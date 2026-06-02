@@ -105,11 +105,38 @@ function SearchApp() {
   }, [config])
 
   const filterApps = useCallback((searchQuery: string): AppItem[] => {
-    const q = searchQuery.toLowerCase().trim()
+    const terms = searchQuery.toLowerCase().trim().split(/\s+/)
     return apps.filter(app => {
-      return app.name.toLowerCase().includes(q) ||
-             app.pinyin.toLowerCase().includes(q) ||
-             app.firstLetter.toLowerCase().startsWith(q)
+      const name = app.name.toLowerCase()
+      const pinyin = app.pinyin.toLowerCase()
+      const firstLetter = app.firstLetter.toLowerCase()
+      const nameWords = name.split(/[\s\-_.,/\\|]+/)
+
+      return terms.every(term => {
+        if (name.includes(term)) return true
+        if (pinyin.includes(term)) return true
+        if (firstLetter.startsWith(term)) return true
+        for (let i = 0; i < nameWords.length; i++) {
+          if (nameWords[i].startsWith(term)) return true
+        }
+        const flMatch = (() => {
+          let ti = 0
+          for (let wi = 0; wi < nameWords.length && ti < term.length; wi++) {
+            if (nameWords[wi][0] === term[ti]) ti++
+          }
+          return ti === term.length
+        })()
+        if (flMatch) return true
+        const pinyinWords = pinyin.split(/[\s\-_.,/\\|]+/)
+        for (let i = 0; i < pinyinWords.length; i++) {
+          if (pinyinWords[i].startsWith(term)) return true
+        }
+        let pti = 0
+        for (let wi = 0; wi < pinyinWords.length && pti < term.length; wi++) {
+          if (pinyinWords[wi][0] === term[pti]) pti++
+        }
+        return pti === term.length
+      })
     }).slice(0, MAX_RESULTS)
   }, [apps])
 
