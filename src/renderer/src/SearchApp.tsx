@@ -244,7 +244,7 @@ function SearchApp() {
             >
               <div className={`search-result-icon ${app.type === 'folder' ? 'folder' : ''}`}>
                 {app.icon ? (
-                  <img src={app.icon.startsWith('/') || app.icon.match(/^[A-Za-z]:/) ? `file://${app.icon}` : app.icon} alt={app.name} width="28" height="28" />
+                  <img src={app.icon} alt={app.name} width="28" height="28" />
                 ) : (
                   <span className="app-icon">{app.type === 'folder' ? '📁' : '📦'}</span>
                 )}

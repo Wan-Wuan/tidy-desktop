@@ -81,7 +81,21 @@ function App() {
       window.electronAPI.getCategories()
     ])
     setConfig(configData)
-    setApps(appsData.apps)
+
+    let loadedApps = appsData.apps
+
+    const needsIconUpdate = loadedApps.filter(a => a.icon && !a.icon.startsWith('data:'))
+    if (needsIconUpdate.length > 0) {
+      for (const app of needsIconUpdate) {
+        const iconPath = await window.electronAPI.extractIcon(app.path)
+        if (iconPath) app.icon = iconPath
+      }
+      setApps([...loadedApps])
+      await window.electronAPI.saveApps({ apps: loadedApps })
+    } else {
+      setApps(loadedApps)
+    }
+
     setCategories(categoriesData.categories.sort((a, b) => a.order - b.order))
   }
 
@@ -678,7 +692,7 @@ function App() {
                   app.type === 'folder' ? 'bg-orange-100' : 'bg-blue-100'
                 }`}>
                   {app.icon ? (
-                    <img src={app.icon.startsWith('/') || app.icon.match(/^[A-Za-z]:/) ? `file://${app.icon}` : app.icon} alt={app.name} className="w-10 h-10" />
+                    <img src={app.icon} alt={app.name} className="w-10 h-10" />
                   ) : (
                     <span className="text-2xl">{app.type === 'folder' ? '📁' : '📦'}</span>
                   )}

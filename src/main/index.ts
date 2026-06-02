@@ -387,13 +387,14 @@ ipcMain.handle('extract-icon', async (_, filePath: string) => {
     const iconPath = path.join(ICONS_DIR, `${hash}.png`)
 
     if (fs.existsSync(iconPath)) {
-      return iconPath
+      const data = fs.readFileSync(iconPath)
+      return `data:image/png;base64,${data.toString('base64')}`
     }
 
     const icon = await app.getFileIcon(filePath, { size: 'normal' })
     const pngData = icon.toPNG()
     fs.writeFileSync(iconPath, pngData)
-    return iconPath
+    return `data:image/png;base64,${pngData.toString('base64')}`
   } catch (error) {
     console.error('Failed to extract icon:', error)
     return null
