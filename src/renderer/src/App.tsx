@@ -459,6 +459,7 @@ function App() {
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    if (draggedAppIdRef.current) return
     if (e.dataTransfer.types.includes('Files')) {
       isExternalDragRef.current = true
       dragCounterRef.current++
@@ -471,13 +472,12 @@ function App() {
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (isExternalDragRef.current) {
-      dragCounterRef.current--
-      if (dragCounterRef.current <= 0) {
-        dragCounterRef.current = 0
-        setIsDragging(false)
-        isExternalDragRef.current = false
-      }
+    if (!isExternalDragRef.current) return
+    dragCounterRef.current--
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0
+      setIsDragging(false)
+      isExternalDragRef.current = false
     }
   }, [])
 
@@ -504,6 +504,8 @@ function App() {
     dragCounterRef.current = 0
     setIsDragging(false)
     isExternalDragRef.current = false
+
+    if (draggedAppIdRef.current) return
 
     const files = Array.from(e.dataTransfer.files)
     if (files.length === 0) return
