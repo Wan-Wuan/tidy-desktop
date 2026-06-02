@@ -43,6 +43,7 @@ function App() {
   const [isDragging, setIsDragging] = useState(false)
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
+  const [dragOverAppId, setDragOverAppId] = useState<string | null>(null)
   const [activeEngine, setActiveEngine] = useState<SearchEngineInfo | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
@@ -51,6 +52,7 @@ function App() {
   const draggedAppIdRef = useRef<string | null>(null)
   const appsRef = useRef<AppItem[]>([])
   const activeCategoryRef = useRef<string | null>(null)
+  const isExternalDragRef = useRef(false)
 
   useEffect(() => {
     loadData()
@@ -65,12 +67,15 @@ function App() {
   }, [activeCategory])
 
   useEffect(() => {
-    const resetDrag = () => {
-      dragCounterRef.current = 0
-      setIsDragging(false)
+    const resetExternalDrag = (e: DragEvent) => {
+      if (e.relatedTarget === null) {
+        dragCounterRef.current = 0
+        setIsDragging(false)
+        isExternalDragRef.current = false
+      }
     }
-    window.addEventListener('dragend', resetDrag)
-    return () => window.removeEventListener('dragend', resetDrag)
+    document.addEventListener('dragleave', resetExternalDrag)
+    return () => document.removeEventListener('dragleave', resetExternalDrag)
   }, [])
 
   useEffect(() => {
@@ -455,6 +460,7 @@ function App() {
     e.preventDefault()
     e.stopPropagation()
     if (e.dataTransfer.types.includes('Files')) {
+      isExternalDragRef.current = true
       dragCounterRef.current++
       if (dragCounterRef.current === 1) {
         setIsDragging(true)
@@ -465,11 +471,12 @@ function App() {
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (e.dataTransfer.types.includes('Files')) {
+    if (isExternalDragRef.current) {
       dragCounterRef.current--
       if (dragCounterRef.current <= 0) {
         dragCounterRef.current = 0
         setIsDragging(false)
+        isExternalDragRef.current = false
       }
     }
   }, [])
@@ -477,7 +484,7 @@ function App() {
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (e.dataTransfer.types.includes('Files')) {
+    if (isExternalDragRef.current) {
       e.dataTransfer.dropEffect = 'copy'
     }
   }, [])
@@ -485,8 +492,10 @@ function App() {
   const handleDragEnd = useCallback(() => {
     dragCounterRef.current = 0
     setIsDragging(false)
+    isExternalDragRef.current = false
     setDraggedAppId(null)
     setDragOverCategory(null)
+    setDragOverAppId(null)
   }, [])
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
@@ -494,6 +503,7 @@ function App() {
     e.stopPropagation()
     dragCounterRef.current = 0
     setIsDragging(false)
+    isExternalDragRef.current = false
 
     const files = Array.from(e.dataTransfer.files)
     if (files.length === 0) return
@@ -517,6 +527,19 @@ function App() {
       bd: 'Baidu'
     }
     return names[engine.key] || engine.name
+  }
+
+  const handleReorderApp = async (sourceId: string, targetId: string) => {
+    const currentApps = appsRef.current
+    const sourceIndex = currentApps.findIndex(a => a.id === sourceId)
+    const targetIndex = currentApps.findIndex(a => a.id === targetId)
+    if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return
+
+    const updated = [...currentApps]
+    const [moved] = updated.splice(sourceIndex, 1)
+    updated.splice(targetIndex, 0, moved)
+    setApps(updated)
+    await window.electronAPI.saveApps({ apps: updated })
   }
 
   const filteredApps = filterApps()
@@ -676,16 +699,38 @@ function App() {
                   e.dataTransfer.effectAllowed = 'move'
                   e.dataTransfer.setData('text/plain', app.id)
                 }}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (draggedAppIdRef.current && draggedAppIdRef.current !== app.id) {
+                    e.dataTransfer.dropEffect = 'move'
+                    setDragOverAppId(app.id)
+                  }
+                }}
+                onDragLeave={() => setDragOverAppId(null)}
+                onDrop={async (e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setDragOverAppId(null)
+                  setDragOverCategory(null)
+                  const sourceId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
+                  if (sourceId && sourceId !== app.id) {
+                    await handleReorderApp(sourceId, app.id)
+                  }
+                  draggedAppIdRef.current = null
+                  setDraggedAppId(null)
+                }}
                 onDragEnd={() => {
                   setTimeout(() => {
                     draggedAppIdRef.current = null
                     setDraggedAppId(null)
                     setDragOverCategory(null)
+                    setDragOverAppId(null)
                   }, 100)
                 }}
                 className={`bg-white rounded-lg p-4 hover:shadow-md transition-all cursor-pointer group relative ${
                   draggedAppId === app.id ? 'opacity-50 scale-95' : ''
-                }`}
+                } ${dragOverAppId === app.id ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}
                 onClick={() => handleOpenApp(app)}
               >
                 <button
