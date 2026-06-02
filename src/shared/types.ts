@@ -4,6 +4,7 @@ export interface AppItem {
   path: string
   icon: string
   categoryId: string
+  subcategoryId?: string | null
   pinyin: string
   firstLetter: string
   type?: 'app' | 'folder'
@@ -14,6 +15,13 @@ export interface Category {
   name: string
   icon: string
   order: number
+}
+
+export interface Subcategory {
+  id: string
+  name: string
+  icon: string
+  parentId: string | null
 }
 
 export interface SearchEngine {
@@ -40,4 +48,5 @@ export interface AppsData {
 
 export interface CategoriesData {
   categories: Category[]
+  subcategories?: Subcategory[]
 }

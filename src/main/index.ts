@@ -290,7 +290,7 @@ ipcMain.handle('save-apps', (_, data) => {
 })
 
 ipcMain.handle('get-categories', () => {
-  return readJsonFile(CATEGORIES_FILE, {
+  const data = readJsonFile(CATEGORIES_FILE, {
     categories: [
       { id: 'browser', name: '浏览器', icon: '🌐', order: 1 },
       { id: 'dev', name: '开发工具', icon: '💻', order: 2 },
@@ -301,6 +301,8 @@ ipcMain.handle('get-categories', () => {
       { id: 'other', name: '其他', icon: '📦', order: 99 }
     ]
   })
+  if (!data.subcategories) data.subcategories = []
+  return data
 })
 
 ipcMain.handle('save-categories', (_, data) => {

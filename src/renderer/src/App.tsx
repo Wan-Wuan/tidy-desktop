@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { AppItem, Category, Config } from '../../shared/types'
+import { AppItem, Category, Subcategory, Config } from '../../shared/types'
 import { pinyin } from 'pinyin-pro'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -10,8 +10,8 @@ declare global {
       saveConfig: (config: Config) => Promise<boolean>
       getApps: () => Promise<{ apps: AppItem[] }>
       saveApps: (data: { apps: AppItem[] }) => Promise<boolean>
-      getCategories: () => Promise<{ categories: Category[] }>
-      saveCategories: (data: { categories: Category[] }) => Promise<boolean>
+      getCategories: () => Promise<{ categories: Category[]; subcategories: Subcategory[] }>
+      saveCategories: (data: { categories: Category[]; subcategories: Subcategory[] }) => Promise<boolean>
       openApp: (path: string) => Promise<boolean>
       openFolder: (path: string) => Promise<boolean>
       openUrl: (url: string) => Promise<boolean>
@@ -35,6 +35,9 @@ function App() {
   const [config, setConfig] = useState<Config | null>(null)
   const [apps, setApps] = useState<AppItem[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([])
+  const [activeSubcategoryId, setActiveSubcategoryId] = useState<string | null>(null)
+  const [showSubcategoryManager, setShowSubcategoryManager] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -80,13 +83,13 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !showSettings && !showAddApp && !showCategoryManager) {
+      if (e.key === 'Escape' && !showSettings && !showAddApp && !showCategoryManager && !showSubcategoryManager) {
         window.electronAPI.hideMainWindow()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showSettings, showAddApp, showCategoryManager])
+  }, [showSettings, showAddApp, showCategoryManager, showSubcategoryManager])
 
   const loadData = async () => {
     const [configData, appsData, categoriesData] = await Promise.all([
@@ -111,6 +114,7 @@ function App() {
     }
 
     setCategories(categoriesData.categories.sort((a, b) => a.order - b.order))
+    setSubcategories(categoriesData.subcategories || [])
   }
 
   const getPinyin = (name: string): string => {
@@ -193,6 +197,12 @@ function App() {
       filtered = filtered.filter(app => app.categoryId === activeCategory)
     }
 
+    if (activeSubcategoryId) {
+      filtered = filtered.filter(app => app.subcategoryId === activeSubcategoryId)
+    } else if (activeCategory === null) {
+      filtered = filtered.filter(app => !app.subcategoryId)
+    }
+
     if (!searchQuery.trim()) {
       return filtered
     }
@@ -205,7 +215,7 @@ function App() {
       const firstLetterMatch = app.firstLetter.toLowerCase().startsWith(query)
       return nameMatch || pinyinMatch || firstLetterMatch
     })
-  }, [apps, searchQuery, activeCategory])
+  }, [apps, searchQuery, activeCategory, activeSubcategoryId])
 
   const handleOpenApp = async (app: AppItem) => {
     if (app.type === 'folder') {
@@ -428,13 +438,13 @@ function App() {
     }
     const updatedCategories = [...categories, newCategory]
     setCategories(updatedCategories)
-    await window.electronAPI.saveCategories({ categories: updatedCategories })
+    await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories })
   }
 
   const handleDeleteCategory = async (id: string) => {
     const updatedCategories = categories.filter(cat => cat.id !== id)
     setCategories(updatedCategories)
-    await window.electronAPI.saveCategories({ categories: updatedCategories })
+    await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories })
     
     if (activeCategory === id) {
       setActiveCategory(null)
@@ -453,8 +463,41 @@ function App() {
       cat.id === id ? { ...cat, name, icon } : cat
     )
     setCategories(updatedCategories)
-    await window.electronAPI.saveCategories({ categories: updatedCategories })
+    await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories })
   }
+
+  const handleAddSubcategory = async (name: string, icon: string, parentId: string | null) => {
+    const newSub: Subcategory = { id: uuidv4(), name, icon, parentId }
+    const updated = [...subcategories, newSub]
+    setSubcategories(updated)
+    await window.electronAPI.saveCategories({ categories, subcategories: updated })
+  }
+
+  const handleDeleteSubcategory = async (id: string) => {
+    const updated = subcategories.filter(s => s.id !== id)
+    setSubcategories(updated)
+    await window.electronAPI.saveCategories({ categories, subcategories: updated })
+    if (activeSubcategoryId === id) setActiveSubcategoryId(null)
+    const currentApps = appsRef.current
+    const updatedApps = currentApps.map(a => a.subcategoryId === id ? { ...a, subcategoryId: null } : a)
+    setApps(updatedApps)
+    await window.electronAPI.saveApps({ apps: updatedApps })
+  }
+
+  const handleUpdateSubcategory = async (id: string, name: string, icon: string) => {
+    const updated = subcategories.map(s => s.id === id ? { ...s, name, icon } : s)
+    setSubcategories(updated)
+    await window.electronAPI.saveCategories({ categories, subcategories: updated })
+  }
+
+  const handleMoveAppToSubcategory = async (appId: string, subcategoryId: string | null) => {
+    const currentApps = appsRef.current
+    const updatedApps = currentApps.map(a => a.id === appId ? { ...a, subcategoryId } : a)
+    setApps(updatedApps)
+    await window.electronAPI.saveApps({ apps: updatedApps })
+  }
+
+  const visibleSubcategories = subcategories.filter(s => s.parentId === activeCategory)
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -609,7 +652,7 @@ function App() {
 
       <div ref={categoryBarRef} className="px-4 pb-2 flex gap-2 overflow-x-auto">
         <button
-          onClick={() => setActiveCategory(null)}
+          onClick={() => { setActiveCategory(null); setActiveSubcategoryId(null) }}
           className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-all ${
             activeCategory === null
               ? 'bg-blue-500 text-white'
@@ -621,7 +664,7 @@ function App() {
         {categories.map(cat => (
           <button
             key={cat.id}
-            onClick={() => setActiveCategory(activeCategory === cat.id ? null : cat.id)}
+            onClick={() => { setActiveCategory(activeCategory === cat.id ? null : cat.id); setActiveSubcategoryId(null) }}
             onDragOver={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -668,6 +711,56 @@ function App() {
             {cat.icon} {cat.name}
           </button>
         ))}
+      </div>
+
+      <div className="px-4 pb-2 flex gap-2 overflow-x-auto">
+        <button
+          onClick={() => setActiveSubcategoryId(null)}
+          className={`px-2.5 py-1 rounded-full text-xs whitespace-nowrap transition-all ${
+            activeSubcategoryId === null
+              ? 'bg-purple-500 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          全部
+        </button>
+        {visibleSubcategories.map(sub => (
+          <button
+            key={sub.id}
+            onClick={() => setActiveSubcategoryId(activeSubcategoryId === sub.id ? null : sub.id)}
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
+              if (appId) {
+                e.dataTransfer.dropEffect = 'move'
+              }
+            }}
+            onDrop={async (e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
+              if (appId) {
+                await handleMoveAppToSubcategory(appId, sub.id)
+                draggedAppIdRef.current = null
+                setDraggedAppId(null)
+              }
+            }}
+            className={`px-2.5 py-1 rounded-full text-xs whitespace-nowrap transition-all ${
+              activeSubcategoryId === sub.id
+                ? 'bg-purple-500 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {sub.icon} {sub.name}
+          </button>
+        ))}
+        <button
+          onClick={() => setShowSubcategoryManager(true)}
+          className="px-2.5 py-1 rounded-full text-xs whitespace-nowrap bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all"
+        >
+          + 子分类
+        </button>
       </div>
 
       <main 
@@ -795,6 +888,18 @@ function App() {
           onAdd={handleAddCategory}
           onDelete={handleDeleteCategory}
           onUpdate={handleUpdateCategory}
+        />
+      )}
+
+      {showSubcategoryManager && (
+        <SubcategoryManagerModal
+          categories={categories}
+          subcategories={subcategories}
+          activeCategory={activeCategory}
+          onClose={() => setShowSubcategoryManager(false)}
+          onAdd={handleAddSubcategory}
+          onDelete={handleDeleteSubcategory}
+          onUpdate={handleUpdateSubcategory}
         />
       )}
     </div>
@@ -1229,6 +1334,192 @@ function CategoryManagerModal({ categories, onClose, onAdd, onDelete, onUpdate }
           >
             关闭
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SubcategoryManagerModal({ categories, subcategories, activeCategory, onClose, onAdd, onDelete, onUpdate }: {
+  categories: Category[]
+  subcategories: Subcategory[]
+  activeCategory: string | null
+  onClose: () => void
+  onAdd: (name: string, icon: string, parentId: string | null) => void
+  onDelete: (id: string) => void
+  onUpdate: (id: string, name: string, icon: string) => void
+}) {
+  const [newName, setNewName] = useState('')
+  const [newIcon, setNewIcon] = useState('📂')
+  const [newParentId, setNewParentId] = useState<string | null>(activeCategory)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editIcon, setEditIcon] = useState('')
+  const [showEmojiPicker, setShowEmojiPicker] = useState<'new' | string | null>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAdd = () => {
+    if (newName.trim()) {
+      onAdd(newName.trim(), newIcon, newParentId)
+      setNewName('')
+      setNewIcon('📂')
+    }
+  }
+
+  const handleSaveEdit = () => {
+    if (editingId && editName.trim()) {
+      onUpdate(editingId, editName.trim(), editIcon)
+      setEditingId(null)
+    }
+  }
+
+  const handleEmojiSelect = (emoji: string, target: 'new' | string) => {
+    if (target === 'new') setNewIcon(emoji)
+    else setEditIcon(emoji)
+    setShowEmojiPicker(null)
+    setTimeout(() => nameInputRef.current?.focus(), 0)
+  }
+
+  const filtered = activeCategory
+    ? subcategories.filter(s => s.parentId === activeCategory)
+    : subcategories.filter(s => s.parentId === null)
+
+  const parentName = activeCategory
+    ? categories.find(c => c.id === activeCategory)?.name || '当前分类'
+    : '全局'
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-[480px] max-h-[80vh] overflow-auto">
+        <h2 className="text-lg font-semibold mb-1">管理子分类</h2>
+        <p className="text-xs text-gray-500 mb-4">当前：{parentName}</p>
+        
+        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+          <h3 className="text-sm font-medium text-gray-700 mb-2">添加子分类</h3>
+          <div className="flex gap-2">
+            <div className="relative">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setShowEmojiPicker(showEmojiPicker === 'new' ? null : 'new')}
+                className="w-10 h-10 border border-gray-300 rounded flex items-center justify-center text-xl hover:bg-gray-100"
+              >
+                {newIcon}
+              </button>
+              {showEmojiPicker === 'new' && (
+                <div className="absolute top-12 left-0 z-20 bg-white border rounded-lg shadow-lg p-2 grid grid-cols-8 gap-1 w-64"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {EMOJI_LIST.map(emoji => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => handleEmojiSelect(emoji, 'new')}
+                      className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded text-lg"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <input
+              ref={nameInputRef}
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="子分类名称"
+              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+            />
+            <select
+              value={newParentId || ''}
+              onChange={(e) => setNewParentId(e.target.value || null)}
+              className="px-2 py-2 border border-gray-300 rounded text-sm"
+            >
+              <option value="">全局</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+            </select>
+            <button
+              onClick={handleAdd}
+              className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
+            >
+              添加
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {filtered.map(sub => (
+            <div key={sub.id} className="flex items-center gap-2 p-2 bg-white border rounded-lg">
+              {editingId === sub.id ? (
+                <>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => setShowEmojiPicker(showEmojiPicker === sub.id ? null : sub.id)}
+                      className="w-10 h-10 border border-gray-300 rounded flex items-center justify-center text-xl hover:bg-gray-100"
+                    >
+                      {editIcon}
+                    </button>
+                    {showEmojiPicker === sub.id && (
+                      <div className="absolute top-12 left-0 z-20 bg-white border rounded-lg shadow-lg p-2 grid grid-cols-8 gap-1 w-64"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {EMOJI_LIST.map(emoji => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleEmojiSelect(emoji, sub.id)}
+                            className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded text-lg"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+                    autoFocus
+                  />
+                  <button onClick={handleSaveEdit} className="px-2 py-1 bg-green-500 text-white rounded text-sm">保存</button>
+                  <button onClick={() => setEditingId(null)} className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-sm">取消</button>
+                </>
+              ) : (
+                <>
+                  <span className="text-xl w-10 h-10 flex items-center justify-center">{sub.icon}</span>
+                  <span className="flex-1 text-sm font-medium">{sub.name}</span>
+                  <button
+                    onClick={() => { setEditingId(sub.id); setEditName(sub.name); setEditIcon(sub.icon) }}
+                    className="px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm"
+                  >编辑</button>
+                  <button
+                    onClick={async () => {
+                      const confirmed = await window.electronAPI.confirm(`确定要删除子分类"${sub.name}"吗？`)
+                      if (confirmed) onDelete(sub.id)
+                    }}
+                    className="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 text-sm"
+                  >删除</button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {filtered.length === 0 && (
+          <div className="text-center text-gray-400 py-6 text-sm">暂无子分类</div>
+        )}
+
+        <div className="flex justify-end mt-4">
+          <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">关闭</button>
         </div>
       </div>
     </div>
