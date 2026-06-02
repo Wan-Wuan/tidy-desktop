@@ -65,6 +65,15 @@ function App() {
   }, [activeCategory])
 
   useEffect(() => {
+    const resetDrag = () => {
+      dragCounterRef.current = 0
+      setIsDragging(false)
+    }
+    window.addEventListener('dragend', resetDrag)
+    return () => window.removeEventListener('dragend', resetDrag)
+  }, [])
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !showSettings && !showAddApp && !showCategoryManager) {
         window.electronAPI.hideMainWindow()
