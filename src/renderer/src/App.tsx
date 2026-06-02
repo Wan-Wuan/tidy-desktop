@@ -84,7 +84,7 @@ function App() {
 
     let loadedApps = appsData.apps
 
-    const needsIconUpdate = loadedApps.filter(a => a.icon && !a.icon.startsWith('data:'))
+    const needsIconUpdate = loadedApps.filter(a => !a.icon || !a.icon.startsWith('data:') || a.icon.length < 1000)
     if (needsIconUpdate.length > 0) {
       for (const app of needsIconUpdate) {
         const iconPath = await window.electronAPI.extractIcon(app.path)

@@ -22,6 +22,17 @@ function ensureDataDir() {
   if (!fs.existsSync(ICONS_DIR)) {
     fs.mkdirSync(ICONS_DIR, { recursive: true })
   }
+  // Clean up small cached icons (< 1KB = likely broken)
+  try {
+    const files = fs.readdirSync(ICONS_DIR)
+    for (const file of files) {
+      const filePath = path.join(ICONS_DIR, file)
+      const stat = fs.statSync(filePath)
+      if (stat.size < 1024) {
+        fs.unlinkSync(filePath)
+      }
+    }
+  } catch {}
 }
 
 function readJsonFile(filePath: string, defaultValue: any) {
@@ -391,10 +402,53 @@ ipcMain.handle('extract-icon', async (_, filePath: string) => {
       return `data:image/png;base64,${data.toString('base64')}`
     }
 
-    const icon = await app.getFileIcon(filePath, { size: 'normal' })
+    let targetPath = filePath
+    if (filePath.toLowerCase().endsWith('.lnk')) {
+      try {
+        const psScript = `$sh = New-Object -ComObject WScript.Shell; $s = $sh.CreateShortcut('${filePath.replace(/'/g, "''")}'); $s.TargetPath`
+        const result = require('child_process').execSync(
+          `powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"')}"`,
+          { encoding: 'utf8', windowsHide: true, timeout: 5000 }
+        ).trim()
+        if (result && fs.existsSync(result)) {
+          targetPath = result
+        }
+      } catch {}
+    }
+
+    // Try PowerShell to extract icon with large size
+    try {
+      const psScript = `
+        Add-Type -AssemblyName System.Drawing
+        $icon = [System.Drawing.Icon]::ExtractAssociatedIcon('${targetPath.replace(/'/g, "''")}')
+        if ($icon) {
+          $bmp = $icon.ToBitmap()
+          $ms = New-Object System.IO.MemoryStream
+          $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+          $bytes = $ms.ToArray()
+          [Convert]::ToBase64String($bytes)
+        }
+      `
+      const result = require('child_process').execSync(
+        `powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"').replace(/\r?\n/g, '; ')}"`,
+        { encoding: 'utf8', windowsHide: true, timeout: 10000 }
+      ).trim()
+      if (result && result.length > 100) {
+        const pngBuffer = Buffer.from(result, 'base64')
+        fs.writeFileSync(iconPath, pngBuffer)
+        return `data:image/png;base64,${result}`
+      }
+    } catch {}
+
+    // Fallback to Electron's getFileIcon
+    const icon = await app.getFileIcon(targetPath, { size: 'large' })
     const pngData = icon.toPNG()
-    fs.writeFileSync(iconPath, pngData)
-    return `data:image/png;base64,${pngData.toString('base64')}`
+    if (pngData.length > 100) {
+      fs.writeFileSync(iconPath, pngData)
+      return `data:image/png;base64,${pngData.toString('base64')}`
+    }
+
+    return null
   } catch (error) {
     console.error('Failed to extract icon:', error)
     return null
