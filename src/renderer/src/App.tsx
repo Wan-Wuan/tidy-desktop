@@ -594,6 +594,21 @@ function App() {
     await window.electronAPI.saveApps({ apps: updatedApps })
   }
 
+  const [draggedSubId, setDraggedSubId] = useState<string | null>(null)
+  const [dragOverSubId, setDragOverSubId] = useState<string | null>(null)
+
+  const handleReorderSubcategory = async (sourceId: string, targetId: string) => {
+    const sourceIndex = subcategories.findIndex(s => s.id === sourceId)
+    const targetIndex = subcategories.findIndex(s => s.id === targetId)
+    if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return
+
+    const updated = [...subcategories]
+    const [moved] = updated.splice(sourceIndex, 1)
+    updated.splice(targetIndex, 0, moved)
+    setSubcategories(updated)
+    await window.electronAPI.saveCategories({ categories, subcategories: updated })
+  }
+
   const visibleSubcategories = subcategories.filter(s => s.parentId === activeCategory)
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -804,29 +819,55 @@ function App() {
         {visibleSubcategories.map(sub => (
           <button
             key={sub.id}
+            draggable
             onClick={() => setActiveSubcategoryId(sub.id)}
+            onDragStart={(e) => {
+              setDraggedSubId(sub.id)
+              e.dataTransfer.effectAllowed = 'move'
+              e.dataTransfer.setData('text/plain', sub.id)
+            }}
             onDragOver={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-              if (appId) {
+              if (draggedSubId && draggedSubId !== sub.id) {
                 e.dataTransfer.dropEffect = 'move'
+                setDragOverSubId(sub.id)
+              } else {
+                const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
+                if (appId) {
+                  e.dataTransfer.dropEffect = 'move'
+                }
               }
             }}
+            onDragLeave={() => setDragOverSubId(null)}
             onDrop={async (e) => {
               e.preventDefault()
               e.stopPropagation()
-              const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-              if (appId) {
-                await handleMoveAppToSubcategory(appId, sub.id)
-                draggedAppIdRef.current = null
-                setDraggedAppId(null)
+              setDragOverSubId(null)
+              if (draggedSubId && draggedSubId !== sub.id) {
+                await handleReorderSubcategory(draggedSubId, sub.id)
+                setDraggedSubId(null)
+              } else {
+                const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
+                if (appId) {
+                  await handleMoveAppToSubcategory(appId, sub.id)
+                  draggedAppIdRef.current = null
+                  setDraggedAppId(null)
+                }
               }
+            }}
+            onDragEnd={() => {
+              setDraggedSubId(null)
+              setDragOverSubId(null)
             }}
             className={`px-2.5 py-1 rounded-full text-xs whitespace-nowrap transition-all ${
               activeSubcategoryId === sub.id
                 ? 'bg-purple-500 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                : dragOverSubId === sub.id
+                  ? 'bg-green-500 text-white scale-110 shadow-lg ring-2 ring-green-300'
+                  : draggedSubId === sub.id
+                    ? 'opacity-50 scale-95'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
             {sub.icon} {sub.name}
