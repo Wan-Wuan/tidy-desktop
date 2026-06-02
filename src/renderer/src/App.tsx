@@ -940,6 +940,7 @@ function CategoryManagerModal({ categories, onClose, onAdd, onDelete, onUpdate }
   const [editName, setEditName] = useState('')
   const [editIcon, setEditIcon] = useState('')
   const [showEmojiPicker, setShowEmojiPicker] = useState<'new' | string | null>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
   const handleAdd = () => {
     if (newName.trim()) {
@@ -966,6 +967,16 @@ function CategoryManagerModal({ categories, onClose, onAdd, onDelete, onUpdate }
     setEditingId(null)
   }
 
+  const handleEmojiSelect = (emoji: string, target: 'new' | string) => {
+    if (target === 'new') {
+      setNewIcon(emoji)
+    } else {
+      setEditIcon(emoji)
+    }
+    setShowEmojiPicker(null)
+    setTimeout(() => nameInputRef.current?.focus(), 0)
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-[480px] max-h-[80vh] overflow-auto">
@@ -977,21 +988,22 @@ function CategoryManagerModal({ categories, onClose, onAdd, onDelete, onUpdate }
             <div className="relative">
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setShowEmojiPicker(showEmojiPicker === 'new' ? null : 'new')}
                 className="w-10 h-10 border border-gray-300 rounded flex items-center justify-center text-xl hover:bg-gray-100"
               >
                 {newIcon}
               </button>
               {showEmojiPicker === 'new' && (
-                <div className="absolute top-12 left-0 z-10 bg-white border rounded-lg shadow-lg p-2 grid grid-cols-8 gap-1 w-64">
+                <div className="absolute top-12 left-0 z-20 bg-white border rounded-lg shadow-lg p-2 grid grid-cols-8 gap-1 w-64"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {EMOJI_LIST.map(emoji => (
                     <button
                       key={emoji}
                       type="button"
-                      onClick={() => {
-                        setNewIcon(emoji)
-                        setShowEmojiPicker(null)
-                      }}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => handleEmojiSelect(emoji, 'new')}
                       className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded text-lg"
                     >
                       {emoji}
@@ -1001,6 +1013,7 @@ function CategoryManagerModal({ categories, onClose, onAdd, onDelete, onUpdate }
               )}
             </div>
             <input
+              ref={nameInputRef}
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
@@ -1025,21 +1038,22 @@ function CategoryManagerModal({ categories, onClose, onAdd, onDelete, onUpdate }
                   <div className="relative">
                     <button
                       type="button"
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={() => setShowEmojiPicker(showEmojiPicker === cat.id ? null : cat.id)}
                       className="w-10 h-10 border border-gray-300 rounded flex items-center justify-center text-xl hover:bg-gray-100"
                     >
                       {editIcon}
                     </button>
                     {showEmojiPicker === cat.id && (
-                      <div className="absolute top-12 left-0 z-10 bg-white border rounded-lg shadow-lg p-2 grid grid-cols-8 gap-1 w-64">
+                      <div className="absolute top-12 left-0 z-20 bg-white border rounded-lg shadow-lg p-2 grid grid-cols-8 gap-1 w-64"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {EMOJI_LIST.map(emoji => (
                           <button
                             key={emoji}
                             type="button"
-                            onClick={() => {
-                              setEditIcon(emoji)
-                              setShowEmojiPicker(null)
-                            }}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleEmojiSelect(emoji, cat.id)}
                             className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded text-lg"
                           >
                             {emoji}
