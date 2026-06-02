@@ -17,6 +17,7 @@ declare global {
       openUrl: (url: string) => Promise<boolean>
       selectFolder: () => Promise<string | null>
       hideMainWindow: () => Promise<void>
+      confirm: (message: string) => Promise<boolean>
     }
   }
 }
@@ -288,9 +289,7 @@ function App() {
   const handleDeleteApp = async (id: string) => {
     const app = apps.find(a => a.id === id)
     if (app) {
-      const confirmed = await new Promise<boolean>((resolve) => {
-        setTimeout(() => resolve(confirm(`确定要删除"${app.name}"吗？`)), 0)
-      })
+      const confirmed = await window.electronAPI.confirm(`确定要删除"${app.name}"吗？`)
       if (!confirmed) return
     }
     const updatedApps = apps.filter(app => app.id !== id)
@@ -1099,9 +1098,7 @@ function CategoryManagerModal({ categories, onClose, onAdd, onDelete, onUpdate }
                   </button>
                   <button
                     onClick={async () => {
-                      const confirmed = await new Promise<boolean>((resolve) => {
-                        setTimeout(() => resolve(confirm(`确定要删除分类"${cat.name}"吗？该分类下的应用将被移到"其他"分类。`)), 0)
-                      })
+                      const confirmed = await window.electronAPI.confirm(`确定要删除分类"${cat.name}"吗？该分类下的应用将被移到"其他"分类。`)
                       if (confirmed) onDelete(cat.id)
                     }}
                     className="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 text-sm"

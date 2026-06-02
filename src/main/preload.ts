@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   hideSearchWindow: () => ipcRenderer.invoke('hide-search-window'),
   hideMainWindow: () => ipcRenderer.invoke('hide-main-window'),
+  confirm: (message: string) => ipcRenderer.invoke('confirm', message),
   resizeSearchWindow: (height: number) => ipcRenderer.invoke('resize-search-window', height),
   onBlur: (callback: () => void) => {
     ipcRenderer.on('blur-event', () => callback())

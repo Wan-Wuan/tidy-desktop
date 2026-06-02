@@ -364,3 +364,15 @@ ipcMain.handle('hide-main-window', () => {
     mainWindow.hide()
   }
 })
+
+ipcMain.handle('confirm', async (_, message: string) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    buttons: ['取消', '确定'],
+    defaultId: 0,
+    cancelId: 0,
+    message
+  })
+  return result.response === 1
+})
