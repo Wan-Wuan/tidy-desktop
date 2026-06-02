@@ -113,8 +113,14 @@ function App() {
       setApps(loadedApps)
     }
 
-    setCategories(categoriesData.categories.sort((a, b) => a.order - b.order))
+    const sortedCats = categoriesData.categories.sort((a, b) => a.order - b.order)
+    setCategories(sortedCats)
     setSubcategories(categoriesData.subcategories || [])
+
+    if (!activeCategoryRef.current && sortedCats.length > 0) {
+      setActiveCategory(sortedCats[0].id)
+      activeCategoryRef.current = sortedCats[0].id
+    }
   }
 
   const getPinyin = (name: string): string => {
@@ -494,7 +500,11 @@ function App() {
     await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories })
     
     if (activeCategory === id) {
-      setActiveCategory(null)
+      if (updatedCategories.length > 0) {
+        setActiveCategory(updatedCategories[0].id)
+      } else {
+        setActiveCategory(null)
+      }
     }
 
     const currentApps = appsRef.current
@@ -707,7 +717,7 @@ function App() {
         {categories.map(cat => (
           <button
             key={cat.id}
-            onClick={() => { setActiveCategory(activeCategory === cat.id ? null : cat.id); setActiveSubcategoryId(null) }}
+            onClick={() => { setActiveCategory(cat.id); setActiveSubcategoryId(null) }}
             onDragOver={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -760,7 +770,7 @@ function App() {
         {visibleSubcategories.map(sub => (
           <button
             key={sub.id}
-            onClick={() => setActiveSubcategoryId(activeSubcategoryId === sub.id ? null : sub.id)}
+            onClick={() => setActiveSubcategoryId(sub.id)}
             onDragOver={(e) => {
               e.preventDefault()
               e.stopPropagation()
