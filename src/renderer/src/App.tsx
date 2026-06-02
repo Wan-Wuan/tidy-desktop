@@ -48,6 +48,7 @@ function App() {
   const dragCounterRef = useRef(0)
   const draggedAppIdRef = useRef<string | null>(null)
   const appsRef = useRef<AppItem[]>([])
+  const activeCategoryRef = useRef<string | null>(null)
 
   useEffect(() => {
     loadData()
@@ -56,6 +57,10 @@ function App() {
   useEffect(() => {
     appsRef.current = apps
   }, [apps])
+
+  useEffect(() => {
+    activeCategoryRef.current = activeCategory
+  }, [activeCategory])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -435,7 +440,8 @@ function App() {
     const files = Array.from(e.dataTransfer.files)
     if (files.length === 0) return
 
-    const newApps = parseFilesToApps(files, 'other')
+    const targetCategory = activeCategoryRef.current || 'other'
+    const newApps = parseFilesToApps(files, targetCategory)
 
     if (newApps.length > 0) {
       const updatedApps = [...appsRef.current, ...newApps]
