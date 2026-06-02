@@ -287,8 +287,11 @@ function App() {
 
   const handleDeleteApp = async (id: string) => {
     const app = apps.find(a => a.id === id)
-    if (app && !confirm(`确定要删除"${app.name}"吗？`)) {
-      return
+    if (app) {
+      const confirmed = await new Promise<boolean>((resolve) => {
+        setTimeout(() => resolve(confirm(`确定要删除"${app.name}"吗？`)), 0)
+      })
+      if (!confirmed) return
     }
     const updatedApps = apps.filter(app => app.id !== id)
     setApps(updatedApps)
@@ -1095,10 +1098,11 @@ function CategoryManagerModal({ categories, onClose, onAdd, onDelete, onUpdate }
                     编辑
                   </button>
                   <button
-                    onClick={() => {
-                      if (confirm(`确定要删除分类"${cat.name}"吗？该分类下的应用将被移到"其他"分类。`)) {
-                        onDelete(cat.id)
-                      }
+                    onClick={async () => {
+                      const confirmed = await new Promise<boolean>((resolve) => {
+                        setTimeout(() => resolve(confirm(`确定要删除分类"${cat.name}"吗？该分类下的应用将被移到"其他"分类。`)), 0)
+                      })
+                      if (confirmed) onDelete(cat.id)
                     }}
                     className="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 text-sm"
                   >
