@@ -351,7 +351,7 @@ function App() {
   const handleMoveAppToCategory = async (appId: string, categoryId: string) => {
     const currentApps = appsRef.current
     const updatedApps = currentApps.map(app =>
-      app.id === appId ? { ...app, categoryId } : app
+      app.id === appId ? { ...app, categoryId, subcategoryId: null } : app
     )
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
@@ -484,6 +484,12 @@ function App() {
 
   const handleUpdateSubcategory = async (id: string, name: string, icon: string) => {
     const updated = subcategories.map(s => s.id === id ? { ...s, name, icon } : s)
+    setSubcategories(updated)
+    await window.electronAPI.saveCategories({ categories, subcategories: updated })
+  }
+
+  const handleMoveSubcategory = async (id: string, newParentId: string | null) => {
+    const updated = subcategories.map(s => s.id === id ? { ...s, parentId: newParentId } : s)
     setSubcategories(updated)
     await window.electronAPI.saveCategories({ categories, subcategories: updated })
   }
@@ -909,6 +915,7 @@ function App() {
           onAdd={handleAddSubcategory}
           onDelete={handleDeleteSubcategory}
           onUpdate={handleUpdateSubcategory}
+          onMove={handleMoveSubcategory}
         />
       )}
     </div>
@@ -1351,7 +1358,7 @@ function CategoryManagerModal({ categories, onClose, onAdd, onDelete, onUpdate }
   )
 }
 
-function SubcategoryManagerModal({ categories, subcategories, activeCategory, onClose, onAdd, onDelete, onUpdate }: {
+function SubcategoryManagerModal({ categories, subcategories, activeCategory, onClose, onAdd, onDelete, onUpdate, onMove }: {
   categories: Category[]
   subcategories: Subcategory[]
   activeCategory: string | null
@@ -1359,6 +1366,7 @@ function SubcategoryManagerModal({ categories, subcategories, activeCategory, on
   onAdd: (name: string, icon: string, parentId: string | null) => void
   onDelete: (id: string) => void
   onUpdate: (id: string, name: string, icon: string) => void
+  onMove: (id: string, parentId: string | null) => void
 }) {
   const [newName, setNewName] = useState('')
   const [newIcon, setNewIcon] = useState('📂')
@@ -1391,19 +1399,15 @@ function SubcategoryManagerModal({ categories, subcategories, activeCategory, on
     setTimeout(() => nameInputRef.current?.focus(), 0)
   }
 
-  const filtered = activeCategory
-    ? subcategories.filter(s => s.parentId === activeCategory)
-    : subcategories.filter(s => s.parentId === null)
-
-  const parentName = activeCategory
-    ? categories.find(c => c.id === activeCategory)?.name || '当前分类'
-    : '全局'
+  const getParentName = (parentId: string | null) => {
+    if (!parentId) return '全局'
+    return categories.find(c => c.id === parentId)?.name || '未知'
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-[480px] max-h-[80vh] overflow-auto">
-        <h2 className="text-lg font-semibold mb-1">管理子分类</h2>
-        <p className="text-xs text-gray-500 mb-4">当前：{parentName}</p>
+      <div className="bg-white rounded-lg p-6 w-[520px] max-h-[80vh] overflow-auto">
+        <h2 className="text-lg font-semibold mb-4">管理子分类</h2>
         
         <div className="mb-4 p-3 bg-gray-50 rounded-lg">
           <h3 className="text-sm font-medium text-gray-700 mb-2">添加子分类</h3>
@@ -1462,7 +1466,7 @@ function SubcategoryManagerModal({ categories, subcategories, activeCategory, on
         </div>
 
         <div className="space-y-2">
-          {filtered.map(sub => (
+          {subcategories.map(sub => (
             <div key={sub.id} className="flex items-center gap-2 p-2 bg-white border rounded-lg">
               {editingId === sub.id ? (
                 <>
@@ -1507,7 +1511,18 @@ function SubcategoryManagerModal({ categories, subcategories, activeCategory, on
               ) : (
                 <>
                   <span className="text-xl w-10 h-10 flex items-center justify-center">{sub.icon}</span>
-                  <span className="flex-1 text-sm font-medium">{sub.name}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium block truncate">{sub.name}</span>
+                    <span className="text-xs text-gray-400">{getParentName(sub.parentId)}</span>
+                  </div>
+                  <select
+                    value={sub.parentId || ''}
+                    onChange={(e) => onMove(sub.id, e.target.value || null)}
+                    className="px-2 py-1 border border-gray-300 rounded text-xs max-w-[120px]"
+                  >
+                    <option value="">全局</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                  </select>
                   <button
                     onClick={() => { setEditingId(sub.id); setEditName(sub.name); setEditIcon(sub.icon) }}
                     className="px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm"
@@ -1525,7 +1540,7 @@ function SubcategoryManagerModal({ categories, subcategories, activeCategory, on
           ))}
         </div>
 
-        {filtered.length === 0 && (
+        {subcategories.length === 0 && (
           <div className="text-center text-gray-400 py-6 text-sm">暂无子分类</div>
         )}
 
