@@ -199,8 +199,6 @@ function App() {
 
     if (activeSubcategoryId) {
       filtered = filtered.filter(app => app.subcategoryId === activeSubcategoryId)
-    } else if (activeCategory === null) {
-      filtered = filtered.filter(app => !app.subcategoryId)
     }
 
     if (!searchQuery.trim()) {
@@ -321,7 +319,7 @@ function App() {
       name: folderName,
       path: folderPath,
       icon: '',
-      categoryId: 'folder',
+      categoryId: '',
       pinyin: getPinyin(folderName),
       firstLetter: getFirstLetter(folderName),
       type: 'folder'
@@ -452,7 +450,7 @@ function App() {
 
     const currentApps = appsRef.current
     const updatedApps = currentApps.map(app => 
-      app.categoryId === id ? { ...app, categoryId: 'other' } : app
+      app.categoryId === id ? { ...app, categoryId: '' } : app
     )
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
@@ -651,16 +649,6 @@ function App() {
       </div>
 
       <div ref={categoryBarRef} className="px-4 pb-2 flex gap-2 overflow-x-auto">
-        <button
-          onClick={() => { setActiveCategory(null); setActiveSubcategoryId(null) }}
-          className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-all ${
-            activeCategory === null
-              ? 'bg-blue-500 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100'
-          }`}
-        >
-          全部
-        </button>
         {categories.map(cat => (
           <button
             key={cat.id}
@@ -714,16 +702,6 @@ function App() {
       </div>
 
       <div className="px-4 pb-2 flex gap-2 overflow-x-auto">
-        <button
-          onClick={() => setActiveSubcategoryId(null)}
-          className={`px-2.5 py-1 rounded-full text-xs whitespace-nowrap transition-all ${
-            activeSubcategoryId === null
-              ? 'bg-purple-500 text-white'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          全部
-        </button>
         {visibleSubcategories.map(sub => (
           <button
             key={sub.id}
@@ -877,7 +855,7 @@ function App() {
           categories={categories}
           onClose={() => setShowAddApp(false)}
           onAdd={handleAddApp}
-          defaultCategory={activeCategory || categories[0]?.id || 'other'}
+          defaultCategory={activeCategory || ''}
         />
       )}
 
@@ -1012,12 +990,13 @@ function AddAppModal({ categories, onClose, onAdd, defaultCategory }: {
   defaultCategory?: string | null
 }) {
   const getInitialCategory = () => {
+    if (defaultCategory && categories.find(c => c.id === defaultCategory)) {
+      return defaultCategory
+    }
     if (categories.length > 0) {
-      const match = categories.find(c => c.id === defaultCategory)
-      if (match) return match.id
       return categories[0].id
     }
-    return 'other'
+    return ''
   }
 
   const [name, setName] = useState('')
@@ -1110,6 +1089,7 @@ function AddAppModal({ categories, onClose, onAdd, defaultCategory }: {
               onChange={(e) => setCategoryId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
+              <option value="">无分类</option>
               {categories.map(cat => (
                 <option key={cat.id} value={cat.id}>
                   {cat.icon} {cat.name}

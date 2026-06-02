@@ -291,15 +291,7 @@ ipcMain.handle('save-apps', (_, data) => {
 
 ipcMain.handle('get-categories', () => {
   const data = readJsonFile(CATEGORIES_FILE, {
-    categories: [
-      { id: 'browser', name: '浏览器', icon: '🌐', order: 1 },
-      { id: 'dev', name: '开发工具', icon: '💻', order: 2 },
-      { id: 'media', name: '影音娱乐', icon: '🎬', order: 3 },
-      { id: 'office', name: '办公软件', icon: '📄', order: 4 },
-      { id: 'game', name: '游戏', icon: '🎮', order: 5 },
-      { id: 'folder', name: '文件夹', icon: '📁', order: 6 },
-      { id: 'other', name: '其他', icon: '📦', order: 99 }
-    ]
+    categories: []
   })
   if (!data.subcategories) data.subcategories = []
   return data
