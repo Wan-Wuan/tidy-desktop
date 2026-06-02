@@ -205,13 +205,62 @@ function App() {
       return filtered
     }
 
-    const query = searchQuery.toLowerCase().trim()
+    const terms = searchQuery.toLowerCase().trim().split(/\s+/)
     
     return filtered.filter(app => {
-      const nameMatch = app.name.toLowerCase().includes(query)
-      const pinyinMatch = app.pinyin.toLowerCase().includes(query)
-      const firstLetterMatch = app.firstLetter.toLowerCase().startsWith(query)
-      return nameMatch || pinyinMatch || firstLetterMatch
+      const name = app.name.toLowerCase()
+      const pinyin = app.pinyin.toLowerCase()
+      const firstLetter = app.firstLetter.toLowerCase()
+      const nameWords = name.split(/[\s\-_.,/\\|]+/)
+
+      return terms.every(term => {
+        if (name.includes(term)) return true
+        if (pinyin.includes(term)) return true
+        if (firstLetter.startsWith(term)) return true
+
+        for (let i = 0; i < nameWords.length; i++) {
+          if (nameWords[i].startsWith(term)) return true
+        }
+
+        let wi = 0
+        for (let ti = 0; ti < term.length && wi < nameWords.length; wi++) {
+          let matched = false
+          for (let tj = ti; tj < term.length; tj++) {
+            const sub = term.slice(ti, tj + 1)
+            if (nameWords[wi] && nameWords[wi].startsWith(sub)) {
+              matched = true
+              ti = tj + 1
+              break
+            }
+          }
+          if (!matched) break
+        }
+
+        const flMatch = (() => {
+          let ti = 0
+          for (let wi = 0; wi < nameWords.length && ti < term.length; wi++) {
+            const ch = nameWords[wi][0]
+            if (ch === term[ti]) ti++
+          }
+          return ti === term.length
+        })()
+
+        if (flMatch) return true
+
+        const pinyinWords = pinyin.split(/[\s\-_.,/\\|]+/)
+        for (let i = 0; i < pinyinWords.length; i++) {
+          if (pinyinWords[i].startsWith(term)) return true
+        }
+
+        let pti = 0
+        for (let wi = 0; wi < pinyinWords.length && pti < term.length; wi++) {
+          const ch = pinyinWords[wi][0]
+          if (ch === term[pti]) pti++
+        }
+        if (pti === term.length) return true
+
+        return false
+      })
     })
   }, [apps, searchQuery, activeCategory, activeSubcategoryId])
 
