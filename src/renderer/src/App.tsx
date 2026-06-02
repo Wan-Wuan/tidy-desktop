@@ -18,6 +18,7 @@ declare global {
       selectFolder: () => Promise<string | null>
       hideMainWindow: () => Promise<void>
       confirm: (message: string) => Promise<boolean>
+      extractIcon: (filePath: string) => Promise<string | null>
     }
   }
 }
@@ -255,6 +256,13 @@ function App() {
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
     setShowAddApp(false)
+
+    const iconPath = await window.electronAPI.extractIcon(path)
+    if (iconPath) {
+      const withIcon = updatedApps.map(a => a.id === newApp.id ? { ...a, icon: iconPath } : a)
+      setApps(withIcon)
+      await window.electronAPI.saveApps({ apps: withIcon })
+    }
   }
 
   const handleAddFolder = async () => {
@@ -284,6 +292,13 @@ function App() {
     const updatedApps = [...apps, newApp]
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
+
+    const iconPath = await window.electronAPI.extractIcon(folderPath)
+    if (iconPath) {
+      const withIcon = updatedApps.map(a => a.id === newApp.id ? { ...a, icon: iconPath } : a)
+      setApps(withIcon)
+      await window.electronAPI.saveApps({ apps: withIcon })
+    }
   }
 
   const handleDeleteApp = async (id: string) => {
@@ -351,6 +366,24 @@ function App() {
     }
 
     return newApps
+  }
+
+  const extractIconsForApps = async (newApps: AppItem[]) => {
+    const appsWithIcons: AppItem[] = []
+    for (const app of newApps) {
+      const iconPath = await window.electronAPI.extractIcon(app.path)
+      appsWithIcons.push({ ...app, icon: iconPath || '' })
+    }
+
+    if (appsWithIcons.length > 0) {
+      const currentApps = appsRef.current
+      const updatedApps = currentApps.map(a => {
+        const found = appsWithIcons.find(n => n.id === a.id)
+        return found || a
+      })
+      setApps(updatedApps)
+      await window.electronAPI.saveApps({ apps: updatedApps })
+    }
   }
 
   const handleUpdateConfig = async (newConfig: Config) => {
@@ -449,6 +482,7 @@ function App() {
       const updatedApps = [...appsRef.current, ...newApps]
       setApps(updatedApps)
       await window.electronAPI.saveApps({ apps: updatedApps })
+      await extractIconsForApps(newApps)
     }
   }, [])
 
@@ -565,6 +599,7 @@ function App() {
                   const updatedApps = [...appsRef.current, ...newApps]
                   setApps(updatedApps)
                   await window.electronAPI.saveApps({ apps: updatedApps })
+                  await extractIconsForApps(newApps)
                 }
                 draggedAppIdRef.current = null
                 setDraggedAppId(null)
@@ -643,7 +678,7 @@ function App() {
                   app.type === 'folder' ? 'bg-orange-100' : 'bg-blue-100'
                 }`}>
                   {app.icon ? (
-                    <img src={app.icon} alt={app.name} className="w-10 h-10" />
+                    <img src={app.icon.startsWith('/') || app.icon.match(/^[A-Za-z]:/) ? `file://${app.icon}` : app.icon} alt={app.name} className="w-10 h-10" />
                   ) : (
                     <span className="text-2xl">{app.type === 'folder' ? '📁' : '📦'}</span>
                   )}

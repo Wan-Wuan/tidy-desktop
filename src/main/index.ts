@@ -13,10 +13,14 @@ const CONFIG_DIR = path.join(app.getPath('userData'), 'data')
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json')
 const APPS_FILE = path.join(CONFIG_DIR, 'apps.json')
 const CATEGORIES_FILE = path.join(CONFIG_DIR, 'categories.json')
+const ICONS_DIR = path.join(CONFIG_DIR, 'icons')
 
 function ensureDataDir() {
   if (!fs.existsSync(CONFIG_DIR)) {
     fs.mkdirSync(CONFIG_DIR, { recursive: true })
+  }
+  if (!fs.existsSync(ICONS_DIR)) {
+    fs.mkdirSync(ICONS_DIR, { recursive: true })
   }
 }
 
@@ -375,4 +379,23 @@ ipcMain.handle('confirm', async (_, message: string) => {
     message
   })
   return result.response === 1
+})
+
+ipcMain.handle('extract-icon', async (_, filePath: string) => {
+  try {
+    const hash = Buffer.from(filePath).toString('base64url').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
+    const iconPath = path.join(ICONS_DIR, `${hash}.png`)
+
+    if (fs.existsSync(iconPath)) {
+      return iconPath
+    }
+
+    const icon = await app.getFileIcon(filePath, { size: 'normal' })
+    const pngData = icon.toPNG()
+    fs.writeFileSync(iconPath, pngData)
+    return iconPath
+  } catch (error) {
+    console.error('Failed to extract icon:', error)
+    return null
+  }
 })
