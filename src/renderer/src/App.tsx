@@ -760,75 +760,106 @@ function App() {
           </div>
         )}
 
-        {!isDragging && (
-          <div className="grid grid-cols-6 gap-4">
-            {filteredApps.map(app => (
-              <div
-                key={app.id}
-                draggable
-                onDragStart={(e) => {
-                  draggedAppIdRef.current = app.id
-                  setDraggedAppId(app.id)
-                  e.dataTransfer.effectAllowed = 'move'
-                  e.dataTransfer.setData('text/plain', app.id)
-                }}
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  if (draggedAppIdRef.current && draggedAppIdRef.current !== app.id) {
-                    e.dataTransfer.dropEffect = 'move'
-                    setDragOverAppId(app.id)
-                  }
-                }}
-                onDragLeave={() => setDragOverAppId(null)}
-                onDrop={async (e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  setDragOverAppId(null)
-                  setDragOverCategory(null)
-                  const sourceId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-                  if (sourceId && sourceId !== app.id) {
-                    await handleReorderApp(sourceId, app.id)
-                  }
-                  draggedAppIdRef.current = null
-                  setDraggedAppId(null)
-                }}
-                onDragEnd={() => {
-                  setTimeout(() => {
-                    draggedAppIdRef.current = null
-                    setDraggedAppId(null)
-                    setDragOverCategory(null)
-                    setDragOverAppId(null)
-                  }, 100)
-                }}
-                className={`bg-white rounded-lg p-4 hover:shadow-md transition-all cursor-pointer group relative ${
-                  draggedAppId === app.id ? 'opacity-50 scale-95' : ''
-                } ${dragOverAppId === app.id ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}
-                onClick={() => handleOpenApp(app)}
-              >
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleDeleteApp(app.id)
-                  }}
-                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
-                >
-                  ×
-                </button>
-                <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-3 mx-auto ${
-                  app.type === 'folder' ? 'bg-orange-100' : 'bg-blue-100'
-                }`}>
-                  {app.icon ? (
-                    <img src={app.icon} alt={app.name} className="w-10 h-10" />
-                  ) : (
-                    <span className="text-2xl">{app.type === 'folder' ? '📁' : '📦'}</span>
+        {!isDragging && (() => {
+          const appsToShow = activeCategory && !activeSubcategoryId
+            ? filteredApps
+            : filteredApps
+
+          const groups: { sub: Subcategory | null; apps: typeof filteredApps }[] = []
+          if (activeCategory && !activeSubcategoryId) {
+            const noSub = appsToShow.filter(a => !a.subcategoryId)
+            if (noSub.length > 0) groups.push({ sub: null, apps: noSub })
+            for (const s of visibleSubcategories) {
+              const sApps = appsToShow.filter(a => a.subcategoryId === s.id)
+              if (sApps.length > 0) groups.push({ sub: s, apps: sApps })
+            }
+          } else {
+            groups.push({ sub: null, apps: appsToShow })
+          }
+
+          return (
+            <div>
+              {groups.map((group, gi) => (
+                <div key={group.sub?.id || '__none__'} className={gi > 0 ? 'mt-6' : ''}>
+                  {group.sub && (
+                    <div className="flex items-center gap-2 mb-3 px-1">
+                      <span className="text-sm">{group.sub.icon}</span>
+                      <span className="text-sm font-medium text-gray-600">{group.sub.name}</span>
+                      <div className="flex-1 border-t border-gray-200"></div>
+                    </div>
                   )}
+                  <div className="grid grid-cols-6 gap-4">
+                    {group.apps.map(app => (
+                      <div
+                        key={app.id}
+                        draggable
+                        onDragStart={(e) => {
+                          draggedAppIdRef.current = app.id
+                          setDraggedAppId(app.id)
+                          e.dataTransfer.effectAllowed = 'move'
+                          e.dataTransfer.setData('text/plain', app.id)
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          if (draggedAppIdRef.current && draggedAppIdRef.current !== app.id) {
+                            e.dataTransfer.dropEffect = 'move'
+                            setDragOverAppId(app.id)
+                          }
+                        }}
+                        onDragLeave={() => setDragOverAppId(null)}
+                        onDrop={async (e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setDragOverAppId(null)
+                          setDragOverCategory(null)
+                          const sourceId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
+                          if (sourceId && sourceId !== app.id) {
+                            await handleReorderApp(sourceId, app.id)
+                          }
+                          draggedAppIdRef.current = null
+                          setDraggedAppId(null)
+                        }}
+                        onDragEnd={() => {
+                          setTimeout(() => {
+                            draggedAppIdRef.current = null
+                            setDraggedAppId(null)
+                            setDragOverCategory(null)
+                            setDragOverAppId(null)
+                          }, 100)
+                        }}
+                        className={`bg-white rounded-lg p-4 hover:shadow-md transition-all cursor-pointer group relative ${
+                          draggedAppId === app.id ? 'opacity-50 scale-95' : ''
+                        } ${dragOverAppId === app.id ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}
+                        onClick={() => handleOpenApp(app)}
+                      >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteApp(app.id)
+                          }}
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
+                        >
+                          ×
+                        </button>
+                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-3 mx-auto ${
+                          app.type === 'folder' ? 'bg-orange-100' : 'bg-blue-100'
+                        }`}>
+                          {app.icon ? (
+                            <img src={app.icon} alt={app.name} className="w-10 h-10" />
+                          ) : (
+                            <span className="text-2xl">{app.type === 'folder' ? '📁' : '📦'}</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-center text-gray-700 truncate">{app.name}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <p className="text-sm text-center text-gray-700 truncate">{app.name}</p>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )
+        })()}
 
         {!isDragging && filteredApps.length === 0 && (
           <div className="text-center text-gray-500 py-12">
