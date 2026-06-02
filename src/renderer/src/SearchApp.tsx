@@ -104,9 +104,33 @@ function SearchApp() {
     return { isEngine: false }
   }, [config])
 
+  const isFolderPath = (query: string): boolean => {
+    const trimmed = query.trim()
+    if (/^[A-Za-z]:\\/.test(trimmed) || /^[A-Za-z]:\//.test(trimmed)) return true
+    if (trimmed.startsWith('\\\\')) return true
+    if (trimmed.startsWith('/') && trimmed.length > 1) return true
+    return false
+  }
+
+  const getFolderSuggestion = (query: string): AppItem | null => {
+    const trimmed = query.trim()
+    if (!isFolderPath(trimmed)) return null
+    const folderName = trimmed.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || trimmed
+    return {
+      id: '__folder_path__',
+      name: `打开文件夹: ${folderName}`,
+      path: trimmed,
+      icon: '',
+      categoryId: '',
+      pinyin: '',
+      firstLetter: '',
+      type: 'folder'
+    }
+  }
+
   const filterApps = useCallback((searchQuery: string): AppItem[] => {
     const terms = searchQuery.toLowerCase().trim().split(/\s+/)
-    return apps.filter(app => {
+    const matched = apps.filter(app => {
       const name = app.name.toLowerCase()
       const pinyin = app.pinyin.toLowerCase()
       const firstLetter = app.firstLetter.toLowerCase()
@@ -137,7 +161,17 @@ function SearchApp() {
         }
         return pti === term.length
       })
-    }).slice(0, MAX_RESULTS)
+    })
+
+    const suggestion = getFolderSuggestion(searchQuery)
+    if (suggestion && matched.length === 0) {
+      return [suggestion].slice(0, MAX_RESULTS)
+    }
+    if (suggestion) {
+      return [suggestion, ...matched].slice(0, MAX_RESULTS)
+    }
+
+    return matched.slice(0, MAX_RESULTS)
   }, [apps])
 
   const resetAll = useCallback(() => {
