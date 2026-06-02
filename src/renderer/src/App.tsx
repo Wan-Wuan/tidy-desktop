@@ -299,6 +299,53 @@ function App() {
     await window.electronAPI.saveApps({ apps: updatedApps })
   }
 
+  const parseFilesToApps = (files: File[], categoryId: string): AppItem[] => {
+    const currentApps = appsRef.current
+    const newApps: AppItem[] = []
+
+    for (const file of files) {
+      const filePath = (file as any).path
+      if (!filePath) continue
+
+      const isExe = filePath.toLowerCase().endsWith('.exe')
+      const isLnk = filePath.toLowerCase().endsWith('.lnk')
+      const isDirectory = (file as any).type === '' && !filePath.includes('.')
+
+      if (isExe || isLnk) {
+        const name = getFileNameFromPath(filePath)
+        if (!currentApps.find(app => app.name === name)) {
+          newApps.push({
+            id: uuidv4(),
+            name,
+            path: filePath,
+            icon: '',
+            categoryId,
+            pinyin: getPinyin(name),
+            firstLetter: getFirstLetter(name),
+            type: 'app'
+          })
+        }
+      } else if (isDirectory) {
+        const parts = filePath.replace(/\\/g, '/').split('/')
+        const folderName = parts[parts.length - 1] || '文件夹'
+        if (!currentApps.find(app => app.name === folderName)) {
+          newApps.push({
+            id: uuidv4(),
+            name: folderName,
+            path: filePath,
+            icon: '',
+            categoryId,
+            pinyin: getPinyin(folderName),
+            firstLetter: getFirstLetter(folderName),
+            type: 'folder'
+          })
+        }
+      }
+    }
+
+    return newApps
+  }
+
   const handleUpdateConfig = async (newConfig: Config) => {
     setConfig(newConfig)
     await window.electronAPI.saveConfig(newConfig)
@@ -388,51 +435,10 @@ function App() {
     const files = Array.from(e.dataTransfer.files)
     if (files.length === 0) return
 
-    const currentApps = appsRef.current
-    const newApps: AppItem[] = []
-
-    for (const file of files) {
-      const filePath = (file as any).path
-      if (!filePath) continue
-
-      const isExe = filePath.toLowerCase().endsWith('.exe')
-      const isLnk = filePath.toLowerCase().endsWith('.lnk')
-      const isDirectory = (file as any).type === '' && !filePath.includes('.')
-
-      if (isExe || isLnk) {
-        const name = getFileNameFromPath(filePath)
-        if (!currentApps.find(app => app.name === name)) {
-          newApps.push({
-            id: uuidv4(),
-            name,
-            path: filePath,
-            icon: '',
-            categoryId: 'other',
-            pinyin: getPinyin(name),
-            firstLetter: getFirstLetter(name),
-            type: 'app'
-          })
-        }
-      } else if (isDirectory) {
-        const parts = filePath.replace(/\\/g, '/').split('/')
-        const folderName = parts[parts.length - 1] || '文件夹'
-        if (!currentApps.find(app => app.name === folderName)) {
-          newApps.push({
-            id: uuidv4(),
-            name: folderName,
-            path: filePath,
-            icon: '',
-            categoryId: 'folder',
-            pinyin: getPinyin(folderName),
-            firstLetter: getFirstLetter(folderName),
-            type: 'folder'
-          })
-        }
-      }
-    }
+    const newApps = parseFilesToApps(files, 'other')
 
     if (newApps.length > 0) {
-      const updatedApps = [...currentApps, ...newApps]
+      const updatedApps = [...appsRef.current, ...newApps]
       setApps(updatedApps)
       await window.electronAPI.saveApps({ apps: updatedApps })
     }
@@ -530,8 +536,9 @@ function App() {
               e.preventDefault()
               e.stopPropagation()
               const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-              if (appId) {
-                e.dataTransfer.dropEffect = 'move'
+              const hasFiles = e.dataTransfer.types.includes('Files')
+              if (appId || hasFiles) {
+                e.dataTransfer.dropEffect = appId ? 'move' : 'copy'
                 setDragOverCategory(cat.id)
               }
             }}
@@ -540,8 +547,20 @@ function App() {
               e.preventDefault()
               e.stopPropagation()
               setDragOverCategory(null)
+
               const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-              if (appId) {
+              const files = Array.from(e.dataTransfer.files)
+
+              if (files.length > 0) {
+                const newApps = parseFilesToApps(files, cat.id)
+                if (newApps.length > 0) {
+                  const updatedApps = [...appsRef.current, ...newApps]
+                  setApps(updatedApps)
+                  await window.electronAPI.saveApps({ apps: updatedApps })
+                }
+                draggedAppIdRef.current = null
+                setDraggedAppId(null)
+              } else if (appId) {
                 await handleMoveAppToCategory(appId, cat.id)
                 draggedAppIdRef.current = null
                 setDraggedAppId(null)
