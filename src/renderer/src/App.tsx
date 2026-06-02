@@ -291,7 +291,8 @@ function App() {
   }
 
   const handleMoveAppToCategory = async (appId: string, categoryId: string) => {
-    const updatedApps = apps.map(app =>
+    const currentApps = appsRef.current
+    const updatedApps = currentApps.map(app =>
       app.id === appId ? { ...app, categoryId } : app
     )
     setApps(updatedApps)
@@ -324,7 +325,8 @@ function App() {
       setActiveCategory(null)
     }
 
-    const updatedApps = apps.map(app => 
+    const currentApps = appsRef.current
+    const updatedApps = currentApps.map(app => 
       app.categoryId === id ? { ...app, categoryId: 'other' } : app
     )
     setApps(updatedApps)
@@ -386,6 +388,7 @@ function App() {
     const files = Array.from(e.dataTransfer.files)
     if (files.length === 0) return
 
+    const currentApps = appsRef.current
     const newApps: AppItem[] = []
 
     for (const file of files) {
@@ -398,7 +401,7 @@ function App() {
 
       if (isExe || isLnk) {
         const name = getFileNameFromPath(filePath)
-        if (!apps.find(app => app.name === name)) {
+        if (!currentApps.find(app => app.name === name)) {
           newApps.push({
             id: uuidv4(),
             name,
@@ -413,7 +416,7 @@ function App() {
       } else if (isDirectory) {
         const parts = filePath.replace(/\\/g, '/').split('/')
         const folderName = parts[parts.length - 1] || '文件夹'
-        if (!apps.find(app => app.name === folderName)) {
+        if (!currentApps.find(app => app.name === folderName)) {
           newApps.push({
             id: uuidv4(),
             name: folderName,
@@ -429,11 +432,11 @@ function App() {
     }
 
     if (newApps.length > 0) {
-      const updatedApps = [...apps, ...newApps]
+      const updatedApps = [...currentApps, ...newApps]
       setApps(updatedApps)
       await window.electronAPI.saveApps({ apps: updatedApps })
     }
-  }, [apps])
+  }, [])
 
   const getEngineDisplayName = (engine: SearchEngineInfo) => {
     const names: { [key: string]: string } = {
@@ -526,7 +529,7 @@ function App() {
             onDragOver={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              const appId = draggedAppIdRef.current || draggedAppId || e.dataTransfer.getData('text/plain')
+              const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
               if (appId) {
                 e.dataTransfer.dropEffect = 'move'
                 setDragOverCategory(cat.id)
@@ -537,14 +540,9 @@ function App() {
               e.preventDefault()
               e.stopPropagation()
               setDragOverCategory(null)
-              const appId = draggedAppIdRef.current || draggedAppId || e.dataTransfer.getData('text/plain')
+              const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
               if (appId) {
-                const currentApps = appsRef.current
-                const updatedApps = currentApps.map(app =>
-                  app.id === appId ? { ...app, categoryId: cat.id } : app
-                )
-                setApps(updatedApps)
-                await window.electronAPI.saveApps({ apps: updatedApps })
+                await handleMoveAppToCategory(appId, cat.id)
                 draggedAppIdRef.current = null
                 setDraggedAppId(null)
               }
