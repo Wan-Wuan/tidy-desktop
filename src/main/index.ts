@@ -109,7 +109,7 @@ function createWindow() {
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173')
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+    mainWindow.loadFile(path.join(__dirname, '../../renderer/index.html'))
   }
 
   mainWindow.once('ready-to-show', () => {
@@ -172,7 +172,7 @@ function createSearchWindow() {
   if (isDev) {
     searchWindow.loadURL('http://localhost:5173/search.html')
   } else {
-    searchWindow.loadFile(path.join(__dirname, '../renderer/search.html'))
+    searchWindow.loadFile(path.join(__dirname, '../../renderer/search.html'))
   }
 
   searchWindow.once('ready-to-show', () => {
