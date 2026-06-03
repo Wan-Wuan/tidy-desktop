@@ -56,6 +56,7 @@ function App() {
   const dragCounterRef = useRef(0)
   const draggedAppIdRef = useRef<string | null>(null)
   const appsRef = useRef<AppItem[]>([])
+  const categoriesRef = useRef<Category[]>([])
   const activeCategoryRef = useRef<string | null>(null)
   const isExternalDragRef = useRef(false)
 
@@ -66,6 +67,10 @@ function App() {
   useEffect(() => {
     appsRef.current = apps
   }, [apps])
+
+  useEffect(() => {
+    categoriesRef.current = categories
+  }, [categories])
 
   useEffect(() => {
     activeCategoryRef.current = activeCategory
@@ -372,6 +377,11 @@ function App() {
   }
 
   const handleAddApp = async (name: string, path: string, categoryId: string, type: 'app' | 'folder' = 'app') => {
+    if (categories.length === 0) {
+      alert('请先创建一个分类，然后再添加应用。')
+      return
+    }
+
     const duplicate = apps.find(app => app.name === name)
     if (duplicate) {
       alert(`已存在同名应用"${name}"，请使用其他名称。`)
@@ -403,6 +413,11 @@ function App() {
   }
 
   const handleAddFolder = async () => {
+    if (categories.length === 0) {
+      alert('请先创建一个分类，然后再添加应用。')
+      return
+    }
+
     const folderPath = await window.electronAPI.selectFolder()
     if (!folderPath) return
 
@@ -462,15 +477,25 @@ function App() {
     const currentApps = appsRef.current
     const newApps: AppItem[] = []
 
+    const execExts = ['.exe', '.lnk', '.msi', '.bat', '.cmd', '.vbs', '.ps1']
+    const docExts = ['.ppt', '.pptx', '.doc', '.docx', '.xls', '.xlsx', '.pdf', '.txt', '.rtf', '.csv']
+    const archiveExts = ['.zip', '.rar', '.7z', '.tar', '.gz', '.bz2']
+    const mediaExts = ['.mp3', '.mp4', '.wav', '.avi', '.mkv', '.flv', '.wmv', '.mov', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg']
+    const allFileExts = [...execExts, ...docExts, ...archiveExts, ...mediaExts]
+
     for (const file of files) {
       const filePath = (file as any).path
       if (!filePath) continue
 
-      const isExe = filePath.toLowerCase().endsWith('.exe')
-      const isLnk = filePath.toLowerCase().endsWith('.lnk')
+      const ext = filePath.toLowerCase().substring(filePath.lastIndexOf('.'))
+      const isExe = execExts.includes(ext)
+      const isDoc = docExts.includes(ext)
+      const isArchive = archiveExts.includes(ext)
+      const isMedia = mediaExts.includes(ext)
+      const isKnownFile = allFileExts.includes(ext)
       const isDirectory = (file as any).type === '' && !filePath.includes('.')
 
-      if (isExe || isLnk) {
+      if (isKnownFile || isExe) {
         const name = getFileNameFromPath(filePath)
         if (!currentApps.find(app => app.name === name)) {
           newApps.push({
@@ -676,6 +701,11 @@ function App() {
 
     const files = Array.from(e.dataTransfer.files)
     if (files.length === 0) return
+
+    if (categoriesRef.current.length === 0) {
+      alert('请先创建一个分类，然后再添加应用。')
+      return
+    }
 
     const targetCategory = activeCategoryRef.current || 'other'
     const newApps = parseFilesToApps(files, targetCategory)
@@ -885,6 +915,12 @@ function App() {
             {sub.icon} {sub.name}
           </button>
         ))}
+        <button
+          onClick={() => setShowCategoryManager(true)}
+          className="px-2.5 py-1 rounded-full text-xs whitespace-nowrap bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all"
+        >
+          + 分类
+        </button>
         <button
           onClick={() => setShowSubcategoryManager(true)}
           className="px-2.5 py-1 rounded-full text-xs whitespace-nowrap bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all"
