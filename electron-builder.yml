@@ -1,6 +1,6 @@
 {
   "appId": "com.tidy-desktop.app",
-  "productName": "桌面整理",
+  "productName": "tidy-desktop",
   "directories": {
     "output": "release"
   },
@@ -11,16 +11,11 @@
   "win": {
     "target": [
       {
-        "target": "nsis",
+        "target": "dir",
         "arch": ["x64"]
       }
     ],
-    "icon": "assets/icon.ico"
-  },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true,
-    "createDesktopShortcut": true,
-    "createStartMenuShortcut": true
+    "signAndEditExecutable": false,
+    "sign": null
   }
 }

@@ -1,29 +1,56 @@
-# 桌面整理 (Tidy Desktop)
+# Tidy Desktop（桌面整理）
 
-一个简洁高效的桌面应用整理工具，帮助您快速启动和管理应用程序。
+一个简洁高效的桌面应用整理工具，帮助您快速启动、分类和管理应用程序。
 
 ## 功能特性
 
-- **全局快捷键唤醒**：支持 `Ctrl+Space` 或 `Alt+Space` 快速打开/隐藏界面
-- **应用管理**：添加、删除、分类管理您的应用程序
-- **智能搜索**：
-  - 全字母搜索：输入应用名称的任意部分
-  - 首字母搜索：输入拼音首字母快速定位
-- **搜索引擎集成**：
-  - 输入 `b + 空格 + 关键词` 调用 Bing 搜索
-  - 输入 `g + 空格 + 关键词` 调用 Google 搜索
-- **分类管理**：预设多种分类（浏览器、开发工具、影音娱乐等），支持自定义
-- **无边框网格布局**：清爽的应用展示界面
-- **系统托盘**：最小化后驻留在系统托盘，双击可重新打开
+### 核心功能
+- **全局快捷键唤醒**：自定义快捷键快速打开/隐藏界面
+- **应用管理**：添加、删除、排序、分类管理应用程序
+- **智能搜索**：多关键词模糊匹配、拼音首字母、单词前缀、路径搜索
+- **分类系统**：多级分类 + 子分类，支持拖拽排序和分组显示
+- **图标提取**：自动提取 .exe/.lnk 应用图标并缓存
+
+### 搜索功能
+- **多关键词搜索**：`vs code` 匹配 `Visual Studio Code`
+- **首字母缩写**：`vc` 匹配 `Visual Studio Code`
+- **拼音搜索**：`weixin` 或 `wx` 匹配 `微信`
+- **文件夹路径**：输入 `C:\Users` 直接打开文件夹
+
+### 搜索引擎（输入关键词 + 空格调用）
+| 前缀 | 引擎 |
+|------|------|
+| `b` | Bing |
+| `g` | Google |
+| `bd` | 百度 |
+| `yh` | Yahoo |
+| `ddg` | DuckDuckGo |
+| `gh` | GitHub |
+| `so` | StackOverflow |
+| `zhihu` | 知乎 |
+| `bilibili` | B站 |
+
+### 分类管理
+- 自定义分类（图标、名称）
+- 子分类（支持挂在任意分类下或全局）
+- 拖拽应用到分类/子分类
+- 拖拽排序应用、分类、子分类
+- 分类视图中按子分类分组显示
+
+### 设置选项
+- 开机自启动
+- 自定义快捷键（录制任意组合键）
+- UI 自定义（每行数量、卡片大小、圆角、显示/隐藏图标和名称）
+- 默认搜索引擎选择
 
 ## 技术栈
 
 - Electron 28
 - React 18
 - TypeScript
-- Vite
-- Tailwind CSS
-- pinyin-pro（拼音搜索支持）
+- Vite 5
+- Tailwind CSS 3
+- pinyin-pro（拼音搜索）
 
 ## 安装与运行
 
@@ -33,15 +60,21 @@
 # 安装依赖
 npm install
 
-# 启动开发模式（同时启动Vite和Electron）
+# 启动开发模式
 npm run electron:dev
 ```
 
 ### 构建打包
 
 ```bash
-# 构建生产版本
-npm run electron:build
+# 构建前端
+npm run build
+
+# 构建主进程
+npm run build:main
+
+# 打包为可执行文件
+npx electron-builder --win --x64
 ```
 
 ## 项目结构
@@ -49,54 +82,44 @@ npm run electron:build
 ```
 tidy-desktop/
 ├── src/
-│   ├── main/                    # Electron主进程
-│   │   ├── index.ts             # 主入口
+│   ├── main/                    # Electron 主进程
+│   │   ├── index.ts             # 主入口（IPC、窗口管理、图标提取）
 │   │   └── preload.ts           # 预加载脚本
-│   ├── renderer/                # React渲染进程
+│   ├── renderer/                # React 渲染进程
 │   │   └── src/
 │   │       ├── App.tsx          # 主应用组件
-│   │       ├── main.tsx         # 渲染入口
+│   │       ├── SearchApp.tsx    # 快速搜索框组件
+│   │       ├── main.tsx         # 主窗口入口
+│   │       ├── search-main.tsx  # 搜索窗口入口
 │   │       └── index.css        # 全局样式
 │   └── shared/                  # 共享类型定义
 │       └── types.ts
-├── data/                        # 数据目录（运行时自动生成）
+├── electron-builder.yml         # 打包配置
 ├── package.json
 ├── tsconfig.json
 ├── tsconfig.main.json
 ├── vite.config.ts
-└── tailwind.config.js
+├── tailwind.config.js
+└── postcss.config.js
 ```
 
 ## 数据存储
 
-应用数据存储在用户的Electron应用数据目录中：
+数据存储在 `%APPDATA%/tidy-desktop/data/` 目录：
 
-- `config.json`：用户配置（快捷键、搜索引擎等）
-- `apps.json`：应用列表
-- `categories.json`：分类信息
+- `config.json`：用户配置（快捷键、搜索引擎、UI 设置等）
+- `apps.json`：应用列表（含图标缓存）
+- `categories.json`：分类和子分类信息
+- `icons/`：应用图标缓存目录
 
 ## 快捷键
 
 | 快捷键 | 功能 |
 |--------|------|
-| `Ctrl+Space` 或 `Alt+Space` | 显示/隐藏主窗口（可在设置中切换） |
+| 自定义（默认 `Alt+Space`） | 显示/隐藏主窗口 |
+| 自定义（默认 `Ctrl+K`） | 快速搜索框 |
+| `Esc` | 关闭窗口 |
 | `Enter` | 打开搜索结果中的第一个应用 |
-
-## 搜索技巧
-
-- 直接输入应用名称进行搜索
-- 输入拼音或拼音首字母进行搜索
-- 输入 `b 关键词` 使用 Bing 搜索
-- 输入 `g 关键词` 使用 Google 搜索
-
-## 默认分类
-
-- 🌐 浏览器
-- 💻 开发工具
-- 🎬 影音娱乐
-- 📄 办公软件
-- 🎮 游戏
-- 📦 其他
 
 ## 许可证
 
