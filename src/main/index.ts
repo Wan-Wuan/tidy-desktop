@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, nativeImage, shell, screen, dialog } from 'electron'
+﻿import { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, nativeImage, shell, screen, dialog } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { exec } from 'child_process'
@@ -298,7 +298,18 @@ ipcMain.handle('get-config', () => {
   const defaults = getDefaultConfig()
   const config = readJsonFile(CONFIG_FILE, defaults)
   // 向后兼容：确保所有新字段都有默认值
-  if (!config.searchEngines) config.searchEngines = defaults.searchEngines
+  if (!config.searchEngines) {
+    config.searchEngines = defaults.searchEngines
+  } else {
+    for (const [key, val] of Object.entries(defaults.searchEngines)) {
+      if (!config.searchEngines[key]) {
+        config.searchEngines[key] = val
+      }
+    }
+  }
+  if (!config.windowSize) config.windowSize = defaults.windowSize
+  if (!config.hotkey) config.hotkey = defaults.hotkey
+  if (!config.searchHotkey) config.searchHotkey = defaults.searchHotkey
   if (!config.ui) config.ui = defaults.ui
   if (config.autoStart === undefined) config.autoStart = defaults.autoStart
   if (!config.defaultEngine) config.defaultEngine = defaults.defaultEngine

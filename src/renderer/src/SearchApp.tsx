@@ -132,8 +132,8 @@ function SearchApp() {
     const terms = searchQuery.toLowerCase().trim().split(/\s+/)
     const matched = apps.filter(app => {
       const name = app.name.toLowerCase()
-      const pinyin = app.pinyin.toLowerCase()
-      const firstLetter = app.firstLetter.toLowerCase()
+      const pinyin = (app.pinyin || '').toLowerCase()
+      const firstLetter = (app.firstLetter || '').toLowerCase()
       const nameWords = name.split(/[\s\-_.,/\\|]+/)
 
       return terms.every(term => {

@@ -108,8 +108,14 @@ function App() {
 
     const loadedApps = (appsData.apps || []).map(app => ({
       ...app,
+      id: app.id || '',
+      name: app.name || '',
+      path: app.path || '',
+      icon: app.icon || '',
       categoryId: app.categoryId || '',
       subcategoryId: app.subcategoryId || null,
+      pinyin: app.pinyin || '',
+      firstLetter: app.firstLetter || '',
       type: app.type || 'app'
     }))
     setApps(loadedApps)
@@ -236,9 +242,9 @@ function App() {
     const terms = searchQuery.toLowerCase().trim().split(/\s+/)
     
     const matched = filtered.filter(app => {
-      const name = app.name.toLowerCase()
-      const pinyin = app.pinyin.toLowerCase()
-      const firstLetter = app.firstLetter.toLowerCase()
+      const name = (app.name || '').toLowerCase()
+      const pinyin = (app.pinyin || '').toLowerCase()
+      const firstLetter = (app.firstLetter || '').toLowerCase()
       const nameWords = name.split(/[\s\-_.,/\\|]+/)
 
       return terms.every(term => {
@@ -713,7 +719,7 @@ function App() {
       return
     }
 
-    const targetCategory = activeCategoryRef.current || 'other'
+    const targetCategory = activeCategoryRef.current || (categoriesRef.current.length > 0 ? categoriesRef.current[0].id : '')
     const newApps = parseFilesToApps(files, targetCategory)
 
     if (newApps.length > 0) {
