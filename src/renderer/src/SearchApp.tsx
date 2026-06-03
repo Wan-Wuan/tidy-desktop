@@ -94,9 +94,9 @@ function SearchApp() {
     const trimmed = input.trimEnd()
     for (const [key, engine] of Object.entries(config.searchEngines)) {
       const aliases = [key, engine.name.toLowerCase()]
-      if (key === 'b') aliases.push('bing', 'baidu', 'bd')
+      if (key === 'b') aliases.push('bing')
       if (key === 'g') aliases.push('google')
-      if (key === 'baidu') aliases.push('b', 'bd')
+      if (key === 'bd') aliases.push('baidu')
       if (aliases.includes(trimmed.toLowerCase())) {
         return { isEngine: true, engine: { key, name: engine.name, url: engine.url } }
       }

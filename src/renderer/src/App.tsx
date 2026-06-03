@@ -171,9 +171,9 @@ function App() {
       const engineName = engine.name.toLowerCase()
       const aliases = [key, engineName]
       
-      if (key === 'b') aliases.push('bing', 'baidu', 'bd')
+      if (key === 'b') aliases.push('bing')
       if (key === 'g') aliases.push('google')
-      if (key === 'baidu') aliases.push('b', 'bd', 'baidu')
+      if (key === 'bd') aliases.push('baidu')
       
       if (aliases.includes(trimmed.toLowerCase())) {
         return {
@@ -298,11 +298,17 @@ function App() {
   }, [apps, searchQuery, activeCategory, activeSubcategoryId])
 
   const handleOpenApp = async (app: AppItem) => {
+    if (app.id === '__folder_path__') {
+      await window.electronAPI.openFolder(app.path)
+      setSearchQuery('')
+      return
+    }
     if (app.type === 'folder') {
       await window.electronAPI.openFolder(app.path)
     } else {
       await window.electronAPI.openApp(app.path)
     }
+    setSearchQuery('')
   }
 
   const isFolderPath = (query: string): boolean => {
@@ -360,7 +366,6 @@ function App() {
     const filteredApps = filterApps()
     if (filteredApps.length > 0) {
       await handleOpenApp(filteredApps[0])
-      setSearchQuery('')
     }
   }
 
@@ -488,14 +493,10 @@ function App() {
       if (!filePath) continue
 
       const ext = filePath.toLowerCase().substring(filePath.lastIndexOf('.'))
-      const isExe = execExts.includes(ext)
-      const isDoc = docExts.includes(ext)
-      const isArchive = archiveExts.includes(ext)
-      const isMedia = mediaExts.includes(ext)
       const isKnownFile = allFileExts.includes(ext)
       const isDirectory = (file as any).type === '' && !filePath.includes('.')
 
-      if (isKnownFile || isExe) {
+      if (isKnownFile) {
         const name = getFileNameFromPath(filePath)
         if (!currentApps.find(app => app.name === name)) {
           newApps.push({
