@@ -194,7 +194,20 @@ function createSearchWindow() {
 }
 
 function createTray() {
-  const icon = nativeImage.createEmpty()
+  const iconSize = 16
+  const canvas = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 ${iconSize} ${iconSize}">
+      <rect width="${iconSize}" height="${iconSize}" rx="3" fill="#3B82F6"/>
+      <rect x="3" y="3" width="4" height="4" rx="1" fill="white" opacity="0.9"/>
+      <rect x="9" y="3" width="4" height="4" rx="1" fill="white" opacity="0.7"/>
+      <rect x="3" y="9" width="4" height="4" rx="1" fill="white" opacity="0.7"/>
+      <rect x="9" y="9" width="4" height="4" rx="1" fill="white" opacity="0.5"/>
+    </svg>
+  `
+  const icon = nativeImage.createFromBuffer(
+    Buffer.from(canvas),
+    { width: iconSize, height: iconSize }
+  )
   tray = new Tray(icon)
 
   const contextMenu = Menu.buildFromTemplate([

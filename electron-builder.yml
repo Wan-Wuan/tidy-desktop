@@ -11,11 +11,17 @@
   "win": {
     "target": [
       {
-        "target": "dir",
+        "target": "nsis",
         "arch": ["x64"]
       }
     ],
     "signAndEditExecutable": false,
     "sign": null
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
   }
 }
