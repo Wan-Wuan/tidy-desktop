@@ -195,7 +195,7 @@ function createSearchWindow() {
 
 function createTray() {
   // Tray icon: embedded 16x16 PNG (blue rounded rectangle with white grid)
-  const trayIconBase64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMElEQVR4nGOwbvr2nxLMMLgMAIJnyBhJfAsyHs4GDIpYwOpUIGhAxsPZgIGPBXIwAGbx8b/4kOAqAAAAAElFTkSuQmCC'
+  const trayIconBase64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA8ElEQVR4nLXTywoBURjAcTsvoCyUR1EegOy9iqXyDJ7BxsJCYqEoURaiSVlMkdxvc6E5l49z6vua5DLI4ldfzTn/TmdmQvHMBNCiGKU5n7VpDpeH4F+HEkkTQo8efIIChnkh7kVAf3zWTg6H9sAlLwPbVJoCsVqBAkYuEizw0wmcsyBSSjjaXBO3eXPg5GmgO3LJweLQ7Dvaes+g2rHJ/wL7EydCSFjtmMa5hNnKI08D9Z5NFlsGlZalTZcelBpHYs697wKWIzQVQIEDuFlRb8kfCfQp42K1md3uxB95G7jfjDDy+wnULxk0gBGcl1MGV/29CTbW87/dAAAAAElFTkSuQmCC'
   const icon = nativeImage.createFromDataURL('data:image/png;base64,' + trayIconBase64)
   tray = new Tray(icon)
 

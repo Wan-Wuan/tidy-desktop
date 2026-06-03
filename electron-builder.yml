@@ -6,17 +6,21 @@
   },
   "files": [
     "dist/**/*",
-    "package.json"
+    "package.json",
+    "build/app-icon.ico"
   ],
   "win": {
     "target": [
       {
         "target": "nsis",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       }
     ],
     "signAndEditExecutable": false,
-    "sign": null
+    "sign": null,
+    "icon": "build/app-icon.ico"
   },
   "nsis": {
     "oneClick": false,
