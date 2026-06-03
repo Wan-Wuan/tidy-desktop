@@ -99,19 +99,8 @@ function App() {
     ])
     setConfig(configData)
 
-    let loadedApps = appsData.apps
-
-    const needsIconUpdate = loadedApps.filter(a => !a.icon || !a.icon.startsWith('data:') || a.icon.length < 1000)
-    if (needsIconUpdate.length > 0) {
-      for (const app of needsIconUpdate) {
-        const iconPath = await window.electronAPI.extractIcon(app.path)
-        if (iconPath) app.icon = iconPath
-      }
-      setApps([...loadedApps])
-      await window.electronAPI.saveApps({ apps: loadedApps })
-    } else {
-      setApps(loadedApps)
-    }
+    const loadedApps = appsData.apps
+    setApps(loadedApps)
 
     const sortedCats = categoriesData.categories.sort((a, b) => a.order - b.order)
     setCategories(sortedCats)
@@ -120,6 +109,27 @@ function App() {
     if (!activeCategoryRef.current && sortedCats.length > 0) {
       setActiveCategory(sortedCats[0].id)
       activeCategoryRef.current = sortedCats[0].id
+    }
+
+    const needsIconUpdate = loadedApps.filter(a => !a.icon || !a.icon.startsWith('data:') || a.icon.length < 1000)
+    if (needsIconUpdate.length > 0) {
+      const BATCH_SIZE = 3
+      for (let i = 0; i < needsIconUpdate.length; i += BATCH_SIZE) {
+        const batch = needsIconUpdate.slice(i, i + BATCH_SIZE)
+        const results = await Promise.all(
+          batch.map(async app => {
+            const icon = await window.electronAPI.extractIcon(app.path)
+            return { id: app.id, icon: icon || '' }
+          })
+        )
+        const currentApps = appsRef.current
+        const updated = currentApps.map(a => {
+          const r = results.find(r => r.id === a.id)
+          return r ? { ...a, icon: r.icon } : a
+        })
+        setApps(updated)
+      }
+      await window.electronAPI.saveApps({ apps: appsRef.current })
     }
   }
 

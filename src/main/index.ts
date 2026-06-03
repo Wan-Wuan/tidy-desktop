@@ -399,10 +399,9 @@ ipcMain.handle('extract-icon', async (_, filePath: string) => {
     let targetPath = filePath
     if (filePath.toLowerCase().endsWith('.lnk')) {
       try {
-        const psScript = `$sh = New-Object -ComObject WScript.Shell; $s = $sh.CreateShortcut('${filePath.replace(/'/g, "''")}'); $s.TargetPath`
         const result = require('child_process').execSync(
-          `powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"')}"`,
-          { encoding: 'utf8', windowsHide: true, timeout: 5000 }
+          `powershell -NoProfile -Command "$sh = New-Object -ComObject WScript.Shell; $s = $sh.CreateShortcut('${filePath.replace(/'/g, "''")}'); $s.TargetPath"`,
+          { encoding: 'utf8', windowsHide: true, timeout: 3000 }
         ).trim()
         if (result && fs.existsSync(result)) {
           targetPath = result
@@ -410,34 +409,26 @@ ipcMain.handle('extract-icon', async (_, filePath: string) => {
       } catch {}
     }
 
-    // Try PowerShell to extract icon with large size
+    const icon = await app.getFileIcon(targetPath, { size: 'large' })
+    const pngData = icon.toPNG()
+    if (pngData.length > 500) {
+      fs.writeFileSync(iconPath, pngData)
+      return `data:image/png;base64,${pngData.toString('base64')}`
+    }
+
     try {
-      const psScript = `
-        Add-Type -AssemblyName System.Drawing
-        $icon = [System.Drawing.Icon]::ExtractAssociatedIcon('${targetPath.replace(/'/g, "''")}')
-        if ($icon) {
-          $bmp = $icon.ToBitmap()
-          $ms = New-Object System.IO.MemoryStream
-          $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
-          $bytes = $ms.ToArray()
-          [Convert]::ToBase64String($bytes)
-        }
-      `
-      const result = require('child_process').execSync(
-        `powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"').replace(/\r?\n/g, '; ')}"`,
-        { encoding: 'utf8', windowsHide: true, timeout: 10000 }
+      const psResult = require('child_process').execSync(
+        `powershell -NoProfile -Command "Add-Type -AssemblyName System.Drawing; $icon = [System.Drawing.Icon]::ExtractAssociatedIcon('${targetPath.replace(/'/g, "''")}'); if($icon){$bmp=$icon.ToBitmap(); $ms=New-Object System.IO.MemoryStream; $bmp.Save($ms,[System.Drawing.Imaging.ImageFormat]::Png); [Convert]::ToBase64String($ms.ToArray())}"`,
+        { encoding: 'utf8', windowsHide: true, timeout: 5000 }
       ).trim()
-      if (result && result.length > 100) {
-        const pngBuffer = Buffer.from(result, 'base64')
-        fs.writeFileSync(iconPath, pngBuffer)
-        return `data:image/png;base64,${result}`
+      if (psResult && psResult.length > 100) {
+        const buf = Buffer.from(psResult, 'base64')
+        fs.writeFileSync(iconPath, buf)
+        return `data:image/png;base64,${psResult}`
       }
     } catch {}
 
-    // Fallback to Electron's getFileIcon
-    const icon = await app.getFileIcon(targetPath, { size: 'large' })
-    const pngData = icon.toPNG()
-    if (pngData.length > 100) {
+    if (pngData.length > 0) {
       fs.writeFileSync(iconPath, pngData)
       return `data:image/png;base64,${pngData.toString('base64')}`
     }
