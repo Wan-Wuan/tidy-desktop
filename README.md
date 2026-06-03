@@ -10,6 +10,7 @@
 - **智能搜索**：多关键词模糊匹配、拼音首字母、单词前缀、路径搜索
 - **分类系统**：多级分类 + 子分类，支持拖拽排序和分组显示
 - **图标提取**：自动提取 .exe/.lnk 应用图标并缓存
+- **系统托盘**：最小化后驻留在系统托盘，双击可重新打开
 
 ### 搜索功能
 - **多关键词搜索**：`vs code` 匹配 `Visual Studio Code`
@@ -36,6 +37,13 @@
 - 拖拽应用到分类/子分类
 - 拖拽排序应用、分类、子分类
 - 分类视图中按子分类分组显示
+- 无分类时添加应用会提示先创建分类
+
+### 支持的文件类型
+- **可执行**：`.exe` `.lnk` `.msi` `.bat` `.cmd` `.vbs` `.ps1`
+- **文档**：`.ppt` `.pptx` `.doc` `.docx` `.xls` `.xlsx` `.pdf` `.txt` `.rtf` `.csv`
+- **压缩包**：`.zip` `.rar` `.7z` `.tar` `.gz` `.bz2`
+- **媒体**：`.mp3` `.mp4` `.wav` `.avi` `.mkv` `.jpg` `.png` `.gif` `.svg`
 
 ### 设置选项
 - 开机自启动
@@ -53,6 +61,12 @@
 - pinyin-pro（拼音搜索）
 
 ## 安装与运行
+
+### 下载安装
+
+从 [GitHub Releases](https://github.com/Wan-Wuan/tidy-desktop/releases) 下载最新版本：
+- `tidy-desktop-Setup-x.x.x.exe`：NSIS 安装包，支持自定义安装目录
+- `tidy-desktop-v.x.x.x-win-x64.zip`：便携版，解压即用
 
 ### 开发环境
 
@@ -73,7 +87,7 @@ npm run build
 # 构建主进程
 npm run build:main
 
-# 打包为可执行文件
+# 打包为安装包
 npx electron-builder --win --x64
 ```
 
