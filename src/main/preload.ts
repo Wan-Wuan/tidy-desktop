@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   confirm: (message: string) => ipcRenderer.invoke('confirm', message),
   extractIcon: (filePath: string) => ipcRenderer.invoke('extract-icon', filePath),
   resizeSearchWindow: (height: number) => ipcRenderer.invoke('resize-search-window', height),
+  setAutoStart: (enabled: boolean) => ipcRenderer.invoke('set-auto-start', enabled),
+  getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
   onBlur: (callback: () => void) => {
     ipcRenderer.on('blur-event', () => callback())
   },

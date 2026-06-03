@@ -29,6 +29,14 @@ export interface SearchEngine {
   url: string
 }
 
+export interface UISettings {
+  gridColumns: number
+  cardSize: 'small' | 'medium' | 'large'
+  showIcon: boolean
+  showName: boolean
+  borderRadius: number
+}
+
 export interface Config {
   hotkey: string
   searchHotkey?: string
@@ -39,7 +47,9 @@ export interface Config {
   searchEngines: {
     [key: string]: SearchEngine
   }
-  theme?: string
+  autoStart?: boolean
+  ui?: UISettings
+  defaultEngine?: string
 }
 
 export interface AppsData {

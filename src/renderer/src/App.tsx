@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { AppItem, Category, Subcategory, Config } from '../../shared/types'
+import { AppItem, Category, Subcategory, Config, UISettings } from '../../shared/types'
 import { pinyin } from 'pinyin-pro'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -19,6 +19,8 @@ declare global {
       hideMainWindow: () => Promise<void>
       confirm: (message: string) => Promise<boolean>
       extractIcon: (filePath: string) => Promise<string | null>
+      setAutoStart: (enabled: boolean) => Promise<boolean>
+      getAutoStart: () => Promise<boolean>
     }
   }
 }
@@ -938,8 +940,22 @@ function App() {
                       <div className="flex-1 border-t border-gray-200"></div>
                     </div>
                   )}
-                  <div className="grid grid-cols-6 gap-4">
-                    {group.apps.map(app => (
+                  <div className={`grid gap-4 ${
+                    config?.ui?.gridColumns === 4 ? 'grid-cols-4' :
+                    config?.ui?.gridColumns === 5 ? 'grid-cols-5' :
+                    config?.ui?.gridColumns === 7 ? 'grid-cols-7' :
+                    config?.ui?.gridColumns === 8 ? 'grid-cols-8' :
+                    'grid-cols-6'
+                  }`}>
+                    {group.apps.map(app => {
+                      const ui = config?.ui
+                      const pSize = ui?.cardSize === 'small' ? 'p-2' : ui?.cardSize === 'large' ? 'p-5' : 'p-4'
+                      const iconSize = ui?.cardSize === 'small' ? 'w-10 h-10' : ui?.cardSize === 'large' ? 'w-14 h-14' : 'w-12 h-12'
+                      const iconInner = ui?.cardSize === 'small' ? 'w-8 h-8' : ui?.cardSize === 'large' ? 'w-12 h-12' : 'w-10 h-10'
+                      const textSize = ui?.cardSize === 'small' ? 'text-xs' : ui?.cardSize === 'large' ? 'text-base' : 'text-sm'
+                      const br = ui?.borderRadius ?? 8
+                      const brClass = br <= 2 ? 'rounded-none' : br <= 4 ? 'rounded-sm' : br <= 8 ? 'rounded-lg' : br <= 14 ? 'rounded-xl' : 'rounded-2xl'
+                      return (
                       <div
                         key={app.id}
                         draggable
@@ -978,7 +994,8 @@ function App() {
                             setDragOverAppId(null)
                           }, 100)
                         }}
-                        className={`bg-white rounded-lg p-4 hover:shadow-md transition-all cursor-pointer group relative ${
+                        style={{ borderRadius: br }}
+                        className={`bg-white ${pSize} hover:shadow-md transition-all cursor-pointer group relative ${
                           draggedAppId === app.id ? 'opacity-50 scale-95' : ''
                         } ${dragOverAppId === app.id ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}
                         onClick={() => handleOpenApp(app)}
@@ -992,18 +1009,23 @@ function App() {
                         >
                           ×
                         </button>
-                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-3 mx-auto ${
-                          app.type === 'folder' ? 'bg-orange-100' : 'bg-blue-100'
-                        }`}>
-                          {app.icon ? (
-                            <img src={app.icon} alt={app.name} className="w-10 h-10" />
-                          ) : (
-                            <span className="text-2xl">{app.type === 'folder' ? '📁' : '📦'}</span>
-                          )}
-                        </div>
-                        <p className="text-sm text-center text-gray-700 truncate">{app.name}</p>
+                        {ui?.showIcon !== false && (
+                          <div style={{ borderRadius: Math.min(br, 12) }} className={`${iconSize} flex items-center justify-center mb-3 mx-auto ${
+                            app.type === 'folder' ? 'bg-orange-100' : 'bg-blue-100'
+                          }`}>
+                            {app.icon ? (
+                              <img src={app.icon} alt={app.name} className={iconInner} />
+                            ) : (
+                              <span className={ui?.cardSize === 'small' ? 'text-xl' : ui?.cardSize === 'large' ? 'text-3xl' : 'text-2xl'}>{app.type === 'folder' ? '📁' : '📦'}</span>
+                            )}
+                          </div>
+                        )}
+                        {ui?.showName !== false && (
+                          <p className={`${textSize} text-center text-gray-700 truncate`}>{app.name}</p>
+                        )}
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               ))}
@@ -1073,90 +1095,220 @@ function SettingsModal({ config, onClose, onSave }: {
 }) {
   const [hotkey, setHotkey] = useState(config.hotkey)
   const [searchHotkey, setSearchHotkey] = useState(config.searchHotkey || 'Ctrl+K')
-  const [engines, setEngines] = useState(config.searchEngines)
+  const [autoStart, setAutoStart] = useState(false)
+  const [defaultEngine, setDefaultEngine] = useState(config.defaultEngine || 'b')
+  const [ui, setUi] = useState<UISettings>(config.ui || {
+    gridColumns: 6, cardSize: 'medium', showIcon: true, showName: true, borderRadius: 8
+  })
+  const [recording, setRecording] = useState<'main' | 'search' | null>(null)
+  const engines = config.searchEngines
 
-  const handleSave = () => {
+  useEffect(() => {
+    window.electronAPI.getAutoStart().then(setAutoStart)
+  }, [])
+
+  useEffect(() => {
+    if (!recording) return
+    const handler = (e: KeyboardEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const parts: string[] = []
+      if (e.ctrlKey) parts.push('Ctrl')
+      if (e.altKey) parts.push('Alt')
+      if (e.shiftKey) parts.push('Shift')
+      if (e.metaKey) parts.push('Meta')
+      const key = e.key === ' ' ? 'Space' : e.key.length === 1 ? e.key.toUpperCase() : e.key
+      if (!['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+        parts.push(key)
+        const combo = parts.join('+')
+        if (recording === 'main') setHotkey(combo)
+        else setSearchHotkey(combo)
+        setRecording(null)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [recording])
+
+  const handleSave = async () => {
+    await window.electronAPI.setAutoStart(autoStart)
     onSave({
       ...config,
       hotkey,
       searchHotkey,
-      searchEngines: engines
+      searchEngines: engines,
+      autoStart,
+      ui,
+      defaultEngine
     })
     onClose()
   }
 
+  const cardSizeLabels: Record<string, string> = { small: '小', medium: '中', large: '大' }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-96 max-h-[80vh] overflow-auto">
-        <h2 className="text-lg font-semibold mb-4">设置</h2>
-        
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            显示/隐藏主窗口
-          </label>
-          <select
-            value={hotkey}
-            onChange={(e) => setHotkey(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="Alt+Space">Alt + Space</option>
-            <option value="Ctrl+Space">Ctrl + Space</option>
-          </select>
-        </div>
+      <div className="bg-white rounded-lg p-6 w-[480px] max-h-[85vh] overflow-auto">
+        <h2 className="text-lg font-semibold mb-5">设置</h2>
 
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            快速搜索框
-          </label>
-          <select
-            value={searchHotkey}
-            onChange={(e) => setSearchHotkey(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="Ctrl+K">Ctrl + K</option>
-            <option value="Ctrl+Space">Ctrl + Space</option>
-            <option value="Alt+Space">Alt + Space</option>
-          </select>
-          <p className="text-xs text-gray-500 mt-1">仅弹出搜索框，不显示主窗口</p>
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            搜索引擎
-          </label>
-          {Object.entries(engines).map(([key, engine]) => (
-            <div key={key} className="mb-2 p-2 bg-gray-50 rounded">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-mono text-sm bg-gray-200 px-2 py-0.5 rounded">
-                  {key} + 空格
-                </span>
-                <span className="text-sm text-gray-600">→ {engine.name}</span>
-              </div>
-              <input
-                type="text"
-                value={engine.url}
-                onChange={(e) => setEngines({
-                  ...engines,
-                  [key]: { ...engine, url: e.target.value }
-                })}
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="搜索引擎URL"
-              />
+        <div className="mb-5">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <span>🚀</span> 常规
+          </h3>
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div>
+              <div className="text-sm font-medium text-gray-700">开机自启动</div>
+              <div className="text-xs text-gray-500">系统启动时自动运行</div>
             </div>
-          ))}
+            <button
+              onClick={() => setAutoStart(!autoStart)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${autoStart ? 'bg-blue-500' : 'bg-gray-300'}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${autoStart ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
         </div>
 
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-          >
+        <div className="mb-5">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <span>⌨️</span> 快捷键
+          </h3>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div>
+                <div className="text-sm font-medium text-gray-700">显示/隐藏主窗口</div>
+                <div className="text-xs text-gray-500">全局快捷键</div>
+              </div>
+              <button
+                onClick={() => setRecording(recording === 'main' ? null : 'main')}
+                className={`px-3 py-1.5 rounded text-sm font-mono min-w-[120px] text-center transition-colors ${
+                  recording === 'main'
+                    ? 'bg-blue-500 text-white animate-pulse'
+                    : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-400'
+                }`}
+              >
+                {recording === 'main' ? '请按下快捷键...' : hotkey}
+              </button>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div>
+                <div className="text-sm font-medium text-gray-700">快速搜索框</div>
+                <div className="text-xs text-gray-500">仅弹出搜索框</div>
+              </div>
+              <button
+                onClick={() => setRecording(recording === 'search' ? null : 'search')}
+                className={`px-3 py-1.5 rounded text-sm font-mono min-w-[120px] text-center transition-colors ${
+                  recording === 'search'
+                    ? 'bg-blue-500 text-white animate-pulse'
+                    : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-400'
+                }`}
+              >
+                {recording === 'search' ? '请按下快捷键...' : searchHotkey}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-5">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <span>🔍</span> 搜索引擎
+          </h3>
+          <div className="mb-3">
+            <label className="text-xs text-gray-500 mb-1 block">默认搜索引擎</label>
+            <select
+              value={defaultEngine}
+              onChange={(e) => setDefaultEngine(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {Object.entries(engines).map(([key, engine]) => (
+                <option key={key} value={key}>{engine.name} ({key} + 空格)</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {Object.entries(engines).map(([key, engine]) => (
+              <div key={key} className="flex items-center gap-1.5 p-2 bg-gray-50 rounded text-xs">
+                <span className="font-mono bg-gray-200 px-1.5 py-0.5 rounded">{key}</span>
+                <span className="text-gray-600 truncate">{engine.name}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-2">输入 关键词 + 空格 调用搜索引擎</p>
+        </div>
+
+        <div className="mb-5">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <span>🎨</span> 界面
+          </h3>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span className="text-sm text-gray-700">每行显示数量</span>
+              <div className="flex gap-1">
+                {[4, 5, 6, 7, 8].map(n => (
+                  <button
+                    key={n}
+                    onClick={() => setUi({ ...ui, gridColumns: n })}
+                    className={`w-8 h-8 rounded text-sm ${ui.gridColumns === n ? 'bg-blue-500 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:border-blue-400'}`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span className="text-sm text-gray-700">卡片大小</span>
+              <div className="flex gap-1">
+                {(['small', 'medium', 'large'] as const).map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setUi({ ...ui, cardSize: s })}
+                    className={`px-3 py-1 rounded text-sm ${ui.cardSize === s ? 'bg-blue-500 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:border-blue-400'}`}
+                  >
+                    {cardSizeLabels[s]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span className="text-sm text-gray-700">圆角大小</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="0"
+                  max="20"
+                  value={ui.borderRadius}
+                  onChange={(e) => setUi({ ...ui, borderRadius: Number(e.target.value) })}
+                  className="w-32"
+                />
+                <span className="text-sm text-gray-500 w-8">{ui.borderRadius}px</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span className="text-sm text-gray-700">显示图标</span>
+              <button
+                onClick={() => setUi({ ...ui, showIcon: !ui.showIcon })}
+                className={`relative w-11 h-6 rounded-full transition-colors ${ui.showIcon ? 'bg-blue-500' : 'bg-gray-300'}`}
+              >
+                <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${ui.showIcon ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span className="text-sm text-gray-700">显示名称</span>
+              <button
+                onClick={() => setUi({ ...ui, showName: !ui.showName })}
+                className={`relative w-11 h-6 rounded-full transition-colors ${ui.showName ? 'bg-blue-500' : 'bg-gray-300'}`}
+              >
+                <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${ui.showName ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t">
+          <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
             取消
           </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
+          <button onClick={handleSave} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
             保存
           </button>
         </div>

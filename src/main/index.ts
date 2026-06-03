@@ -58,16 +58,36 @@ function writeJsonFile(filePath: string, data: any) {
   }
 }
 
-function createWindow() {
-  const config = readJsonFile(CONFIG_FILE, {
+function getDefaultConfig() {
+  return {
     hotkey: 'Alt+Space',
     searchHotkey: 'Ctrl+K',
     windowSize: { width: 1050, height: 800 },
     searchEngines: {
       b: { name: 'Bing', url: 'https://www.bing.com/search?q=' },
-      g: { name: 'Google', url: 'https://www.google.com/search?q=' }
-    }
-  })
+      g: { name: 'Google', url: 'https://www.google.com/search?q=' },
+      bd: { name: '百度', url: 'https://www.baidu.com/s?wd=' },
+      yh: { name: 'Yahoo', url: 'https://search.yahoo.com/search?p=' },
+      ddg: { name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' },
+      gh: { name: 'GitHub', url: 'https://github.com/search?q=' },
+      so: { name: 'StackOverflow', url: 'https://stackoverflow.com/search?q=' },
+      zhihu: { name: '知乎', url: 'https://www.zhihu.com/search?q=' },
+      bilibili: { name: 'B站', url: 'https://search.bilibili.com/all?keyword=' }
+    },
+    autoStart: false,
+    ui: {
+      gridColumns: 6,
+      cardSize: 'medium' as const,
+      showIcon: true,
+      showName: true,
+      borderRadius: 8
+    },
+    defaultEngine: 'b'
+  }
+}
+
+function createWindow() {
+  const config = readJsonFile(CONFIG_FILE, getDefaultConfig())
 
   mainWindow = new BrowserWindow({
     width: config.windowSize.width,
@@ -262,15 +282,7 @@ app.on('will-quit', () => {
 })
 
 ipcMain.handle('get-config', () => {
-  return readJsonFile(CONFIG_FILE, {
-    hotkey: 'Alt+Space',
-    searchHotkey: 'Ctrl+K',
-    windowSize: { width: 1050, height: 800 },
-    searchEngines: {
-      b: { name: 'Bing', url: 'https://www.bing.com/search?q=' },
-      g: { name: 'Google', url: 'https://www.google.com/search?q=' }
-    }
-  })
+  return readJsonFile(CONFIG_FILE, getDefaultConfig())
 })
 
 ipcMain.handle('save-config', (_, config) => {
@@ -372,6 +384,18 @@ ipcMain.handle('hide-main-window', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.hide()
   }
+})
+
+ipcMain.handle('set-auto-start', (_, enabled: boolean) => {
+  app.setLoginItemSettings({
+    openAtLogin: enabled,
+    path: app.getPath('exe')
+  })
+  return true
+})
+
+ipcMain.handle('get-auto-start', () => {
+  return app.getLoginItemSettings().openAtLogin
 })
 
 ipcMain.handle('confirm', async (_, message: string) => {
