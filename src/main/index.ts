@@ -295,7 +295,14 @@ app.on('will-quit', () => {
 })
 
 ipcMain.handle('get-config', () => {
-  return readJsonFile(CONFIG_FILE, getDefaultConfig())
+  const defaults = getDefaultConfig()
+  const config = readJsonFile(CONFIG_FILE, defaults)
+  // 向后兼容：确保所有新字段都有默认值
+  if (!config.searchEngines) config.searchEngines = defaults.searchEngines
+  if (!config.ui) config.ui = defaults.ui
+  if (config.autoStart === undefined) config.autoStart = defaults.autoStart
+  if (!config.defaultEngine) config.defaultEngine = defaults.defaultEngine
+  return config
 })
 
 ipcMain.handle('save-config', (_, config) => {
@@ -307,7 +314,20 @@ ipcMain.handle('save-config', (_, config) => {
 })
 
 ipcMain.handle('get-apps', () => {
-  return readJsonFile(APPS_FILE, { apps: [] })
+  const data = readJsonFile(APPS_FILE, { apps: [] })
+  // 向后兼容：确保每个应用都有必需字段
+  data.apps = (data.apps || []).map((app: any) => ({
+    id: app.id || '',
+    name: app.name || '',
+    path: app.path || '',
+    icon: app.icon || '',
+    categoryId: app.categoryId || '',
+    subcategoryId: app.subcategoryId || null,
+    pinyin: app.pinyin || '',
+    firstLetter: app.firstLetter || '',
+    type: app.type || 'app'
+  }))
+  return data
 })
 
 ipcMain.handle('save-apps', (_, data) => {

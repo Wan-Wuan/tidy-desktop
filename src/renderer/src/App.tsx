@@ -106,10 +106,15 @@ function App() {
     ])
     setConfig(configData)
 
-    const loadedApps = appsData.apps
+    const loadedApps = (appsData.apps || []).map(app => ({
+      ...app,
+      categoryId: app.categoryId || '',
+      subcategoryId: app.subcategoryId || null,
+      type: app.type || 'app'
+    }))
     setApps(loadedApps)
 
-    const sortedCats = categoriesData.categories.sort((a, b) => a.order - b.order)
+    const sortedCats = (categoriesData.categories || []).sort((a, b) => a.order - b.order)
     setCategories(sortedCats)
     setSubcategories(categoriesData.subcategories || [])
 
