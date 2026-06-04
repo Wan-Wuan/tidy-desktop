@@ -552,6 +552,22 @@ function App() {
     await window.electronAPI.saveApps({ apps: updatedApps })
   }
 
+  const parseSteamUrlFromText = (text: string): { steamUrl: string; appId: string } | null => {
+    const launchMatch = text.match(/steam:\/\/launch\/(\d+)/)
+    if (launchMatch) {
+      return { steamUrl: `steam://launch/${launchMatch[1]}/0`, appId: launchMatch[1] }
+    }
+    const storeMatch = text.match(/steampowered\.com\/app\/(\d+)/)
+    if (storeMatch) {
+      return { steamUrl: `steam://launch/${storeMatch[1]}/0`, appId: storeMatch[1] }
+    }
+    const runGameMatch = text.match(/steam:\/\/rungameid\/(\d+)/)
+    if (runGameMatch) {
+      return { steamUrl: `steam://rungameid/${runGameMatch[1]}`, appId: runGameMatch[1] }
+    }
+    return null
+  }
+
   const parseFilesToApps = (files: File[], categoryId: string): AppItem[] => {
     const currentApps = appsRef.current
     const newApps: AppItem[] = []
@@ -608,7 +624,13 @@ function App() {
   const extractIconsForApps = async (newApps: AppItem[]) => {
     const appsWithIcons: AppItem[] = []
     for (const app of newApps) {
-      const iconPath = await window.electronAPI.extractIcon(app.path)
+      let iconPath: string | null = null
+      if (app.type === 'steam') {
+        iconPath = await window.electronAPI.extractSteamIcon(app.path)
+      }
+      if (!iconPath) {
+        iconPath = await window.electronAPI.extractIcon(app.path)
+      }
       appsWithIcons.push({ ...app, icon: iconPath || '' })
     }
 
@@ -727,7 +749,7 @@ function App() {
     e.preventDefault()
     e.stopPropagation()
     if (draggedAppIdRef.current) return
-    if (e.dataTransfer.types.includes('Files')) {
+    if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/uri-list')) {
       isExternalDragRef.current = true
       dragCounterRef.current++
       if (dragCounterRef.current === 1) {
@@ -773,6 +795,40 @@ function App() {
     isExternalDragRef.current = false
 
     if (draggedAppIdRef.current) return
+
+    // Check for Steam URL in dragged text (e.g. dragging from browser)
+    const textData = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/uri-list')
+    const steamMatch = textData ? parseSteamUrlFromText(textData) : null
+
+    if (steamMatch) {
+      if (categoriesRef.current.length === 0) {
+        alert('请先创建一个分类，然后再添加应用。')
+        return
+      }
+      const gameName = `Steam Game ${steamMatch.appId}`
+      const newApp: AppItem = {
+        id: uuidv4(),
+        name: gameName,
+        path: steamMatch.steamUrl,
+        icon: '',
+        categoryId: activeCategoryRef.current || categoriesRef.current[0].id,
+        pinyin: getPinyin(gameName),
+        firstLetter: getFirstLetter(gameName),
+        type: 'steam'
+      }
+      const updatedApps = [...appsRef.current, newApp]
+      setApps(updatedApps)
+      await window.electronAPI.saveApps({ apps: updatedApps })
+
+      // Extract Steam icon
+      const iconPath = await window.electronAPI.extractSteamIcon(steamMatch.steamUrl)
+      if (iconPath) {
+        const withIcon = updatedApps.map(a => a.id === newApp.id ? { ...a, icon: iconPath } : a)
+        setApps(withIcon)
+        await window.electronAPI.saveApps({ apps: withIcon })
+      }
+      return
+    }
 
     const files = Array.from(e.dataTransfer.files)
     if (files.length === 0) return
