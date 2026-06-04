@@ -21,6 +21,7 @@ declare global {
       confirm: (message: string) => Promise<boolean>
       extractIcon: (filePath: string) => Promise<string | null>
       extractSteamIcon: (steamUrl: string) => Promise<string | null>
+      getSteamGameName: (steamUrl: string) => Promise<string | null>
       setAutoStart: (enabled: boolean) => Promise<boolean>
       getAutoStart: () => Promise<boolean>
       onBlur: (callback: () => void) => void

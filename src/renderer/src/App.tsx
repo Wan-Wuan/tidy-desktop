@@ -21,6 +21,7 @@ declare global {
       confirm: (message: string) => Promise<boolean>
       extractIcon: (filePath: string) => Promise<string | null>
       extractSteamIcon: (steamUrl: string) => Promise<string | null>
+      getSteamGameName: (steamUrl: string) => Promise<string | null>
       setAutoStart: (enabled: boolean) => Promise<boolean>
       getAutoStart: () => Promise<boolean>
       hideSearchWindow: () => Promise<void>
@@ -805,7 +806,14 @@ function App() {
         alert('请先创建一个分类，然后再添加应用。')
         return
       }
-      const gameName = `Steam Game ${steamMatch.appId}`
+
+      // Get real game name from Steam API
+      let gameName = `Steam Game ${steamMatch.appId}`
+      try {
+        const realName = await window.electronAPI.getSteamGameName(steamMatch.steamUrl)
+        if (realName) gameName = realName
+      } catch {}
+
       const newApp: AppItem = {
         id: uuidv4(),
         name: gameName,
@@ -820,7 +828,7 @@ function App() {
       setApps(updatedApps)
       await window.electronAPI.saveApps({ apps: updatedApps })
 
-      // Extract Steam icon
+      // Extract Steam icon (from local cache or Steam CDN)
       const iconPath = await window.electronAPI.extractSteamIcon(steamMatch.steamUrl)
       if (iconPath) {
         const withIcon = updatedApps.map(a => a.id === newApp.id ? { ...a, icon: iconPath } : a)

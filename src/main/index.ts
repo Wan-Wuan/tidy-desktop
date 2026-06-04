@@ -506,9 +506,43 @@ ipcMain.handle('extract-steam-icon', async (_, steamUrl: string) => {
       }
     } catch {}
 
+    // Fallback: download icon from Steam CDN
+    try {
+      const iconUrl = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`
+      const response = await fetch(iconUrl)
+      if (response.ok) {
+        const buffer = Buffer.from(await response.arrayBuffer())
+        if (buffer.length > 1000) {
+          const cachedPath = path.join(ICONS_DIR, `steam_${appId}.jpg`)
+          try { fs.writeFileSync(cachedPath, buffer) } catch {}
+          return `data:image/jpeg;base64,${buffer.toString('base64')}`
+        }
+      }
+    } catch {}
+
     return null
   } catch (error) {
     console.error('Failed to extract Steam icon:', error)
+    return null
+  }
+})
+
+ipcMain.handle('get-steam-game-name', async (_, steamUrl: string) => {
+  try {
+    const match = steamUrl.match(/steam:\/\/(?:launch|rungameid)\/(\d+)/)
+    if (!match) return null
+    const appId = match[1]
+
+    const response = await fetch(`https://store.steampowered.com/api/appdetails?appids=${appId}`)
+    if (!response.ok) return null
+
+    const data = await response.json() as Record<string, any>
+    if (data[appId]?.success && data[appId]?.data?.name) {
+      return data[appId].data.name
+    }
+    return null
+  } catch (error) {
+    console.error('Failed to get Steam game name:', error)
     return null
   }
 })
