@@ -1,31 +1,25 @@
-{
-  "appId": "com.tidy-desktop.app",
-  "productName": "tidy-desktop",
-  "directories": {
-    "output": "release"
-  },
-  "files": [
-    "dist/**/*",
-    "package.json",
-    "build/app-icon.ico"
-  ],
-  "win": {
-    "target": [
-      {
-        "target": "nsis",
-        "arch": [
-          "x64"
-        ]
-      }
-    ],
-    "signAndEditExecutable": false,
-    "sign": null,
-    "icon": "build/app-icon.ico"
-  },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true,
-    "createDesktopShortcut": true,
-    "createStartMenuShortcut": true
-  }
-}
+appId: com.tidy-desktop.app
+productName: tidy-desktop
+directories:
+  output: release
+files:
+  - dist/**/*
+  - package.json
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  sign: null
+  signAndEditExecutable: false
+  verifyUpdateCodeSignature: false
+  publisherName: null
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/app-icon.ico
+  uninstallerIcon: build/app-icon.ico
+  installerHeaderIcon: build/app-icon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: tidy-desktop

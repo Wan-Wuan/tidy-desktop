@@ -1,4 +1,4 @@
-﻿import { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, nativeImage, shell, screen, dialog } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, nativeImage, shell, screen, dialog } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { exec } from 'child_process'
@@ -195,7 +195,7 @@ function createSearchWindow() {
 
 function createTray() {
   // Tray icon: embedded 16x16 PNG (blue rounded rectangle with white grid)
-  const trayIconBase64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA8ElEQVR4nLXTywoBURjAcTsvoCyUR1EegOy9iqXyDJ7BxsJCYqEoURaiSVlMkdxvc6E5l49z6vua5DLI4ldfzTn/TmdmQvHMBNCiGKU5n7VpDpeH4F+HEkkTQo8efIIChnkh7kVAf3zWTg6H9sAlLwPbVJoCsVqBAkYuEizw0wmcsyBSSjjaXBO3eXPg5GmgO3LJweLQ7Dvaes+g2rHJ/wL7EydCSFjtmMa5hNnKI08D9Z5NFlsGlZalTZcelBpHYs697wKWIzQVQIEDuFlRb8kfCfQp42K1md3uxB95G7jfjDDy+wnULxk0gBGcl1MGV/29CTbW87/dAAAAAElFTkSuQmCC'
+  const trayIconBase64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAACoklEQVR4nD2Sy4scVRSHz617b1dVT0/XONMOMS8MDDOoiCYQFFwIrnQjZB0IJCS4UMSN2+BSsvF/yCZk4SILH7gYUHCRxziZwCQ6icFopjvd1enuetyquq9zpBPN4XA2vw8O5/Ax+L+ElEvLPSQgAkSaNwHNJ2o1I3TPMRYEASKe/+LLU2fO8XC5qGBa4iQzs1yXpS7KRqlqOh7+eePbv25eZYwJRDz9yWdff3NpfwppAQyArLbSGKG10EY0VoSdlztvf3zR2ebx7WuMMXZl89Ybx98qs4ZZAKxKH1lNjfaNQWusc+6X28OsYaOH279eviDCKBJRN1PBWLXfXco7UUNRByAmIk66thCHIptmw4Kp8QrnLQEAjZG1YVWxmy5u/LDX3ej0T4Tfp/L9gT26JOtuLMaT4vp9HwsJjAmAlqr7gyfXh2n95oEjzcyX6POwNgvVOPfhSxi2A291qZyM5hcKAlKN2BtuAyVP8hu43rMq2b3/6dJadeToQI6CVvW0JrHansWsRgoCQpfOwtcPf7Qq1hf5CZ4bpw3B0JlKW0HEjHVrh7one4/GT2cEbL6hFeDZ905u/fzj1r39JF4dqLwvqup3p7dM7RoDrc8/7O0vr313d18EKBBp586DC/+M66xeWMkQsgDmPzXWWNPUSgGwr/qP0klRZSNEL4ho+26/d4An7ZirwSSv+2mxdjiRnCYz1W3zrKi2dwuPkI3+RkQB3qDJex167ZVA8tBRtHmrOLgiO23RSziXolvKjfVVg/yna38Y9AKJ8oebe8mrd+6NyNtQsiRZ2HmQam2cadLRlDHiPGAi0qMdAGLwTJ/FYx+0D72DTDjrGfg4loSoVIUeibw3lU13XPobAGMv9J6LKxcYANKcmWf8v5RcDYTPsX8BjqupiIu8dEkAAAAASUVORK5CYII='
   const icon = nativeImage.createFromDataURL('data:image/png;base64,' + trayIconBase64)
   tray = new Tray(icon)
 
@@ -376,6 +376,16 @@ ipcMain.handle('open-url', async (_, url: string) => {
   }
 })
 
+ipcMain.handle('open-steam', async (_, steamUrl: string) => {
+  try {
+    await shell.openExternal(steamUrl)
+    return true
+  } catch (error) {
+    console.error('Failed to open Steam URL:', error)
+    return false
+  }
+})
+
 ipcMain.handle('select-folder', async () => {
   try {
     const result = await dialog.showOpenDialog({
@@ -429,6 +439,78 @@ ipcMain.handle('set-auto-start', (_, enabled: boolean) => {
 
 ipcMain.handle('get-auto-start', () => {
   return app.getLoginItemSettings().openAtLogin
+})
+
+ipcMain.handle('extract-steam-icon', async (_, steamUrl: string) => {
+  try {
+    // Extract AppID from steam:// URL
+    const match = steamUrl.match(/steam:\/\/(?:launch|rungameid)\/(\d+)/)
+    if (!match) return null
+    const appId = match[1]
+
+    // Common Steam install paths
+    const steamPaths = [
+      'C:\\Program Files (x86)\\Steam',
+      'C:\\Program Files\\Steam',
+      'D:\\Steam',
+      'E:\\Steam'
+    ]
+
+    for (const steamPath of steamPaths) {
+      const cacheDir = path.join(steamPath, 'appcache', 'librarycache')
+      if (!fs.existsSync(cacheDir)) continue
+
+      // Try different icon filenames
+      const iconFiles = [
+        `${appId}_icon.jpg`,
+        `${appId}_library_600x900.jpg`,
+        `${appId}_header.jpg`,
+        `${appId}_capsule_231x87.jpg`
+      ]
+
+      for (const iconFile of iconFiles) {
+        const iconPath = path.join(cacheDir, iconFile)
+        if (fs.existsSync(iconPath)) {
+          const data = fs.readFileSync(iconPath)
+          if (data.length > 500) {
+            const ext = path.extname(iconFile).toLowerCase()
+            const mime = ext === '.png' ? 'image/png' : 'image/jpeg'
+            return `data:${mime};base64,${data.toString('base64')}`
+          }
+        }
+      }
+    }
+
+    // Try reading from Steam's config to find library folders
+    try {
+      for (const steamPath of steamPaths) {
+        const libraryFoldersPath = path.join(steamPath, 'steamapps', 'libraryfolders.vdf')
+        if (fs.existsSync(libraryFoldersPath)) {
+          const vdf = fs.readFileSync(libraryFoldersPath, 'utf-8')
+          const libMatches = vdf.matchAll(/"path"\s+"([^"]+)"/g)
+          for (const libMatch of libMatches) {
+            const libPath = libMatch[1].replace(/\\\\/g, '\\')
+            const cacheDir = path.join(libPath, 'appcache', 'librarycache')
+            if (!fs.existsSync(cacheDir)) continue
+            for (const iconFile of [`${appId}_icon.jpg`, `${appId}_library_600x900.jpg`]) {
+              const iconPath = path.join(cacheDir, iconFile)
+              if (fs.existsSync(iconPath)) {
+                const data = fs.readFileSync(iconPath)
+                if (data.length > 500) {
+                  return `data:image/jpeg;base64,${data.toString('base64')}`
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+
+    return null
+  } catch (error) {
+    console.error('Failed to extract Steam icon:', error)
+    return null
+  }
 })
 
 ipcMain.handle('confirm', async (_, message: string) => {
@@ -496,3 +578,4 @@ ipcMain.handle('extract-icon', async (_, filePath: string) => {
     return null
   }
 })
+

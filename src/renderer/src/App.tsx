@@ -15,12 +15,18 @@ declare global {
       openApp: (path: string) => Promise<boolean>
       openFolder: (path: string) => Promise<boolean>
       openUrl: (url: string) => Promise<boolean>
+      openSteam: (steamUrl: string) => Promise<boolean>
       selectFolder: () => Promise<string | null>
       hideMainWindow: () => Promise<void>
       confirm: (message: string) => Promise<boolean>
       extractIcon: (filePath: string) => Promise<string | null>
+      extractSteamIcon: (steamUrl: string) => Promise<string | null>
       setAutoStart: (enabled: boolean) => Promise<boolean>
       getAutoStart: () => Promise<boolean>
+      hideSearchWindow: () => Promise<void>
+      resizeSearchWindow: (height: number) => Promise<void>
+      onBlur: (callback: () => void) => void
+      onResetSearch: (callback: () => void) => void
     }
   }
 }
@@ -44,6 +50,8 @@ function App() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showAddApp, setShowAddApp] = useState(false)
+  const [showEditApp, setShowEditApp] = useState(false)
+  const [editingApp, setEditingApp] = useState<AppItem | null>(null)
   const [showCategoryManager, setShowCategoryManager] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null)
@@ -90,13 +98,13 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !showSettings && !showAddApp && !showCategoryManager && !showSubcategoryManager) {
+      if (e.key === 'Escape' && !showSettings && !showAddApp && !showEditApp && !showCategoryManager && !showSubcategoryManager) {
         window.electronAPI.hideMainWindow()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showSettings, showAddApp, showCategoryManager, showSubcategoryManager])
+  }, [showSettings, showAddApp, showEditApp, showCategoryManager, showSubcategoryManager])
 
   const loadData = async () => {
     const [configData, appsData, categoriesData] = await Promise.all([
@@ -314,9 +322,9 @@ function App() {
       setSearchQuery('')
       return
     }
-    if (app.type === 'folder') {
-      await window.electronAPI.openFolder(app.path)
-    } else {
+    if (app.type === 'steam') {
+      await window.electronAPI.openSteam(app.path)
+    } else if (app.type === 'folder') {
       await window.electronAPI.openApp(app.path)
     }
     setSearchQuery('')
@@ -392,7 +400,7 @@ function App() {
     }
   }
 
-  const handleAddApp = async (name: string, path: string, categoryId: string, type: 'app' | 'folder' = 'app') => {
+  const handleAddApp = async (name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam' = 'app') => {
     if (categories.length === 0) {
       alert('请先创建一个分类，然后再添加应用。')
       return
@@ -420,11 +428,64 @@ function App() {
     await window.electronAPI.saveApps({ apps: updatedApps })
     setShowAddApp(false)
 
-    const iconPath = await window.electronAPI.extractIcon(path)
+    // Extract icon: for Steam, try Steam cache first; for others, extract from file
+    let iconPath: string | null = null
+    if (type === 'steam') {
+      iconPath = await window.electronAPI.extractSteamIcon(path)
+    }
+    if (!iconPath) {
+      iconPath = await window.electronAPI.extractIcon(path)
+    }
     if (iconPath) {
       const withIcon = updatedApps.map(a => a.id === newApp.id ? { ...a, icon: iconPath } : a)
       setApps(withIcon)
       await window.electronAPI.saveApps({ apps: withIcon })
+    }
+  }
+
+  const handleUpdateApp = async (id: string, name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam') => {
+    const currentApps = appsRef.current
+    const existing = currentApps.find(a => a.id === id)
+    if (!existing) return
+
+    const duplicate = currentApps.find(a => a.name === name && a.id !== id)
+    if (duplicate) {
+      alert(`已存在同名应用"${name}"，请使用其他名称。`)
+      return
+    }
+
+    const updatedApp: AppItem = {
+      ...existing,
+      name,
+      path,
+      categoryId,
+      type,
+      pinyin: getPinyin(name),
+      firstLetter: getFirstLetter(name),
+      // Clear old icon if path/type changed
+      icon: (existing.path !== path || existing.type !== type) ? '' : existing.icon
+    }
+
+    const updatedApps = currentApps.map(a => a.id === id ? updatedApp : a)
+    setApps(updatedApps)
+    await window.electronAPI.saveApps({ apps: updatedApps })
+    setShowEditApp(false)
+    setEditingApp(null)
+
+    // Re-extract icon if path or type changed
+    if (existing.path !== path || existing.type !== type) {
+      let iconPath: string | null = null
+      if (type === 'steam') {
+        iconPath = await window.electronAPI.extractSteamIcon(path)
+      }
+      if (!iconPath) {
+        iconPath = await window.electronAPI.extractIcon(path)
+      }
+      if (iconPath) {
+        const withIcon = updatedApps.map(a => a.id === id ? { ...a, icon: iconPath } : a)
+        setApps(withIcon)
+        await window.electronAPI.saveApps({ apps: withIcon })
+      }
     }
   }
 
@@ -1048,23 +1109,37 @@ function App() {
                         } ${dragOverAppId === app.id ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}
                         onClick={() => handleOpenApp(app)}
                       >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteApp(app.id)
-                          }}
-                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
-                        >
-                          ×
-                        </button>
+                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingApp(app)
+                              setShowEditApp(true)
+                            }}
+                            className="text-gray-400 hover:text-blue-500 p-0.5"
+                            title="编辑"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteApp(app.id)
+                            }}
+                            className="text-gray-400 hover:text-red-500 p-0.5"
+                            title="删除"
+                          >
+                            ×
+                          </button>
+                        </div>
                         {ui?.showIcon !== false && (
                           <div style={{ borderRadius: Math.min(br, 12) }} className={`${iconSize} flex items-center justify-center mb-3 mx-auto ${
-                            app.type === 'folder' ? 'bg-orange-100' : 'bg-blue-100'
+                            app.type === 'folder' ? 'bg-orange-100' : app.type === 'steam' ? 'bg-purple-100' : 'bg-blue-100'
                           }`}>
                             {app.icon ? (
                               <img src={app.icon} alt={app.name} className={iconInner} />
                             ) : (
-                              <span className={ui?.cardSize === 'small' ? 'text-xl' : ui?.cardSize === 'large' ? 'text-3xl' : 'text-2xl'}>{app.type === 'folder' ? '📁' : '📦'}</span>
+<span className={ui?.cardSize === 'small' ? 'text-xl' : ui?.cardSize === 'large' ? 'text-3xl' : 'text-2xl'}>{app.type === 'folder' ? '📁' : app.type === 'steam' ? '🎮' : '📦'}</span>
                             )}
                           </div>
                         )}
@@ -1107,6 +1182,15 @@ function App() {
           onClose={() => setShowAddApp(false)}
           onAdd={handleAddApp}
           defaultCategory={activeCategory || ''}
+        />
+      )}
+
+      {showEditApp && editingApp && (
+        <EditAppModal
+          app={editingApp}
+          categories={categories}
+          onClose={() => { setShowEditApp(false); setEditingApp(null) }}
+          onUpdate={handleUpdateApp}
         />
       )}
 
@@ -1368,7 +1452,7 @@ function SettingsModal({ config, onClose, onSave }: {
 function AddAppModal({ categories, onClose, onAdd, defaultCategory }: {
   categories: Category[]
   onClose: () => void
-  onAdd: (name: string, path: string, categoryId: string, type: 'app' | 'folder') => void
+  onAdd: (name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam') => void
   defaultCategory?: string | null
 }) {
   const getInitialCategory = () => {
@@ -1384,7 +1468,7 @@ function AddAppModal({ categories, onClose, onAdd, defaultCategory }: {
   const [name, setName] = useState('')
   const [path, setPath] = useState('')
   const [categoryId, setCategoryId] = useState(getInitialCategory())
-  const [type, setType] = useState<'app' | 'folder'>('app')
+  const [type, setType] = useState<'app' | 'folder' | 'steam'>('app')
 
   useEffect(() => {
     const valid = getInitialCategory()
@@ -1393,30 +1477,83 @@ function AddAppModal({ categories, onClose, onAdd, defaultCategory }: {
     }
   }, [categories, defaultCategory])
 
+  const parseSteamUrl = (url: string): { name: string; steamUrl: string } | null => {
+    // Support steam://launch/XXXXX or store.steampowered.com/app/XXXXX
+    const launchMatch = url.match(/steam:\/\/launch\/(\d+)/)
+    if (launchMatch) {
+      return { name: '', steamUrl: `steam://launch/${launchMatch[1]}/0` }
+    }
+    const storeMatch = url.match(/steampowered\.com\/app\/(\d+)/)
+    if (storeMatch) {
+      return { name: '', steamUrl: `steam://launch/${storeMatch[1]}/0` }
+    }
+    // steam://rungameid/XXXXX
+    const runGameMatch = url.match(/steam:\/\/rungameid\/(\d+)/)
+    if (runGameMatch) {
+      return { name: '', steamUrl: `steam://rungameid/${runGameMatch[1]}` }
+    }
+    return null
+  }
+
+  const handlePathChange = (value: string) => {
+    if (type === 'steam') {
+      setPath(value)
+      const parsed = parseSteamUrl(value)
+      if (parsed && !name.trim()) {
+        // Try to extract a readable name from the URL
+        const idMatch = value.match(/(\d+)/)
+        if (idMatch) {
+          setName(`Steam Game ${idMatch[1]}`)
+        }
+      }
+    } else {
+      setPath(value)
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (type === 'steam') {
+      const parsed = parseSteamUrl(path.trim())
+      if (parsed) {
+        onAdd(name.trim() || 'Steam Game', parsed.steamUrl, categoryId, 'steam')
+        return
+      }
+    }
     if (name.trim() && path.trim()) {
       onAdd(name.trim(), path.trim(), categoryId, type)
     }
+  }
+
+  const typeLabels: Record<string, string> = {
+    app: '应用程序',
+    folder: '文件夹',
+    steam: 'Steam 链接'
+  }
+
+  const placeholders: Record<string, { name: string; path: string }> = {
+    app: { name: '输入应用名称', path: '输入应用路径，如 C:\\Program Files\\app.exe' },
+    folder: { name: '输入文件夹名称', path: '输入文件夹路径，如 D:\\Documents' },
+    steam: { name: '输入游戏名称（可选）', path: '粘贴 Steam 链接，如 steam://launch/730/0 或 https://store.steampowered.com/app/730/' }
   }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-96">
         <h2 className="text-lg font-semibold mb-4">添加应用</h2>
-        
+
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               类型
             </label>
-            <div className="flex gap-4">
+            <div className="flex gap-4 flex-wrap">
               <label className="flex items-center">
                 <input
                   type="radio"
                   value="app"
                   checked={type === 'app'}
-                  onChange={(e) => setType(e.target.value as 'app' | 'folder')}
+                  onChange={(e) => setType(e.target.value as 'app' | 'folder' | 'steam')}
                   className="mr-2"
                 />
                 应用程序
@@ -1426,10 +1563,20 @@ function AddAppModal({ categories, onClose, onAdd, defaultCategory }: {
                   type="radio"
                   value="folder"
                   checked={type === 'folder'}
-                  onChange={(e) => setType(e.target.value as 'app' | 'folder')}
+                  onChange={(e) => setType(e.target.value as 'app' | 'folder' | 'steam')}
                   className="mr-2"
                 />
                 文件夹
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value="steam"
+                  checked={type === 'steam'}
+                  onChange={(e) => setType(e.target.value as 'app' | 'folder' | 'steam')}
+                  className="mr-2"
+                />
+                Steam 链接
               </label>
             </div>
           </div>
@@ -1443,21 +1590,21 @@ function AddAppModal({ categories, onClose, onAdd, defaultCategory }: {
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder={type === 'app' ? '输入应用名称' : '输入文件夹名称'}
+              placeholder={placeholders[type].name}
               required
             />
           </div>
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              路径
+              {type === 'steam' ? 'Steam 链接' : '路径'}
             </label>
             <input
               type="text"
               value={path}
-              onChange={(e) => setPath(e.target.value)}
+              onChange={(e) => handlePathChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder={type === 'app' ? '输入应用路径，如 C:\Program Files\app.exe' : '输入文件夹路径，如 D:\Documents'}
+              placeholder={placeholders[type].path}
               required
             />
           </div>
@@ -1493,6 +1640,164 @@ function AddAppModal({ categories, onClose, onAdd, defaultCategory }: {
               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
             >
               添加
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function EditAppModal({ app, categories, onClose, onUpdate }: {
+  app: AppItem
+  categories: Category[]
+  onClose: () => void
+  onUpdate: (id: string, name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam') => void
+}) {
+  const [name, setName] = useState(app.name)
+  const [path, setPath] = useState(app.path)
+  const [categoryId, setCategoryId] = useState(app.categoryId || (categories.length > 0 ? categories[0].id : ''))
+  const [type, setType] = useState<'app' | 'folder' | 'steam'>(app.type || 'app')
+
+  const parseSteamUrl = (url: string): { name: string; steamUrl: string } | null => {
+    const launchMatch = url.match(/steam:\/\/launch\/(\d+)/)
+    if (launchMatch) {
+      return { name: '', steamUrl: `steam://launch/${launchMatch[1]}/0` }
+    }
+    const storeMatch = url.match(/steampowered\.com\/app\/(\d+)/)
+    if (storeMatch) {
+      return { name: '', steamUrl: `steam://launch/${storeMatch[1]}/0` }
+    }
+    const runGameMatch = url.match(/steam:\/\/rungameid\/(\d+)/)
+    if (runGameMatch) {
+      return { name: '', steamUrl: `steam://rungameid/${runGameMatch[1]}` }
+    }
+    return null
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (type === 'steam') {
+      const parsed = parseSteamUrl(path.trim())
+      if (parsed) {
+        onUpdate(app.id, name.trim() || 'Steam Game', parsed.steamUrl, categoryId, 'steam')
+        return
+      }
+    }
+    if (name.trim() && path.trim()) {
+      onUpdate(app.id, name.trim(), path.trim(), categoryId, type)
+    }
+  }
+
+  const placeholders: Record<string, { name: string; path: string }> = {
+    app: { name: '输入应用名称', path: '输入应用路径，如 C:\\Program Files\\app.exe' },
+    folder: { name: '输入文件夹名称', path: '输入文件夹路径，如 D:\\Documents' },
+    steam: { name: '输入游戏名称（可选）', path: '粘贴 Steam 链接，如 steam://launch/730/0 或 https://store.steampowered.com/app/730/' }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-96">
+        <h2 className="text-lg font-semibold mb-4">编辑应用</h2>
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              类型
+            </label>
+            <div className="flex gap-4 flex-wrap">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value="app"
+                  checked={type === 'app'}
+                  onChange={(e) => setType(e.target.value as 'app' | 'folder' | 'steam')}
+                  className="mr-2"
+                />
+                应用程序
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value="folder"
+                  checked={type === 'folder'}
+                  onChange={(e) => setType(e.target.value as 'app' | 'folder' | 'steam')}
+                  className="mr-2"
+                />
+                文件夹
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value="steam"
+                  checked={type === 'steam'}
+                  onChange={(e) => setType(e.target.value as 'app' | 'folder' | 'steam')}
+                  className="mr-2"
+                />
+                Steam 链接
+              </label>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              名称
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder={placeholders[type].name}
+              required
+            />
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {type === 'steam' ? 'Steam 链接' : '路径'}
+            </label>
+            <input
+              type="text"
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder={placeholders[type].path}
+              required
+            />
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              分类
+            </label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">无分类</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.icon} {cat.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+            >
+              保存
             </button>
           </div>
         </form>

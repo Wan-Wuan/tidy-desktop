@@ -1,17 +1,28 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { AppItem, Config, Category } from '../../shared/types'
+import { AppItem, Config, Category, Subcategory } from '../../shared/types'
 
 declare global {
   interface Window {
     electronAPI: {
       getConfig: () => Promise<Config>
+      saveConfig: (config: Config) => Promise<boolean>
       getApps: () => Promise<{ apps: AppItem[] }>
-      getCategories: () => Promise<{ categories: Category[] }>
+      saveApps: (data: { apps: AppItem[] }) => Promise<boolean>
+      getCategories: () => Promise<{ categories: Category[]; subcategories: Subcategory[] }>
+      saveCategories: (data: { categories: Category[]; subcategories: Subcategory[] }) => Promise<boolean>
       openApp: (appPath: string) => Promise<boolean>
       openFolder: (folderPath: string) => Promise<boolean>
       openUrl: (url: string) => Promise<boolean>
+      openSteam: (steamUrl: string) => Promise<boolean>
+      selectFolder: () => Promise<string | null>
       hideSearchWindow: () => Promise<void>
+      hideMainWindow: () => Promise<void>
       resizeSearchWindow: (height: number) => Promise<void>
+      confirm: (message: string) => Promise<boolean>
+      extractIcon: (filePath: string) => Promise<string | null>
+      extractSteamIcon: (steamUrl: string) => Promise<string | null>
+      setAutoStart: (enabled: boolean) => Promise<boolean>
+      getAutoStart: () => Promise<boolean>
       onBlur: (callback: () => void) => void
       onResetSearch: (callback: () => void) => void
     }

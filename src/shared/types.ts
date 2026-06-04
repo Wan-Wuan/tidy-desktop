@@ -1,4 +1,4 @@
-export interface AppItem {
+﻿export interface AppItem {
   id: string
   name: string
   path: string
@@ -7,7 +7,7 @@ export interface AppItem {
   subcategoryId?: string | null
   pinyin: string
   firstLetter: string
-  type?: 'app' | 'folder'
+  type?: 'app' | 'folder' | 'steam'
 }
 
 export interface Category {
