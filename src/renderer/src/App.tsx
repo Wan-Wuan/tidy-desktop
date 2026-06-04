@@ -325,6 +325,8 @@ function App() {
     if (app.type === 'steam') {
       await window.electronAPI.openSteam(app.path)
     } else if (app.type === 'folder') {
+      await window.electronAPI.openFolder(app.path)
+    } else {
       await window.electronAPI.openApp(app.path)
     }
     setSearchQuery('')
