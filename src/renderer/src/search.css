@@ -92,6 +92,15 @@ html, body {
   background-color: #f3f4f6;
 }
 
+.search-result-item.active {
+  background-color: #e0f2fe;
+}
+
+.search-result-item.active .search-result-name {
+  color: #0369a1;
+  font-weight: 600;
+}
+
 .search-result-icon {
   width: 36px;
   height: 36px;

@@ -365,6 +365,22 @@ function App() {
     }
   }
 
+  const docFileExts = ['.ppt', '.pptx', '.doc', '.docx', '.xls', '.xlsx', '.pdf', '.txt', '.rtf', '.csv', '.zip', '.rar', '.7z', '.mp3', '.mp4', '.wav', '.avi', '.mkv', '.jpg', '.jpeg', '.png', '.gif']
+  const isDocFile = (app: AppItem): boolean => {
+    if (app.type !== 'app') return false
+    const ext = app.path.toLowerCase().substring(app.path.lastIndexOf('.'))
+    return docFileExts.includes(ext)
+  }
+
+  const handleCopyFile = async (app: AppItem) => {
+    const success = await window.electronAPI.copyFileToClipboard(app.path)
+    if (success) {
+      alert('文件已复制到剪贴板，可以在微信等应用中粘贴发送。')
+    } else {
+      alert('复制文件失败，请重试。')
+    }
+  }
+
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -1203,6 +1219,18 @@ function App() {
                           >
                             ×
                           </button>
+                          {isDocFile(app) && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleCopyFile(app)
+                              }}
+                              className="text-gray-400 hover:text-green-500 p-0.5"
+                              title="发送文件（复制到剪贴板）"
+                            >
+                              📤
+                            </button>
+                          )}
                         </div>
                         {ui?.showIcon !== false && (
                           <div style={{ borderRadius: Math.min(br, 12) }} className={`${iconSize} flex items-center justify-center mb-3 mx-auto ${

@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   extractIcon: (filePath: string) => ipcRenderer.invoke('extract-icon', filePath),
   extractSteamIcon: (steamUrl: string) => ipcRenderer.invoke('extract-steam-icon', steamUrl),
   getSteamGameName: (steamUrl: string) => ipcRenderer.invoke('get-steam-game-name', steamUrl),
+  copyFileToClipboard: (filePath: string) => ipcRenderer.invoke('copy-file-to-clipboard', filePath),
   resizeSearchWindow: (height: number) => ipcRenderer.invoke('resize-search-window', height),
   setAutoStart: (enabled: boolean) => ipcRenderer.invoke('set-auto-start', enabled),
   getAutoStart: () => ipcRenderer.invoke('get-auto-start'),

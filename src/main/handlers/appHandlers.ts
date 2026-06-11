@@ -56,4 +56,15 @@ export function registerAppHandlers() {
       return null
     }
   })
+
+  ipcMain.handle('copy-file-to-clipboard', async (_, filePath: string) => {
+    try {
+      const psScript = `Add-Type -AssemblyName System.Windows.Forms; $dropList = New-Object System.Collections.Specialized.StringCollection; $dropList.Add('${filePath.replace(/'/g, "''")}') | Out-Null; [System.Windows.Forms.Clipboard]::SetFileDropList($dropList)`
+      execSync(`powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"')}"`, { windowsHide: true, timeout: 5000 })
+      return true
+    } catch (error) {
+      console.error('Failed to copy file to clipboard:', error)
+      return false
+    }
+  })
 }

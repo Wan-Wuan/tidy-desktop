@@ -25,8 +25,10 @@ function SearchApp() {
   const [config, setConfig] = useState<Config | null>(null)
   const [activeEngine, setActiveEngine] = useState<SearchEngineInfo | null>(null)
   const [results, setResults] = useState<AppItem[]>([])
+  const [activeIndex, setActiveIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const isInteracting = useRef(false)
+  const resultsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     loadData()
@@ -178,7 +180,7 @@ function SearchApp() {
       return
     }
     if (results.length > 0) {
-      const app = results[0]
+      const app = results[activeIndex] || results[0]
       window.electronAPI.hideSearchWindow()
       resetAll()
       if (app.type === 'folder') {
@@ -187,7 +189,7 @@ function SearchApp() {
         await window.electronAPI.openApp(app.path)
       }
     }
-  }, [activeEngine, query, results, resetAll])
+  }, [activeEngine, query, results, activeIndex, resetAll])
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
@@ -217,6 +219,7 @@ function SearchApp() {
 
     const filtered = filterApps(value)
     setResults(filtered)
+    setActiveIndex(0)
     resizeWindow(filtered.length)
   }, [activeEngine, checkSearchEngine, filterApps])
 
@@ -230,10 +233,20 @@ function SearchApp() {
     } else if (e.key === 'Enter') {
       e.preventDefault()
       handleSearch()
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (results.length > 0) {
+        setActiveIndex(prev => (prev + 1) % results.length)
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (results.length > 0) {
+        setActiveIndex(prev => (prev - 1 + results.length) % results.length)
+      }
     } else if (e.key === 'Backspace' && query === '' && activeEngine) {
       setActiveEngine(null)
     }
-  }, [activeEngine, query, handleSearch, resetAll])
+  }, [activeEngine, query, handleSearch, resetAll, results.length])
 
   const handleOpenItem = async (app: AppItem) => {
     isInteracting.current = true
@@ -281,13 +294,17 @@ function SearchApp() {
       </div>
 
       {hasResults && (
-        <div className="search-results">
+        <div className="search-results" ref={resultsRef}>
           {results.map((app, index) => (
             <div
               key={app.id}
-              className={`search-result-item ${index === 0 ? 'first' : ''}`}
+              className={`search-result-item ${index === 0 ? 'first' : ''} ${index === activeIndex ? 'active' : ''}`}
               onClick={() => handleOpenItem(app)}
               onMouseDown={() => { isInteracting.current = true }}
+              onMouseEnter={() => setActiveIndex(index)}
+              ref={index === activeIndex ? (el) => {
+                if (el) el.scrollIntoView({ block: 'nearest' })
+              } : undefined}
             >
               <div className={`search-result-icon ${app.type === 'folder' ? 'folder' : ''}`}>
                 {app.icon ? (
