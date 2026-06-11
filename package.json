@@ -1,6 +1,6 @@
 {
   "name": "tidy-desktop",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "description": "桌面整理应用",
   "main": "dist/main/main/index.js",
   "scripts": {
@@ -15,13 +15,12 @@
   "dependencies": {
     "pinyin-pro": "^3.18.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "uuid": "^9.0.0"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/node": "^25.9.2",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@types/uuid": "^9.0.0",
     "@vitejs/plugin-react": "^4.2.0",
     "autoprefixer": "^10.4.0",
     "concurrently": "^10.0.1",

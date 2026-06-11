@@ -1,34 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { AppItem, Config, Category, Subcategory } from '../../shared/types'
-
-declare global {
-  interface Window {
-    electronAPI: {
-      getConfig: () => Promise<Config>
-      saveConfig: (config: Config) => Promise<boolean>
-      getApps: () => Promise<{ apps: AppItem[] }>
-      saveApps: (data: { apps: AppItem[] }) => Promise<boolean>
-      getCategories: () => Promise<{ categories: Category[]; subcategories: Subcategory[] }>
-      saveCategories: (data: { categories: Category[]; subcategories: Subcategory[] }) => Promise<boolean>
-      openApp: (appPath: string) => Promise<boolean>
-      openFolder: (folderPath: string) => Promise<boolean>
-      openUrl: (url: string) => Promise<boolean>
-      openSteam: (steamUrl: string) => Promise<boolean>
-      selectFolder: () => Promise<string | null>
-      hideSearchWindow: () => Promise<void>
-      hideMainWindow: () => Promise<void>
-      resizeSearchWindow: (height: number) => Promise<void>
-      confirm: (message: string) => Promise<boolean>
-      extractIcon: (filePath: string) => Promise<string | null>
-      extractSteamIcon: (steamUrl: string) => Promise<string | null>
-      getSteamGameName: (steamUrl: string) => Promise<string | null>
-      setAutoStart: (enabled: boolean) => Promise<boolean>
-      getAutoStart: () => Promise<boolean>
-      onBlur: (callback: () => void) => void
-      onResetSearch: (callback: () => void) => void
-    }
-  }
-}
 
 interface SearchEngineInfo {
   key: string
@@ -59,7 +30,7 @@ function SearchApp() {
 
   useEffect(() => {
     loadData()
-    setTimeout(() => inputRef.current?.focus(), 50)
+    const focusTimer = setTimeout(() => inputRef.current?.focus(), 50)
 
     window.electronAPI.onBlur(() => {
       if (!isInteracting.current) {
@@ -74,6 +45,10 @@ function SearchApp() {
       window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
       setTimeout(() => inputRef.current?.focus(), 50)
     })
+
+    return () => {
+      clearTimeout(focusTimer)
+    }
   }, [])
 
   const resizeWindow = (resultCount: number) => {
@@ -196,21 +171,21 @@ function SearchApp() {
   const handleSearch = useCallback(async () => {
     if (activeEngine) {
       if (query.trim()) {
-        await window.electronAPI.openUrl(activeEngine.url + encodeURIComponent(query.trim()))
-        resetAll()
         window.electronAPI.hideSearchWindow()
+        resetAll()
+        await window.electronAPI.openUrl(activeEngine.url + encodeURIComponent(query.trim()))
       }
       return
     }
     if (results.length > 0) {
       const app = results[0]
+      window.electronAPI.hideSearchWindow()
+      resetAll()
       if (app.type === 'folder') {
         await window.electronAPI.openFolder(app.path)
       } else {
         await window.electronAPI.openApp(app.path)
       }
-      resetAll()
-      window.electronAPI.hideSearchWindow()
     }
   }, [activeEngine, query, results, resetAll])
 
@@ -262,14 +237,13 @@ function SearchApp() {
 
   const handleOpenItem = async (app: AppItem) => {
     isInteracting.current = true
+    window.electronAPI.hideSearchWindow()
+    resetAll()
     if (app.type === 'folder') {
       await window.electronAPI.openFolder(app.path)
     } else {
       await window.electronAPI.openApp(app.path)
     }
-    resetAll()
-    window.electronAPI.hideSearchWindow()
-    setTimeout(() => { isInteracting.current = false }, 100)
   }
 
   const hasResults = results.length > 0

@@ -1,0 +1,66 @@
+import { ipcMain, BrowserWindow, dialog, screen, app } from 'electron'
+
+let mainWindowRef: { current: BrowserWindow | null } = { current: null }
+let searchWindowRef: { current: BrowserWindow | null } = { current: null }
+
+export function setWindowRefs(main: { current: BrowserWindow | null }, search: { current: BrowserWindow | null }) {
+  mainWindowRef = main
+  searchWindowRef = search
+}
+
+export function registerSystemHandlers() {
+  ipcMain.handle('hide-main-window', () => {
+    const w = mainWindowRef.current
+    if (w && !w.isDestroyed()) {
+      w.hide()
+    }
+  })
+
+  ipcMain.handle('hide-search-window', () => {
+    const w = searchWindowRef.current
+    if (w && !w.isDestroyed()) {
+      w.hide()
+    }
+  })
+
+  ipcMain.handle('resize-search-window', (_, height: number) => {
+    const w = searchWindowRef.current
+    if (w && !w.isDestroyed()) {
+      const width = 600
+      const finalHeight = Math.max(60, height)
+      const display = screen.getPrimaryDisplay()
+      const newY = Math.round((display.workAreaSize.height * 0.3))
+      w.setBounds({
+        x: Math.round((display.workAreaSize.width - width) / 2),
+        y: newY,
+        width: width,
+        height: finalHeight
+      })
+    }
+  })
+
+  ipcMain.handle('confirm', async (_, message: string) => {
+    const w = mainWindowRef.current
+    if (!w || w.isDestroyed()) return false
+    const result = await dialog.showMessageBox(w, {
+      type: 'question',
+      buttons: ['取消', '确定'],
+      defaultId: 0,
+      cancelId: 0,
+      message
+    })
+    return result.response === 1
+  })
+
+  ipcMain.handle('set-auto-start', (_, enabled: boolean) => {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      path: app.getPath('exe')
+    })
+    return true
+  })
+
+  ipcMain.handle('get-auto-start', () => {
+    return app.getLoginItemSettings().openAtLogin
+  })
+}

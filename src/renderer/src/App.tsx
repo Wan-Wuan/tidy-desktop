@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { AppItem, Category, Subcategory, Config, UISettings } from '../../shared/types'
 import { pinyin } from 'pinyin-pro'
-import { v4 as uuidv4 } from 'uuid'
+
 
 declare global {
   interface Window {
@@ -140,23 +140,31 @@ function App() {
 
     const needsIconUpdate = loadedApps.filter(a => !a.icon || !a.icon.startsWith('data:') || a.icon.length < 1000)
     if (needsIconUpdate.length > 0) {
-      const BATCH_SIZE = 3
+      // Batch all extractions first, update state once
+      const BATCH_SIZE = 5
+      const allIcons: { id: string; icon: string }[] = []
       for (let i = 0; i < needsIconUpdate.length; i += BATCH_SIZE) {
         const batch = needsIconUpdate.slice(i, i + BATCH_SIZE)
-        const results = await Promise.all(
+        const results = await Promise.allSettled(
           batch.map(async app => {
             const icon = await window.electronAPI.extractIcon(app.path)
             return { id: app.id, icon: icon || '' }
           })
         )
-        const currentApps = appsRef.current
-        const updated = currentApps.map(a => {
-          const r = results.find(r => r.id === a.id)
-          return r ? { ...a, icon: r.icon } : a
+        for (const r of results) {
+          if (r.status === 'fulfilled' && r.value.icon) {
+            allIcons.push(r.value)
+          }
+        }
+      }
+      if (allIcons.length > 0) {
+        const updated = loadedApps.map(a => {
+          const found = allIcons.find(r => r.id === a.id)
+          return found ? { ...a, icon: found.icon } : a
         })
         setApps(updated)
+        await window.electronAPI.saveApps({ apps: updated })
       }
-      await window.electronAPI.saveApps({ apps: appsRef.current })
     }
   }
 
@@ -233,7 +241,7 @@ function App() {
     }
   }, [activeEngine, checkSearchEngine])
 
-  const filterApps = useCallback(() => {
+  const filteredApps = useMemo(() => {
     let filtered = apps
 
     if (activeCategory) {
@@ -385,9 +393,9 @@ function App() {
       }
     }
 
-    const filteredApps = filterApps()
-    if (filteredApps.length > 0) {
-      await handleOpenApp(filteredApps[0])
+    const submitApps = filteredApps
+    if (submitApps.length > 0) {
+      await handleOpenApp(submitApps[0])
     }
   }
 
@@ -416,7 +424,7 @@ function App() {
     }
 
     const newApp: AppItem = {
-      id: uuidv4(),
+      id: crypto.randomUUID(),
       name,
       path,
       icon: '',
@@ -511,7 +519,7 @@ function App() {
     }
 
     const newApp: AppItem = {
-      id: uuidv4(),
+      id: crypto.randomUUID(),
       name: folderName,
       path: folderPath,
       icon: '',
@@ -591,7 +599,7 @@ function App() {
         const name = getFileNameFromPath(filePath)
         if (!currentApps.find(app => app.name === name)) {
           newApps.push({
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             name,
             path: filePath,
             icon: '',
@@ -606,7 +614,7 @@ function App() {
         const folderName = parts[parts.length - 1] || '文件夹'
         if (!currentApps.find(app => app.name === folderName)) {
           newApps.push({
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             name: folderName,
             path: filePath,
             icon: '',
@@ -653,7 +661,7 @@ function App() {
 
   const handleAddCategory = async (name: string, icon: string) => {
     const newCategory: Category = {
-      id: uuidv4(),
+      id: crypto.randomUUID(),
       name,
       icon,
       order: categories.length + 1
@@ -693,7 +701,7 @@ function App() {
   }
 
   const handleAddSubcategory = async (name: string, icon: string, parentId: string | null) => {
-    const newSub: Subcategory = { id: uuidv4(), name, icon, parentId }
+    const newSub: Subcategory = { id: crypto.randomUUID(), name, icon, parentId }
     const updated = [...subcategories, newSub]
     setSubcategories(updated)
     await window.electronAPI.saveCategories({ categories, subcategories: updated })
@@ -815,7 +823,7 @@ function App() {
       } catch {}
 
       const newApp: AppItem = {
-        id: uuidv4(),
+        id: crypto.randomUUID(),
         name: gameName,
         path: steamMatch.steamUrl,
         icon: '',
@@ -879,8 +887,6 @@ function App() {
     setApps(updated)
     await window.electronAPI.saveApps({ apps: updated })
   }
-
-  const filteredApps = filterApps()
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">

@@ -22,9 +22,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAutoStart: (enabled: boolean) => ipcRenderer.invoke('set-auto-start', enabled),
   getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
   onBlur: (callback: () => void) => {
-    ipcRenderer.on('blur-event', () => callback())
+    const handler = () => callback()
+    ipcRenderer.on('blur-event', handler)
+    return () => ipcRenderer.removeListener('blur-event', handler)
   },
   onResetSearch: (callback: () => void) => {
-    ipcRenderer.on('reset-search', () => callback())
+    const handler = () => callback()
+    ipcRenderer.on('reset-search', handler)
+    return () => ipcRenderer.removeListener('reset-search', handler)
   }
 })
