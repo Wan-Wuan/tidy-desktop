@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { AppItem, Config, Category, Subcategory } from '../../shared/types'
+import { isFolderPath, getFolderSuggestion, checkSearchEngine } from '../../shared/utils'
 
 interface SearchEngineInfo {
   key: string
@@ -34,13 +35,13 @@ function SearchApp() {
     loadData()
     const focusTimer = setTimeout(() => inputRef.current?.focus(), 50)
 
-    window.electronAPI.onBlur(() => {
+    const removeBlur = window.electronAPI.onBlur(() => {
       if (!isInteracting.current) {
         window.electronAPI.hideSearchWindow()
       }
     })
 
-    window.electronAPI.onResetSearch(() => {
+    const removeReset = window.electronAPI.onResetSearch(() => {
       setQuery('')
       setResults([])
       setActiveEngine(null)
@@ -50,6 +51,8 @@ function SearchApp() {
 
     return () => {
       clearTimeout(focusTimer)
+      removeBlur()
+      removeReset()
     }
   }, [])
 
@@ -78,44 +81,10 @@ function SearchApp() {
     return cat ? cat.name : ''
   }
 
-  const checkSearchEngine = useCallback((input: string): { isEngine: boolean; engine?: SearchEngineInfo } => {
+  const handleSearchEngineCheck = useCallback((input: string): { isEngine: boolean; engine?: SearchEngineInfo } => {
     if (!config?.searchEngines) return { isEngine: false }
-    const trimmed = input.trimEnd()
-    for (const [key, engine] of Object.entries(config.searchEngines)) {
-      const aliases = [key, engine.name.toLowerCase()]
-      if (key === 'b') aliases.push('bing')
-      if (key === 'g') aliases.push('google')
-      if (key === 'bd') aliases.push('baidu')
-      if (aliases.includes(trimmed.toLowerCase())) {
-        return { isEngine: true, engine: { key, name: engine.name, url: engine.url } }
-      }
-    }
-    return { isEngine: false }
+    return checkSearchEngine(input, config.searchEngines) as { isEngine: boolean; engine?: SearchEngineInfo }
   }, [config])
-
-  const isFolderPath = (query: string): boolean => {
-    const trimmed = query.trim()
-    if (/^[A-Za-z]:\\/.test(trimmed) || /^[A-Za-z]:\//.test(trimmed)) return true
-    if (trimmed.startsWith('\\\\')) return true
-    if (trimmed.startsWith('/') && trimmed.length > 1) return true
-    return false
-  }
-
-  const getFolderSuggestion = (query: string): AppItem | null => {
-    const trimmed = query.trim()
-    if (!isFolderPath(trimmed)) return null
-    const folderName = trimmed.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || trimmed
-    return {
-      id: '__folder_path__',
-      name: `打开文件夹: ${folderName}`,
-      path: trimmed,
-      icon: '',
-      categoryId: '',
-      pinyin: '',
-      firstLetter: '',
-      type: 'folder'
-    }
-  }
 
   const filterApps = useCallback((searchQuery: string): AppItem[] => {
     const terms = searchQuery.toLowerCase().trim().split(/\s+/)
@@ -185,6 +154,8 @@ function SearchApp() {
       resetAll()
       if (app.type === 'folder') {
         await window.electronAPI.openFolder(app.path)
+      } else if (app.type === 'steam') {
+        await window.electronAPI.openSteam(app.path)
       } else {
         await window.electronAPI.openApp(app.path)
       }
@@ -195,8 +166,8 @@ function SearchApp() {
     const value = e.target.value
     setQuery(value)
 
-    if (value.endsWith(' ')) {
-      const engineCheck = checkSearchEngine(value)
+    if (value.endsWith(' ') && config?.searchEngines) {
+      const engineCheck = checkSearchEngine(value, config.searchEngines)
       if (engineCheck.isEngine && engineCheck.engine) {
         setActiveEngine(engineCheck.engine)
         setQuery('')
@@ -221,7 +192,7 @@ function SearchApp() {
     setResults(filtered)
     setActiveIndex(0)
     resizeWindow(filtered.length)
-  }, [activeEngine, checkSearchEngine, filterApps])
+  }, [activeEngine, config, filterApps])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -254,6 +225,8 @@ function SearchApp() {
     resetAll()
     if (app.type === 'folder') {
       await window.electronAPI.openFolder(app.path)
+    } else if (app.type === 'steam') {
+      await window.electronAPI.openSteam(app.path)
     } else {
       await window.electronAPI.openApp(app.path)
     }
@@ -263,10 +236,18 @@ function SearchApp() {
 
   return (
     <div 
-      className="search-container"
-      onMouseEnter={() => { isInteracting.current = true }}
-      onMouseLeave={() => { isInteracting.current = false }}
+      className="search-wrapper"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          window.electronAPI.hideSearchWindow()
+        }
+      }}
     >
+      <div 
+        className="search-container"
+        onMouseEnter={() => { isInteracting.current = true }}
+        onMouseLeave={() => { isInteracting.current = false }}
+      >
       <div className="search-input-wrapper">
         <svg className="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="11" cy="11" r="8" />
@@ -331,6 +312,7 @@ function SearchApp() {
           <span>没有找到匹配的应用或文件夹</span>
         </div>
       )}
+      </div>
     </div>
   )
 }

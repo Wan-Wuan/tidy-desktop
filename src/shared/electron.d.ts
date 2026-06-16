@@ -19,6 +19,9 @@ declare global {
       extractIcon: (filePath: string) => Promise<string | null>
       extractSteamIcon: (steamUrl: string) => Promise<string | null>
       getSteamGameName: (steamUrl: string) => Promise<string | null>
+      copyFileToClipboard: (filePath: string) => Promise<boolean>
+      copyImageToClipboard: (filePath: string) => Promise<boolean>
+      startDragFile: (filePath: string) => Promise<boolean>
       setAutoStart: (enabled: boolean) => Promise<boolean>
       getAutoStart: () => Promise<boolean>
       hideSearchWindow: () => Promise<void>

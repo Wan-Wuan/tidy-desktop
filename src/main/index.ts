@@ -108,9 +108,10 @@ function createSearchWindow() {
   })
 
   win.on('blur', () => {
+    const blurredWin = win
     setTimeout(() => {
-      if (win && !win.isDestroyed() && !win.isFocused()) {
-        win.webContents.send('blur-event')
+      if (blurredWin && !blurredWin.isDestroyed() && !blurredWin.isFocused()) {
+        blurredWin.webContents.send('blur-event')
       }
     }, 200)
   })

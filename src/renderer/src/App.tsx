@@ -1,36 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { AppItem, Category, Subcategory, Config, UISettings } from '../../shared/types'
+import { isFolderPath, getFolderSuggestion, checkSearchEngine, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
 import { pinyin } from 'pinyin-pro'
 
-
-declare global {
-  interface Window {
-    electronAPI: {
-      getConfig: () => Promise<Config>
-      saveConfig: (config: Config) => Promise<boolean>
-      getApps: () => Promise<{ apps: AppItem[] }>
-      saveApps: (data: { apps: AppItem[] }) => Promise<boolean>
-      getCategories: () => Promise<{ categories: Category[]; subcategories: Subcategory[] }>
-      saveCategories: (data: { categories: Category[]; subcategories: Subcategory[] }) => Promise<boolean>
-      openApp: (path: string) => Promise<boolean>
-      openFolder: (path: string) => Promise<boolean>
-      openUrl: (url: string) => Promise<boolean>
-      openSteam: (steamUrl: string) => Promise<boolean>
-      selectFolder: () => Promise<string | null>
-      hideMainWindow: () => Promise<void>
-      confirm: (message: string) => Promise<boolean>
-      extractIcon: (filePath: string) => Promise<string | null>
-      extractSteamIcon: (steamUrl: string) => Promise<string | null>
-      getSteamGameName: (steamUrl: string) => Promise<string | null>
-      setAutoStart: (enabled: boolean) => Promise<boolean>
-      getAutoStart: () => Promise<boolean>
-      hideSearchWindow: () => Promise<void>
-      resizeSearchWindow: (height: number) => Promise<void>
-      onBlur: (callback: () => void) => void
-      onResetSearch: (callback: () => void) => void
-    }
-  }
-}
 
 interface SearchEngineInfo {
   key: string
@@ -64,10 +36,12 @@ function App() {
   const categoryBarRef = useRef<HTMLDivElement>(null)
   const dragCounterRef = useRef(0)
   const draggedAppIdRef = useRef<string | null>(null)
+  const dragTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const appsRef = useRef<AppItem[]>([])
   const categoriesRef = useRef<Category[]>([])
   const activeCategoryRef = useRef<string | null>(null)
   const isExternalDragRef = useRef(false)
+  const docDragRef = useRef<{ appId: string; startX: number; startY: number; started: boolean } | null>(null)
 
   useEffect(() => {
     loadData()
@@ -93,8 +67,33 @@ function App() {
         isExternalDragRef.current = false
       }
     }
+    const handleGlobalDragEnd = () => {
+      if (dragTimeoutRef.current) {
+        clearTimeout(dragTimeoutRef.current)
+        dragTimeoutRef.current = null
+      }
+      dragCounterRef.current = 0
+      setIsDragging(false)
+      isExternalDragRef.current = false
+      setDraggedAppId(null)
+      setDragOverCategory(null)
+      setDragOverAppId(null)
+      draggedAppIdRef.current = null
+    }
     document.addEventListener('dragleave', resetExternalDrag)
-    return () => document.removeEventListener('dragleave', resetExternalDrag)
+    document.addEventListener('dragend', handleGlobalDragEnd)
+    return () => {
+      document.removeEventListener('dragleave', resetExternalDrag)
+      document.removeEventListener('dragend', handleGlobalDragEnd)
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (dragTimeoutRef.current) {
+        clearTimeout(dragTimeoutRef.current)
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -106,6 +105,27 @@ function App() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [showSettings, showAddApp, showEditApp, showCategoryManager, showSubcategoryManager])
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!docDragRef.current || docDragRef.current.started) return
+      const dx = e.clientX - docDragRef.current.startX
+      const dy = e.clientY - docDragRef.current.startY
+      if (Math.abs(dx) + Math.abs(dy) > 5) {
+        docDragRef.current.started = true
+        window.electronAPI.startDragFile(docDragRef.current.appId)
+      }
+    }
+    const handleMouseUp = () => {
+      docDragRef.current = null
+    }
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
 
   const loadData = async () => {
     const [configData, appsData, categoriesData] = await Promise.all([
@@ -190,32 +210,9 @@ function App() {
     return fileName.replace(/\.exe$/i, '').replace(/\.lnk$/i, '')
   }
 
-  const checkSearchEngine = useCallback((input: string): { isEngine: boolean; engine?: SearchEngineInfo } => {
+  const handleCheckSearchEngine = useCallback((input: string): { isEngine: boolean; engine?: SearchEngineInfo } => {
     if (!config?.searchEngines) return { isEngine: false }
-
-    const trimmed = input.trimEnd()
-    
-    for (const [key, engine] of Object.entries(config.searchEngines)) {
-      const engineName = engine.name.toLowerCase()
-      const aliases = [key, engineName]
-      
-      if (key === 'b') aliases.push('bing')
-      if (key === 'g') aliases.push('google')
-      if (key === 'bd') aliases.push('baidu')
-      
-      if (aliases.includes(trimmed.toLowerCase())) {
-        return {
-          isEngine: true,
-          engine: {
-            key,
-            name: engine.name,
-            url: engine.url
-          }
-        }
-      }
-    }
-
-    return { isEngine: false }
+    return checkSearchEngine(input, config.searchEngines) as { isEngine: boolean; engine?: SearchEngineInfo }
   }, [config])
 
   const handleSearch = useCallback((query: string) => {
@@ -232,14 +229,14 @@ function App() {
     }
 
     if (value.endsWith(' ')) {
-      const engineCheck = checkSearchEngine(value)
+      const engineCheck = handleCheckSearchEngine(value)
       if (engineCheck.isEngine && engineCheck.engine) {
         setActiveEngine(engineCheck.engine)
         setSearchQuery('')
         return
       }
     }
-  }, [activeEngine, checkSearchEngine])
+  }, [activeEngine, handleCheckSearchEngine])
 
   const filteredApps = useMemo(() => {
     let filtered = apps
@@ -341,35 +338,14 @@ function App() {
     setSearchQuery('')
   }
 
-  const isFolderPath = (query: string): boolean => {
-    const trimmed = query.trim()
-    if (/^[A-Za-z]:\\/.test(trimmed) || /^[A-Za-z]:\//.test(trimmed)) return true
-    if (trimmed.startsWith('\\\\')) return true
-    if (trimmed.startsWith('/') && trimmed.length > 1) return true
-    return false
-  }
-
-  const getFolderSuggestion = (query: string): AppItem | null => {
-    const trimmed = query.trim()
-    if (!isFolderPath(trimmed)) return null
-    const folderName = trimmed.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || trimmed
-    return {
-      id: '__folder_path__',
-      name: `打开文件夹: ${folderName}`,
-      path: trimmed,
-      icon: '',
-      categoryId: '',
-      pinyin: '',
-      firstLetter: '',
-      type: 'folder'
-    }
-  }
-
-  const docFileExts = ['.ppt', '.pptx', '.doc', '.docx', '.xls', '.xlsx', '.pdf', '.txt', '.rtf', '.csv', '.zip', '.rar', '.7z', '.mp3', '.mp4', '.wav', '.avi', '.mkv', '.jpg', '.jpeg', '.png', '.gif']
   const isDocFile = (app: AppItem): boolean => {
     if (app.type !== 'app') return false
     const ext = app.path.toLowerCase().substring(app.path.lastIndexOf('.'))
-    return docFileExts.includes(ext)
+    return DOC_FILE_EXTS.includes(ext)
+  }
+
+  const canNativeDrag = (app: AppItem): boolean => {
+    return isDocFile(app) || isImageFile(app)
   }
 
   const handleCopyFile = async (app: AppItem) => {
@@ -378,6 +354,15 @@ function App() {
       alert('文件已复制到剪贴板，可以在微信等应用中粘贴发送。')
     } else {
       alert('复制文件失败，请重试。')
+    }
+  }
+
+  const handleCopyImage = async (app: AppItem) => {
+    const success = await window.electronAPI.copyImageToClipboard(app.path)
+    if (success) {
+      alert('图片已复制到剪贴板，可以在微信等应用中粘贴发送。')
+    } else {
+      alert('复制图片失败，请重试。')
     }
   }
 
@@ -433,7 +418,8 @@ function App() {
       return
     }
 
-    const duplicate = apps.find(app => app.name === name)
+    const currentApps = appsRef.current
+    const duplicate = currentApps.find(app => app.name === name)
     if (duplicate) {
       alert(`已存在同名应用"${name}"，请使用其他名称。`)
       return
@@ -450,7 +436,7 @@ function App() {
       type
     }
 
-    const updatedApps = [...apps, newApp]
+    const updatedApps = [...currentApps, newApp]
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
     setShowAddApp(false)
@@ -528,7 +514,8 @@ function App() {
     const parts = folderPath.replace(/\\/g, '/').split('/')
     const folderName = parts[parts.length - 1] || '文件夹'
 
-    const duplicate = apps.find(app => app.name === folderName)
+    const currentApps = appsRef.current
+    const duplicate = currentApps.find(app => app.name === folderName)
     if (duplicate) {
       alert(`已存在同名文件夹"${folderName}"，请使用其他名称。`)
       return
@@ -545,7 +532,7 @@ function App() {
       type: 'folder'
     }
 
-    const updatedApps = [...apps, newApp]
+    const updatedApps = [...currentApps, newApp]
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
 
@@ -558,12 +545,13 @@ function App() {
   }
 
   const handleDeleteApp = async (id: string) => {
-    const app = apps.find(a => a.id === id)
+    const currentApps = appsRef.current
+    const app = currentApps.find(a => a.id === id)
     if (app) {
       const confirmed = await window.electronAPI.confirm(`确定要删除"${app.name}"吗？`)
       if (!confirmed) return
     }
-    const updatedApps = apps.filter(app => app.id !== id)
+    const updatedApps = currentApps.filter(app => app.id !== id)
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
   }
@@ -773,7 +761,7 @@ function App() {
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (draggedAppIdRef.current) return
+    if (draggedAppIdRef.current || docDragRef.current) return
     if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/uri-list')) {
       isExternalDragRef.current = true
       dragCounterRef.current++
@@ -786,7 +774,7 @@ function App() {
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!isExternalDragRef.current) return
+    if (draggedAppIdRef.current || docDragRef.current) return
     dragCounterRef.current--
     if (dragCounterRef.current <= 0) {
       dragCounterRef.current = 0
@@ -819,7 +807,7 @@ function App() {
     setIsDragging(false)
     isExternalDragRef.current = false
 
-    if (draggedAppIdRef.current) return
+    if (draggedAppIdRef.current || docDragRef.current) return
 
     // Check for Steam URL in dragged text (e.g. dragging from browser)
     const textData = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/uri-list')
@@ -1110,20 +1098,16 @@ function App() {
         )}
 
         {!isDragging && (() => {
-          const appsToShow = activeCategory && !activeSubcategoryId
-            ? filteredApps
-            : filteredApps
-
           const groups: { sub: Subcategory | null; apps: typeof filteredApps }[] = []
           if (activeCategory && !activeSubcategoryId) {
-            const noSub = appsToShow.filter(a => !a.subcategoryId)
+            const noSub = filteredApps.filter(a => !a.subcategoryId)
             if (noSub.length > 0) groups.push({ sub: null, apps: noSub })
             for (const s of visibleSubcategories) {
-              const sApps = appsToShow.filter(a => a.subcategoryId === s.id)
+              const sApps = filteredApps.filter(a => a.subcategoryId === s.id)
               if (sApps.length > 0) groups.push({ sub: s, apps: sApps })
             }
           } else {
-            groups.push({ sub: null, apps: appsToShow })
+            groups.push({ sub: null, apps: filteredApps })
           }
 
           return (
@@ -1155,14 +1139,14 @@ function App() {
                       return (
                       <div
                         key={app.id}
-                        draggable
-                        onDragStart={(e) => {
+                        draggable={!canNativeDrag(app)}
+                        onDragStart={canNativeDrag(app) ? undefined : (e) => {
                           draggedAppIdRef.current = app.id
                           setDraggedAppId(app.id)
                           e.dataTransfer.effectAllowed = 'move'
                           e.dataTransfer.setData('text/plain', app.id)
                         }}
-                        onDragOver={(e) => {
+                        onDragOver={canNativeDrag(app) ? undefined : (e) => {
                           e.preventDefault()
                           e.stopPropagation()
                           if (draggedAppIdRef.current && draggedAppIdRef.current !== app.id) {
@@ -1170,8 +1154,8 @@ function App() {
                             setDragOverAppId(app.id)
                           }
                         }}
-                        onDragLeave={() => setDragOverAppId(null)}
-                        onDrop={async (e) => {
+                        onDragLeave={canNativeDrag(app) ? undefined : () => setDragOverAppId(null)}
+                        onDrop={canNativeDrag(app) ? undefined : async (e) => {
                           e.preventDefault()
                           e.stopPropagation()
                           setDragOverAppId(null)
@@ -1183,14 +1167,22 @@ function App() {
                           draggedAppIdRef.current = null
                           setDraggedAppId(null)
                         }}
-                        onDragEnd={() => {
-                          setTimeout(() => {
+                        onDragEnd={canNativeDrag(app) ? undefined : () => {
+                          if (dragTimeoutRef.current) {
+                            clearTimeout(dragTimeoutRef.current)
+                          }
+                          dragTimeoutRef.current = setTimeout(() => {
                             draggedAppIdRef.current = null
                             setDraggedAppId(null)
                             setDragOverCategory(null)
                             setDragOverAppId(null)
+                            dragTimeoutRef.current = null
                           }, 100)
                         }}
+                        onMouseDown={canNativeDrag(app) ? (e) => {
+                          e.stopPropagation()
+                          docDragRef.current = { appId: app.path, startX: e.clientX, startY: e.clientY, started: false }
+                        } : undefined}
                         style={{ borderRadius: br }}
                         className={`bg-white ${pSize} hover:shadow-md transition-all cursor-pointer group relative ${
                           draggedAppId === app.id ? 'opacity-50 scale-95' : ''
@@ -1227,6 +1219,18 @@ function App() {
                               }}
                               className="text-gray-400 hover:text-green-500 p-0.5"
                               title="发送文件（复制到剪贴板）"
+                            >
+                              📤
+                            </button>
+                          )}
+                          {isImageFile(app) && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleCopyImage(app)
+                              }}
+                              className="text-gray-400 hover:text-green-500 p-0.5"
+                              title="复制图片（可粘贴到微信等应用）"
                             >
                               📤
                             </button>
@@ -1379,7 +1383,12 @@ function SettingsModal({ config, onClose, onSave }: {
   const cardSizeLabels: Record<string, string> = { small: '小', medium: '中', large: '大' }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
       <div className="bg-white rounded-lg p-6 w-[480px] max-h-[85vh] overflow-auto">
         <h2 className="text-lg font-semibold mb-5">设置</h2>
 
@@ -1638,7 +1647,12 @@ function AddAppModal({ categories, onClose, onAdd, defaultCategory }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
       <div className="bg-white rounded-lg p-6 w-96">
         <h2 className="text-lg font-semibold mb-4">添加应用</h2>
 
@@ -1796,7 +1810,12 @@ function EditAppModal({ app, categories, onClose, onUpdate }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
       <div className="bg-white rounded-lg p-6 w-96">
         <h2 className="text-lg font-semibold mb-4">编辑应用</h2>
 
@@ -1957,7 +1976,12 @@ function CategoryManagerModal({ categories, onClose, onAdd, onDelete, onUpdate }
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
       <div className="bg-white rounded-lg p-6 w-[480px] max-h-[80vh] overflow-auto">
         <h2 className="text-lg font-semibold mb-4">管理分类</h2>
         
@@ -2154,7 +2178,12 @@ function SubcategoryManagerModal({ categories, subcategories, activeCategory, on
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
       <div className="bg-white rounded-lg p-6 w-[520px] max-h-[80vh] overflow-auto">
         <h2 className="text-lg font-semibold mb-4">管理子分类</h2>
         

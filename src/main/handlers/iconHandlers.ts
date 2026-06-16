@@ -18,8 +18,9 @@ export function registerIconHandlers() {
       let targetPath = filePath
       if (filePath.toLowerCase().endsWith('.lnk')) {
         try {
+          const escapedPath = filePath.replace(/'/g, "''")
           const result = execSync(
-            `powershell -NoProfile -Command "$sh = New-Object -ComObject WScript.Shell; $s = $sh.CreateShortcut('${filePath.replace(/'/g, "''")}'); $s.TargetPath"`,
+            `powershell -NoProfile -Command "$sh = New-Object -ComObject WScript.Shell; $s = $sh.CreateShortcut('${escapedPath}'); $s.TargetPath"`,
             { encoding: 'utf8', windowsHide: true, timeout: 3000 }
           ).trim()
           if (result && fs.existsSync(result)) {
@@ -37,8 +38,9 @@ export function registerIconHandlers() {
 
       // Fallback: use PowerShell to extract associated icon
       try {
+        const escapedTargetPath = targetPath.replace(/'/g, "''")
         const psResult = execSync(
-          `powershell -NoProfile -Command "Add-Type -AssemblyName System.Drawing; $icon = [System.Drawing.Icon]::ExtractAssociatedIcon('${targetPath.replace(/'/g, "''")}'); if($icon){$bmp=$icon.ToBitmap(); $ms=New-Object System.IO.MemoryStream; $bmp.Save($ms,[System.Drawing.Imaging.ImageFormat]::Png); [Convert]::ToBase64String($ms.ToArray())}"`,
+          `powershell -NoProfile -Command "Add-Type -AssemblyName System.Drawing; $icon = [System.Drawing.Icon]::ExtractAssociatedIcon('${escapedTargetPath}'); if($icon){$bmp=$icon.ToBitmap(); $ms=New-Object System.IO.MemoryStream; $bmp.Save($ms,[System.Drawing.Imaging.ImageFormat]::Png); [Convert]::ToBase64String($ms.ToArray())}"`,
           { encoding: 'utf8', windowsHide: true, timeout: 5000 }
         ).trim()
         if (psResult && psResult.length > 100) {

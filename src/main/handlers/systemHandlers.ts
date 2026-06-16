@@ -1,4 +1,6 @@
-import { ipcMain, BrowserWindow, dialog, screen, app } from 'electron'
+import { ipcMain, BrowserWindow, dialog, screen, app, nativeImage } from 'electron'
+import fs from 'fs'
+import path from 'path'
 
 let mainWindowRef: { current: BrowserWindow | null } = { current: null }
 let searchWindowRef: { current: BrowserWindow | null } = { current: null }
@@ -62,5 +64,25 @@ export function registerSystemHandlers() {
 
   ipcMain.handle('get-auto-start', () => {
     return app.getLoginItemSettings().openAtLogin
+  })
+
+  ipcMain.handle('start-drag-file', async (event, filePath: string) => {
+    const senderWin = BrowserWindow.fromWebContents(event.sender)
+    if (!senderWin || senderWin.isDestroyed()) return false
+    if (!fs.existsSync(filePath)) return false
+
+    let icon = nativeImage.createEmpty()
+    try {
+      const fileIcon = await app.getFileIcon(filePath, { size: 'normal' })
+      if (fileIcon && !fileIcon.isEmpty()) {
+        icon = fileIcon
+      }
+    } catch { /* ignore */ }
+
+    event.sender.startDrag({
+      file: filePath,
+      icon
+    })
+    return true
   })
 }

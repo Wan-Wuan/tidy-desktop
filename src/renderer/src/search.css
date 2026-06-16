@@ -24,12 +24,26 @@ html, body {
   background: transparent;
 }
 
+.search-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: transparent;
+  display: flex;
+  justify-content: center;
+  padding-top: 0;
+}
+
 .search-container {
   background: white;
   border-radius: 12px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
   overflow: hidden;
   min-height: 56px;
+  width: 100%;
+  max-width: 600px;
 }
 
 .search-input-wrapper {
