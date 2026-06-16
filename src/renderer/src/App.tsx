@@ -41,7 +41,69 @@ function App() {
   const categoriesRef = useRef<Category[]>([])
   const activeCategoryRef = useRef<string | null>(null)
   const isExternalDragRef = useRef(false)
-  const docDragRef = useRef<{ appId: string; startX: number; startY: number; started: boolean } | null>(null)
+  const mouseButtonRef = useRef<number>(0)
+  const nativeDragPathRef = useRef<string | null>(null)
+  const rightDragRef = useRef<{ appId: string; active: boolean; startX: number; startY: number } | null>(null)
+  const dragGhostRef = useRef<HTMLDivElement | null>(null)
+
+  // 创建跟随鼠标的幽灵卡片（HTML5拖拽和右键拖拽共用）
+  const dragGhostRafRef = useRef(0)
+  const dragGhostPosRef = useRef({ x: 0, y: 0 })
+
+  const createDragGhost = (appId: string, x: number, y: number) => {
+    removeDragGhost()
+    const app = appsRef.current.find(a => a.id === appId)
+    if (!app) return
+    const div = document.createElement('div')
+    // 小型标签：圆角胶囊，跟随鼠标右下方
+    div.style.cssText = 'position:fixed;z-index:99999;pointer-events:none;display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:rgba(59,130,246,0.9);color:white;font-size:12px;font-weight:500;white-space:nowrap;box-shadow:0 4px 12px rgba(59,130,246,0.4);will-change:transform;transition:transform 100ms cubic-bezier(0.34,1.56,0.64,1),opacity 150ms ease-out;opacity:0;transform:translate(' + (x + 14) + 'px,' + (y + 18) + 'px) scale(0.5);'
+    // 入场：淡入 + 弹性放大
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (div.parentNode) {
+          div.style.opacity = '1'
+          div.style.transform = `translate(${x + 14}px, ${y + 18}px) scale(1)`
+        }
+      })
+    })
+    // 小图标
+    if (app.icon && app.icon.startsWith('data:')) {
+      const img = document.createElement('img')
+      img.src = app.icon
+      img.style.cssText = 'width:16px;height:16px;border-radius:3px;'
+      div.appendChild(img)
+    }
+    const span = document.createElement('span')
+    span.textContent = app.name
+    div.appendChild(span)
+    document.body.appendChild(div)
+    dragGhostRef.current = div
+    dragGhostPosRef.current = { x: x - 60, y: y - 20 }
+  }
+
+  const moveDragGhost = (x: number, y: number) => {
+    if (!dragGhostRef.current) return
+    dragGhostPosRef.current = { x: x + 14, y: y + 18 }
+    if (!dragGhostRafRef.current) {
+      dragGhostRafRef.current = requestAnimationFrame(() => {
+        dragGhostRafRef.current = 0
+        if (dragGhostRef.current) {
+          dragGhostRef.current.style.transform = `translate(${dragGhostPosRef.current.x}px, ${dragGhostPosRef.current.y}px) scale(1)`
+        }
+      })
+    }
+  }
+
+  const removeDragGhost = () => {
+    if (dragGhostRafRef.current) {
+      cancelAnimationFrame(dragGhostRafRef.current)
+      dragGhostRafRef.current = 0
+    }
+    if (dragGhostRef.current) {
+      dragGhostRef.current.remove()
+      dragGhostRef.current = null
+    }
+  }
 
   useEffect(() => {
     loadData()
@@ -68,6 +130,7 @@ function App() {
       }
     }
     const handleGlobalDragEnd = () => {
+      removeDragGhost()
       if (dragTimeoutRef.current) {
         clearTimeout(dragTimeoutRef.current)
         dragTimeoutRef.current = null
@@ -107,23 +170,108 @@ function App() {
   }, [showSettings, showAddApp, showEditApp, showCategoryManager, showSubcategoryManager])
 
   useEffect(() => {
+    // 左键拖拽图片/文档文件：第一次 mousemove 时启动 Electron 原生拖拽（用于复制/发送到外部应用）
+    let moveFired = false
     const handleMouseMove = (e: MouseEvent) => {
-      if (!docDragRef.current || docDragRef.current.started) return
-      const dx = e.clientX - docDragRef.current.startX
-      const dy = e.clientY - docDragRef.current.startY
-      if (Math.abs(dx) + Math.abs(dy) > 5) {
-        docDragRef.current.started = true
-        window.electronAPI.startDragFile(docDragRef.current.appId)
-      }
+      if (moveFired) return
+      const filePath = nativeDragPathRef.current
+      if (!filePath) return
+      moveFired = true
+      window.electronAPI.startDragFile(filePath)
     }
     const handleMouseUp = () => {
-      docDragRef.current = null
+      moveFired = false
+      nativeDragPathRef.current = null
     }
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
     return () => {
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
+
+  useEffect(() => {
+    // 右键自定义拖拽：图片/文档文件的右键拖拽排序分类（HTML5 draggable 不支持右键）
+    const findDropTarget = (el: Element | null): { type: 'app' | 'category' | 'subcategory'; id: string } | null => {
+      if (!el) return null
+      let node: Element | null = el
+      for (let i = 0; i < 5 && node; i++) {
+        if (node.hasAttribute?.('data-app-id')) return { type: 'app', id: node.getAttribute('data-app-id')! }
+        if (node.hasAttribute?.('data-category-id')) return { type: 'category', id: node.getAttribute('data-category-id')! }
+        if (node.hasAttribute?.('data-subcategory-id')) return { type: 'subcategory', id: node.getAttribute('data-subcategory-id')! }
+        node = node.parentElement
+      }
+      return null
+    }
+
+    const handleRightDragMove = (e: MouseEvent) => {
+      if (!rightDragRef.current) return
+      if (!rightDragRef.current.active) {
+        const dx = e.clientX - rightDragRef.current.startX
+        const dy = e.clientY - rightDragRef.current.startY
+        if (Math.abs(dx) + Math.abs(dy) < 3) return
+        rightDragRef.current.active = true
+        setDraggedAppId(rightDragRef.current.appId)
+        draggedAppIdRef.current = rightDragRef.current.appId
+        document.body.style.cursor = 'grabbing'
+        createDragGhost(rightDragRef.current.appId, e.clientX, e.clientY)
+      }
+      moveDragGhost(e.clientX, e.clientY)
+      const el = document.elementFromPoint(e.clientX, e.clientY)
+      const target = findDropTarget(el)
+      if (!target) {
+        setDragOverAppId(null)
+        setDragOverCategory(null)
+        setDragOverSubId(null)
+        return
+      }
+      if (target.type === 'app' && target.id !== rightDragRef.current!.appId) {
+        setDragOverAppId(target.id)
+        setDragOverCategory(null)
+        setDragOverSubId(null)
+      } else if (target.type === 'category') {
+        setDragOverCategory(target.id)
+        setDragOverAppId(null)
+        setDragOverSubId(null)
+      } else if (target.type === 'subcategory') {
+        setDragOverSubId(target.id)
+        setDragOverAppId(null)
+        setDragOverCategory(null)
+      }
+    }
+
+    const handleRightDragUp = async (e: MouseEvent) => {
+      document.body.style.cursor = ''
+      removeDragGhost()
+      if (!rightDragRef.current) return
+      const { appId, active } = rightDragRef.current
+      rightDragRef.current = null
+      if (!active) return
+      const el = document.elementFromPoint(e.clientX, e.clientY)
+      const target = findDropTarget(el)
+      if (target) {
+        if (target.type === 'app' && target.id !== appId) {
+          await handleReorderApp(appId, target.id)
+        } else if (target.type === 'category') {
+          await handleMoveAppToCategory(appId, target.id)
+        } else if (target.type === 'subcategory') {
+          await handleMoveAppToSubcategory(appId, target.id)
+        }
+      }
+      setDraggedAppId(null)
+      setDragOverAppId(null)
+      setDragOverCategory(null)
+      setDragOverSubId(null)
+      draggedAppIdRef.current = null
+    }
+
+    document.addEventListener('mousemove', handleRightDragMove)
+    document.addEventListener('mouseup', handleRightDragUp)
+    return () => {
+      document.removeEventListener('mousemove', handleRightDragMove)
+      document.removeEventListener('mouseup', handleRightDragUp)
+      removeDragGhost()
     }
   }, [])
 
@@ -761,7 +909,7 @@ function App() {
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (draggedAppIdRef.current || docDragRef.current) return
+    if (draggedAppIdRef.current) return
     if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/uri-list')) {
       isExternalDragRef.current = true
       dragCounterRef.current++
@@ -774,7 +922,7 @@ function App() {
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (draggedAppIdRef.current || docDragRef.current) return
+    if (draggedAppIdRef.current) return
     dragCounterRef.current--
     if (dragCounterRef.current <= 0) {
       dragCounterRef.current = 0
@@ -786,12 +934,15 @@ function App() {
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    // 更新自定义幽灵位置
+    moveDragGhost(e.clientX, e.clientY)
     if (isExternalDragRef.current) {
       e.dataTransfer.dropEffect = 'copy'
     }
   }, [])
 
   const handleDragEnd = useCallback(() => {
+    removeDragGhost()
     dragCounterRef.current = 0
     setIsDragging(false)
     isExternalDragRef.current = false
@@ -807,7 +958,7 @@ function App() {
     setIsDragging(false)
     isExternalDragRef.current = false
 
-    if (draggedAppIdRef.current || docDragRef.current) return
+    if (draggedAppIdRef.current) return
 
     // Check for Steam URL in dragged text (e.g. dragging from browser)
     const textData = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/uri-list')
@@ -957,10 +1108,12 @@ function App() {
         {categories.map(cat => (
           <button
             key={cat.id}
+            data-category-id={cat.id}
             onClick={() => { setActiveCategory(cat.id); setActiveSubcategoryId(null) }}
             onDragOver={(e) => {
               e.preventDefault()
               e.stopPropagation()
+              moveDragGhost(e.clientX, e.clientY)
               const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
               const hasFiles = e.dataTransfer.types.includes('Files')
               if (appId || hasFiles) {
@@ -974,9 +1127,15 @@ function App() {
               e.stopPropagation()
               setDragOverCategory(null)
 
-              const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-              const files = Array.from(e.dataTransfer.files)
+              // 优先处理内部拖拽（包括原生拖拽放回应用内的情况）
+              if (draggedAppIdRef.current) {
+                await handleMoveAppToCategory(draggedAppIdRef.current, cat.id)
+                draggedAppIdRef.current = null
+                setDraggedAppId(null)
+                return
+              }
 
+              const files = Array.from(e.dataTransfer.files)
               if (files.length > 0) {
                 const newApps = parseFilesToApps(files, cat.id)
                 if (newApps.length > 0) {
@@ -985,19 +1144,18 @@ function App() {
                   await window.electronAPI.saveApps({ apps: updatedApps })
                   await extractIconsForApps(newApps)
                 }
-                draggedAppIdRef.current = null
-                setDraggedAppId(null)
-              } else if (appId) {
-                await handleMoveAppToCategory(appId, cat.id)
-                draggedAppIdRef.current = null
-                setDraggedAppId(null)
+              } else {
+                const appId = e.dataTransfer.getData('text/plain')
+                if (appId) {
+                  await handleMoveAppToCategory(appId, cat.id)
+                }
               }
             }}
             className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-all ${
               activeCategory === cat.id
                 ? 'bg-blue-500 text-white'
                 : dragOverCategory === cat.id
-                  ? 'bg-green-500 text-white scale-110 shadow-lg ring-2 ring-green-300'
+                  ? 'bg-green-500 text-white scale-110 shadow-lg shadow-green-300/50 ring-2 ring-green-300 ring-offset-1'
                   : 'bg-white text-gray-700 hover:bg-gray-100'
             }`}
           >
@@ -1010,6 +1168,7 @@ function App() {
         {visibleSubcategories.map(sub => (
           <button
             key={sub.id}
+            data-subcategory-id={sub.id}
             draggable
             onClick={() => setActiveSubcategoryId(sub.id)}
             onDragStart={(e) => {
@@ -1020,6 +1179,7 @@ function App() {
             onDragOver={(e) => {
               e.preventDefault()
               e.stopPropagation()
+              moveDragGhost(e.clientX, e.clientY)
               if (draggedSubId && draggedSubId !== sub.id) {
                 e.dataTransfer.dropEffect = 'move'
                 setDragOverSubId(sub.id)
@@ -1048,6 +1208,7 @@ function App() {
               }
             }}
             onDragEnd={() => {
+              removeDragGhost()
               setDraggedSubId(null)
               setDragOverSubId(null)
             }}
@@ -1055,7 +1216,7 @@ function App() {
               activeSubcategoryId === sub.id
                 ? 'bg-purple-500 text-white'
                 : dragOverSubId === sub.id
-                  ? 'bg-green-500 text-white scale-110 shadow-lg ring-2 ring-green-300'
+                  ? 'bg-green-500 text-white scale-110 shadow-lg shadow-green-300/50 ring-2 ring-green-300 ring-offset-1'
                   : draggedSubId === sub.id
                     ? 'opacity-50 scale-95'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -1078,26 +1239,16 @@ function App() {
         </button>
       </div>
 
-      <main 
+      <main
         ref={dropZoneRef}
-        className={`flex-1 overflow-auto p-4 ${isDragging ? 'bg-blue-50' : ''}`}
+        className="flex-1 overflow-auto p-4"
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
         onDrop={handleDrop}
       >
-        {isDragging && (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <div className="text-4xl mb-2">📥</div>
-              <p className="text-blue-600 font-medium">拖放文件或文件夹到此处添加</p>
-              <p className="text-sm text-gray-500 mt-1">支持 .exe、.lnk 文件和文件夹</p>
-            </div>
-          </div>
-        )}
-
-        {!isDragging && (() => {
+        {(() => {
           const groups: { sub: Subcategory | null; apps: typeof filteredApps }[] = []
           if (activeCategory && !activeSubcategoryId) {
             const noSub = filteredApps.filter(a => !a.subcategoryId)
@@ -1139,23 +1290,46 @@ function App() {
                       return (
                       <div
                         key={app.id}
-                        draggable={!canNativeDrag(app)}
-                        onDragStart={canNativeDrag(app) ? undefined : (e) => {
+                        data-app-id={app.id}
+                        draggable
+                        onMouseDown={(e) => {
+                          mouseButtonRef.current = e.button
+                          // 右键图片/文档：准备原生拖拽（复制发送到外部应用）
+                          if (e.button === 2 && canNativeDrag(app)) {
+                            e.preventDefault()
+                            nativeDragPathRef.current = app.path
+                          }
+                        }}
+                        onContextMenu={(e) => {
+                          // 图片/文档文件：阻止右键菜单（右键用于原生拖拽复制发送）
+                          if (canNativeDrag(app)) e.preventDefault()
+                        }}
+                        onDragStart={(e) => {
+                          // 清理上一次拖拽可能残留的状态
+                          if (draggedAppIdRef.current) {
+                            draggedAppIdRef.current = null
+                          }
                           draggedAppIdRef.current = app.id
                           setDraggedAppId(app.id)
                           e.dataTransfer.effectAllowed = 'move'
                           e.dataTransfer.setData('text/plain', app.id)
+                          // 隐藏默认拖拽幽灵，使用自定义幽灵
+                          const emptyImg = new Image()
+                          emptyImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs='
+                          e.dataTransfer.setDragImage(emptyImg, 0, 0)
+                          createDragGhost(app.id, e.clientX, e.clientY)
                         }}
-                        onDragOver={canNativeDrag(app) ? undefined : (e) => {
+                        onDragOver={(e) => {
                           e.preventDefault()
                           e.stopPropagation()
+                          moveDragGhost(e.clientX, e.clientY)
                           if (draggedAppIdRef.current && draggedAppIdRef.current !== app.id) {
                             e.dataTransfer.dropEffect = 'move'
                             setDragOverAppId(app.id)
                           }
                         }}
-                        onDragLeave={canNativeDrag(app) ? undefined : () => setDragOverAppId(null)}
-                        onDrop={canNativeDrag(app) ? undefined : async (e) => {
+                        onDragLeave={() => setDragOverAppId(null)}
+                        onDrop={async (e) => {
                           e.preventDefault()
                           e.stopPropagation()
                           setDragOverAppId(null)
@@ -1167,7 +1341,8 @@ function App() {
                           draggedAppIdRef.current = null
                           setDraggedAppId(null)
                         }}
-                        onDragEnd={canNativeDrag(app) ? undefined : () => {
+                        onDragEnd={() => {
+                          removeDragGhost()
                           if (dragTimeoutRef.current) {
                             clearTimeout(dragTimeoutRef.current)
                           }
@@ -1179,14 +1354,10 @@ function App() {
                             dragTimeoutRef.current = null
                           }, 100)
                         }}
-                        onMouseDown={canNativeDrag(app) ? (e) => {
-                          e.stopPropagation()
-                          docDragRef.current = { appId: app.path, startX: e.clientX, startY: e.clientY, started: false }
-                        } : undefined}
                         style={{ borderRadius: br }}
-                        className={`bg-white ${pSize} hover:shadow-md transition-all cursor-pointer group relative ${
-                          draggedAppId === app.id ? 'opacity-50 scale-95' : ''
-                        } ${dragOverAppId === app.id ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}
+                        className={`bg-white ${pSize} hover:shadow-md transition-all duration-150 cursor-pointer group relative ${
+                          draggedAppId === app.id ? 'opacity-40 scale-90 blur-[1px]' : ''
+                        } ${dragOverAppId === app.id ? 'scale-105 ring-2 ring-blue-400 ring-offset-2 shadow-xl shadow-blue-200/60 bg-blue-50/40' : ''}`}
                         onClick={() => handleOpenApp(app)}
                       >
                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
@@ -1241,7 +1412,7 @@ function App() {
                             app.type === 'folder' ? 'bg-orange-100' : app.type === 'steam' ? 'bg-purple-100' : 'bg-blue-100'
                           }`}>
                             {app.icon ? (
-                              <img src={app.icon} alt={app.name} className={iconInner} />
+                              <img src={app.icon} alt={app.name} className={iconInner} draggable={false} />
                             ) : (
 <span className={ui?.cardSize === 'small' ? 'text-xl' : ui?.cardSize === 'large' ? 'text-3xl' : 'text-2xl'}>{app.type === 'folder' ? '📁' : app.type === 'steam' ? '🎮' : '📦'}</span>
                             )}
@@ -1260,7 +1431,7 @@ function App() {
           )
         })()}
 
-        {!isDragging && filteredApps.length === 0 && (
+        {filteredApps.length === 0 && (
           <div className="text-center text-gray-500 py-12">
             {searchQuery ? '未找到匹配的应用' : '暂无应用，点击"添加应用"或"添加文件夹"开始使用'}
           </div>
