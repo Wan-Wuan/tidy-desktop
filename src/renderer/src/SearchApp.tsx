@@ -17,7 +17,7 @@ const ENGINE_ICONS: { [key: string]: string } = {
 
 const MAX_RESULTS = 10
 const INPUT_HEIGHT = 64
-const ROW_HEIGHT = 56
+const ROW_HEIGHT = 52
 
 function SearchApp() {
   const [query, setQuery] = useState('')
@@ -58,7 +58,8 @@ function SearchApp() {
 
   const resizeWindow = (resultCount: number) => {
     if (resultCount > 0) {
-      const height = INPUT_HEIGHT + Math.min(resultCount, MAX_RESULTS) * ROW_HEIGHT + 8
+      const count = Math.min(resultCount, MAX_RESULTS)
+      const height = INPUT_HEIGHT + count * ROW_HEIGHT + 16
       window.electronAPI.resizeSearchWindow(height)
     } else {
       window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
