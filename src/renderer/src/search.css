@@ -24,18 +24,6 @@ html, body {
   background: transparent;
 }
 
-.search-wrapper {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: transparent;
-  display: flex;
-  justify-content: center;
-  padding-top: 0;
-}
-
 .search-container {
   background: white;
   border-radius: 12px;

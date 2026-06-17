@@ -1,18 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { AppItem, Config, Category, Subcategory } from '../../shared/types'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { AppItem, Config, Category } from '../../shared/types'
 import { isFolderPath, getFolderSuggestion, checkSearchEngine } from '../../shared/utils'
 
 interface SearchEngineInfo {
   key: string
   name: string
   url: string
-}
-
-const ENGINE_ICONS: { [key: string]: string } = {
-  b: 'Bing',
-  g: 'Google',
-  baidu: 'Baidu',
-  bd: 'Baidu'
 }
 
 const MAX_RESULTS = 10
@@ -28,23 +21,27 @@ function SearchApp() {
   const [results, setResults] = useState<AppItem[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
-  const isInteracting = useRef(false)
-  const resultsRef = useRef<HTMLDivElement>(null)
+  const queryRef = useRef('')
+  const resultsRef = useRef<AppItem[]>([])
+  const isActiveRef = useRef(false)
 
   useEffect(() => {
     loadData()
     const focusTimer = setTimeout(() => inputRef.current?.focus(), 50)
 
     const removeBlur = window.electronAPI.onBlur(() => {
-      if (!isInteracting.current && results.length === 0 && !query.trim()) {
+      if (!isActiveRef.current) {
         window.electronAPI.hideSearchWindow()
       }
     })
 
     const removeReset = window.electronAPI.onResetSearch(() => {
       setQuery('')
+      queryRef.current = ''
       setResults([])
+      resultsRef.current = []
       setActiveEngine(null)
+      setActiveIndex(0)
       window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
       setTimeout(() => inputRef.current?.focus(), 50)
     })
@@ -81,11 +78,6 @@ function SearchApp() {
     const cat = categories.find(c => c.id === categoryId)
     return cat ? cat.name : ''
   }
-
-  const handleSearchEngineCheck = useCallback((input: string): { isEngine: boolean; engine?: SearchEngineInfo } => {
-    if (!config?.searchEngines) return { isEngine: false }
-    return checkSearchEngine(input, config.searchEngines) as { isEngine: boolean; engine?: SearchEngineInfo }
-  }, [config])
 
   const filterApps = useCallback((searchQuery: string): AppItem[] => {
     const terms = searchQuery.toLowerCase().trim().split(/\s+/)
@@ -135,93 +127,16 @@ function SearchApp() {
 
   const resetAll = useCallback(() => {
     setQuery('')
+    queryRef.current = ''
     setResults([])
+    resultsRef.current = []
     setActiveEngine(null)
+    setActiveIndex(0)
     window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
   }, [])
 
-  const handleSearch = useCallback(async () => {
-    if (activeEngine) {
-      if (query.trim()) {
-        window.electronAPI.hideSearchWindow()
-        resetAll()
-        await window.electronAPI.openUrl(activeEngine.url + encodeURIComponent(query.trim()))
-      }
-      return
-    }
-    if (results.length > 0) {
-      const app = results[activeIndex] || results[0]
-      window.electronAPI.hideSearchWindow()
-      resetAll()
-      if (app.type === 'folder') {
-        await window.electronAPI.openFolder(app.path)
-      } else if (app.type === 'steam') {
-        await window.electronAPI.openSteam(app.path)
-      } else {
-        await window.electronAPI.openApp(app.path)
-      }
-    }
-  }, [activeEngine, query, results, activeIndex, resetAll])
-
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    setQuery(value)
-
-    if (value.endsWith(' ') && config?.searchEngines) {
-      const engineCheck = checkSearchEngine(value, config.searchEngines)
-      if (engineCheck.isEngine && engineCheck.engine) {
-        setActiveEngine(engineCheck.engine)
-        setQuery('')
-        setResults([])
-        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
-        return
-      }
-    }
-
-    if (activeEngine) {
-      setResults([])
-      return
-    }
-
-    if (!value.trim()) {
-      setResults([])
-      window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
-      return
-    }
-
-    const filtered = filterApps(value)
-    setResults(filtered)
-    setActiveIndex(0)
-    resizeWindow(filtered.length)
-  }, [activeEngine, config, filterApps])
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      if (activeEngine) {
-        resetAll()
-      } else {
-        window.electronAPI.hideSearchWindow()
-      }
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      handleSearch()
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      if (results.length > 0) {
-        setActiveIndex(prev => (prev + 1) % results.length)
-      }
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      if (results.length > 0) {
-        setActiveIndex(prev => (prev - 1 + results.length) % results.length)
-      }
-    } else if (e.key === 'Backspace' && query === '' && activeEngine) {
-      setActiveEngine(null)
-    }
-  }, [activeEngine, query, handleSearch, resetAll, results.length])
-
   const handleOpenItem = async (app: AppItem) => {
-    isInteracting.current = true
+    isActiveRef.current = true
     window.electronAPI.hideSearchWindow()
     resetAll()
     if (app.type === 'folder') {
@@ -231,33 +146,125 @@ function SearchApp() {
     } else {
       await window.electronAPI.openApp(app.path)
     }
+    setTimeout(() => { isActiveRef.current = false }, 200)
   }
+
+  const handleSearch = useCallback(async () => {
+    if (activeEngine) {
+      if (queryRef.current.trim()) {
+        isActiveRef.current = true
+        window.electronAPI.hideSearchWindow()
+        const url = activeEngine.url + encodeURIComponent(queryRef.current.trim())
+        resetAll()
+        await window.electronAPI.openUrl(url)
+        setTimeout(() => { isActiveRef.current = false }, 200)
+      }
+      return
+    }
+    if (resultsRef.current.length > 0) {
+      const app = resultsRef.current[activeIndex] || resultsRef.current[0]
+      isActiveRef.current = true
+      window.electronAPI.hideSearchWindow()
+      resetAll()
+      if (app.type === 'folder') {
+        await window.electronAPI.openFolder(app.path)
+      } else if (app.type === 'steam') {
+        await window.electronAPI.openSteam(app.path)
+      } else {
+        await window.electronAPI.openApp(app.path)
+      }
+      setTimeout(() => { isActiveRef.current = false }, 200)
+    }
+  }, [activeEngine, activeIndex, resetAll])
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setQuery(value)
+    queryRef.current = value
+
+    if (value.endsWith(' ') && config?.searchEngines) {
+      const engineCheck = checkSearchEngine(value, config.searchEngines)
+      if (engineCheck.isEngine && engineCheck.engine) {
+        setActiveEngine(engineCheck.engine)
+        setQuery('')
+        queryRef.current = ''
+        setResults([])
+        resultsRef.current = []
+        setActiveIndex(0)
+        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
+        return
+      }
+    }
+
+    if (activeEngine) {
+      return
+    }
+
+    if (!value.trim()) {
+      setResults([])
+      resultsRef.current = []
+      setActiveIndex(0)
+      window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
+      return
+    }
+
+    const filtered = filterApps(value)
+    setResults(filtered)
+    resultsRef.current = filtered
+    setActiveIndex(0)
+    resizeWindow(filtered.length)
+  }, [activeEngine, config, filterApps])
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      if (resultsRef.current.length > 0) {
+        setResults([])
+        resultsRef.current = []
+        setActiveIndex(0)
+        setQuery('')
+        queryRef.current = ''
+        if (activeEngine) setActiveEngine(null)
+        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
+      } else if (activeEngine) {
+        setActiveEngine(null)
+        setQuery('')
+        queryRef.current = ''
+        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
+      } else {
+        window.electronAPI.hideSearchWindow()
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSearch()
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (resultsRef.current.length > 0) {
+        setActiveIndex(prev => (prev + 1) % resultsRef.current.length)
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (resultsRef.current.length > 0) {
+        setActiveIndex(prev => (prev - 1 + resultsRef.current.length) % resultsRef.current.length)
+      }
+    } else if (e.key === 'Backspace' && queryRef.current === '' && activeEngine) {
+      setActiveEngine(null)
+      window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
+    }
+  }, [activeEngine, handleSearch])
 
   const hasResults = results.length > 0
 
   return (
-    <div 
-      className="search-wrapper"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) {
-          window.electronAPI.hideSearchWindow()
-        }
-      }}
-    >
-      <div 
-        className="search-container"
-        onMouseEnter={() => { isInteracting.current = true }}
-        onMouseLeave={() => { isInteracting.current = false }}
-      >
+    <div className="search-container">
       <div className="search-input-wrapper">
         <svg className="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="11" cy="11" r="8" />
           <path d="m21 21-4.35-4.35" />
         </svg>
-        
+
         {activeEngine && (
           <div className="search-engine-badge">
-            <span>{ENGINE_ICONS[activeEngine.key] || activeEngine.name}</span>
+            <span>{activeEngine.name}</span>
           </div>
         )}
 
@@ -268,21 +275,27 @@ function SearchApp() {
           value={query}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          onFocus={() => { isInteracting.current = true }}
-          onBlur={() => { setTimeout(() => { isInteracting.current = false }, 100) }}
+          onFocus={() => { isActiveRef.current = true }}
+          onBlur={() => {
+            setTimeout(() => {
+              if (!isActiveRef.current) {
+                window.electronAPI.hideSearchWindow()
+              }
+            }, 150)
+          }}
           placeholder={activeEngine ? `在 ${activeEngine.name} 中搜索...` : '搜索应用或文件夹...'}
           autoFocus
         />
       </div>
 
       {hasResults && (
-        <div className="search-results" ref={resultsRef}>
+        <div className="search-results">
           {results.map((app, index) => (
             <div
               key={app.id}
-              className={`search-result-item ${index === 0 ? 'first' : ''} ${index === activeIndex ? 'active' : ''}`}
+              className={`search-result-item ${index === activeIndex ? 'active' : ''}`}
               onClick={() => handleOpenItem(app)}
-              onMouseDown={() => { isInteracting.current = true }}
+              onMouseDown={(e) => { e.preventDefault(); isActiveRef.current = true }}
               onMouseEnter={() => setActiveIndex(index)}
               ref={index === activeIndex ? (el) => {
                 if (el) el.scrollIntoView({ block: 'nearest' })
@@ -313,7 +326,6 @@ function SearchApp() {
           <span>没有找到匹配的应用或文件夹</span>
         </div>
       )}
-      </div>
     </div>
   )
 }
