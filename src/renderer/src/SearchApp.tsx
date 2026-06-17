@@ -8,7 +8,7 @@ interface SearchEngineInfo {
   url: string
 }
 
-const MAX_RESULTS = 10
+const MAX_RESULTS = 5
 const INPUT_HEIGHT = 50
 const ROW_HEIGHT = 30
 
