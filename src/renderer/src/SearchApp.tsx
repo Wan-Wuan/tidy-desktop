@@ -36,7 +36,7 @@ function SearchApp() {
     const focusTimer = setTimeout(() => inputRef.current?.focus(), 50)
 
     const removeBlur = window.electronAPI.onBlur(() => {
-      if (!isInteracting.current) {
+      if (!isInteracting.current && results.length === 0 && !query.trim()) {
         window.electronAPI.hideSearchWindow()
       }
     })
