@@ -8,7 +8,7 @@ interface SearchEngineInfo {
   url: string
 }
 
-const MAX_RESULTS = 5
+const MAX_RESULTS = 20
 const INPUT_HEIGHT = 50
 const ROW_HEIGHT = 30
 
@@ -30,9 +30,7 @@ function SearchApp() {
     const focusTimer = setTimeout(() => inputRef.current?.focus(), 50)
 
     const removeBlur = window.electronAPI.onBlur(() => {
-      if (!isActiveRef.current && !queryRef.current.trim() && resultsRef.current.length === 0) {
-        window.electronAPI.hideSearchWindow()
-      }
+      // 搜索框永不因失焦而隐藏，只通过 Escape 或打开应用关闭
     })
 
     const removeReset = window.electronAPI.onResetSearch(() => {
@@ -278,8 +276,8 @@ function SearchApp() {
           onFocus={() => { isActiveRef.current = true }}
           onBlur={() => {
             setTimeout(() => {
-              if (!isActiveRef.current && !queryRef.current.trim() && resultsRef.current.length === 0) {
-                window.electronAPI.hideSearchWindow()
+              if (!isActiveRef.current) {
+                inputRef.current?.focus()
               }
             }, 150)
           }}
