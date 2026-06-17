@@ -16,8 +16,8 @@ const ENGINE_ICONS: { [key: string]: string } = {
 }
 
 const MAX_RESULTS = 10
-const INPUT_HEIGHT = 48
-const ROW_HEIGHT = 36
+const INPUT_HEIGHT = 44
+const ROW_HEIGHT = 34
 
 function SearchApp() {
   const [query, setQuery] = useState('')
