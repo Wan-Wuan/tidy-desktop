@@ -30,7 +30,7 @@ function SearchApp() {
     const focusTimer = setTimeout(() => inputRef.current?.focus(), 50)
 
     const removeBlur = window.electronAPI.onBlur(() => {
-      if (!isActiveRef.current) {
+      if (!isActiveRef.current && !queryRef.current.trim() && resultsRef.current.length === 0) {
         window.electronAPI.hideSearchWindow()
       }
     })
@@ -278,7 +278,7 @@ function SearchApp() {
           onFocus={() => { isActiveRef.current = true }}
           onBlur={() => {
             setTimeout(() => {
-              if (!isActiveRef.current) {
+              if (!isActiveRef.current && !queryRef.current.trim() && resultsRef.current.length === 0) {
                 window.electronAPI.hideSearchWindow()
               }
             }, 150)
