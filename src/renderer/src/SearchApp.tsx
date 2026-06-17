@@ -16,7 +16,7 @@ const ENGINE_ICONS: { [key: string]: string } = {
 }
 
 const MAX_RESULTS = 10
-const INPUT_HEIGHT = 40
+const INPUT_HEIGHT = 50
 const ROW_HEIGHT = 30
 
 function SearchApp() {
