@@ -109,8 +109,12 @@ function createSearchWindow() {
 
   win.on('blur', () => {
     const blurredWin = win
+    let cancelled = false
+    const cancelHandler = () => { cancelled = true }
+    blurredWin.once('focus', cancelHandler)
     setTimeout(() => {
-      if (blurredWin && !blurredWin.isDestroyed() && !blurredWin.isFocused()) {
+      blurredWin.removeListener('focus', cancelHandler)
+      if (!cancelled && blurredWin && !blurredWin.isDestroyed() && !blurredWin.isFocused()) {
         blurredWin.webContents.send('blur-event')
       }
     }, 200)
@@ -170,7 +174,7 @@ function registerGlobalShortcut() {
 
   globalShortcut.unregisterAll()
 
-  globalShortcut.register(hotkey, () => {
+  const mainRegistered = globalShortcut.register(hotkey, () => {
     const w = mainWindowRef.current
     if (w) {
       if (w.isVisible()) {
@@ -181,10 +185,16 @@ function registerGlobalShortcut() {
       }
     }
   })
+  if (!mainRegistered) {
+    console.warn(`Failed to register main window hotkey: ${hotkey}`)
+  }
 
-  globalShortcut.register(searchHotkey, () => {
+  const searchRegistered = globalShortcut.register(searchHotkey, () => {
     toggleSearchWindow()
   })
+  if (!searchRegistered) {
+    console.warn(`Failed to register search hotkey: ${searchHotkey}`)
+  }
 }
 
 app.on('ready', () => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { AppItem, Category, Subcategory, Config, UISettings } from '../../shared/types'
 import { isFolderPath, getFolderSuggestion, checkSearchEngine, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
-import { pinyin } from 'pinyin-pro'
+import { getPinyin, getFirstLetter } from './utils/pinyin'
 
 
 interface SearchEngineInfo {
@@ -336,22 +336,6 @@ function App() {
     }
   }
 
-  const getPinyin = (name: string): string => {
-    try {
-      return pinyin(name, { toneType: 'none', type: 'array' }).join('')
-    } catch {
-      return name.toLowerCase()
-    }
-  }
-
-  const getFirstLetter = (name: string): string => {
-    try {
-      return pinyin(name, { pattern: 'first', toneType: 'none' }).replace(/\s/g, '')
-    } catch {
-      return name.charAt(0).toLowerCase()
-    }
-  }
-
   const getFileNameFromPath = (filePath: string): string => {
     const parts = filePath.replace(/\\/g, '/').split('/')
     const fileName = parts[parts.length - 1] || ''
@@ -420,16 +404,16 @@ function App() {
 
         let wi = 0
         for (let ti = 0; ti < term.length && wi < nameWords.length; wi++) {
-          let matched = false
+          let wordMatched = false
           for (let tj = ti; tj < term.length; tj++) {
             const sub = term.slice(ti, tj + 1)
             if (nameWords[wi] && nameWords[wi].startsWith(sub)) {
-              matched = true
+              wordMatched = true
               ti = tj + 1
               break
             }
           }
-          if (!matched) break
+          if (!wordMatched) break
         }
 
         const flMatch = (() => {
@@ -579,6 +563,7 @@ function App() {
       path,
       icon: '',
       categoryId,
+      subcategoryId: activeSubcategoryId || null,
       pinyin: getPinyin(name),
       firstLetter: getFirstLetter(name),
       type
@@ -591,12 +576,14 @@ function App() {
 
     // Extract icon: for Steam, try Steam cache first; for others, extract from file
     let iconPath: string | null = null
-    if (type === 'steam') {
-      iconPath = await window.electronAPI.extractSteamIcon(path)
-    }
-    if (!iconPath) {
-      iconPath = await window.electronAPI.extractIcon(path)
-    }
+    try {
+      if (type === 'steam') {
+        iconPath = await window.electronAPI.extractSteamIcon(path)
+      }
+      if (!iconPath) {
+        iconPath = await window.electronAPI.extractIcon(path)
+      }
+    } catch { /* icon extraction failed, app still usable */ }
     if (iconPath) {
       const withIcon = updatedApps.map(a => a.id === newApp.id ? { ...a, icon: iconPath } : a)
       setApps(withIcon)
@@ -636,12 +623,14 @@ function App() {
     // Re-extract icon if path or type changed
     if (existing.path !== path || existing.type !== type) {
       let iconPath: string | null = null
-      if (type === 'steam') {
-        iconPath = await window.electronAPI.extractSteamIcon(path)
-      }
-      if (!iconPath) {
-        iconPath = await window.electronAPI.extractIcon(path)
-      }
+      try {
+        if (type === 'steam') {
+          iconPath = await window.electronAPI.extractSteamIcon(path)
+        }
+        if (!iconPath) {
+          iconPath = await window.electronAPI.extractIcon(path)
+        }
+      } catch { /* icon extraction failed, app still usable */ }
       if (iconPath) {
         const withIcon = updatedApps.map(a => a.id === id ? { ...a, icon: iconPath } : a)
         setApps(withIcon)
@@ -674,7 +663,8 @@ function App() {
       name: folderName,
       path: folderPath,
       icon: '',
-      categoryId: '',
+      categoryId: activeCategoryRef.current || '',
+      subcategoryId: null,
       pinyin: getPinyin(folderName),
       firstLetter: getFirstLetter(folderName),
       type: 'folder'
@@ -684,7 +674,10 @@ function App() {
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
 
-    const iconPath = await window.electronAPI.extractIcon(folderPath)
+    let iconPath: string | null = null
+    try {
+      iconPath = await window.electronAPI.extractIcon(folderPath)
+    } catch { /* icon extraction failed, folder still usable */ }
     if (iconPath) {
       const withIcon = updatedApps.map(a => a.id === newApp.id ? { ...a, icon: iconPath } : a)
       setApps(withIcon)
@@ -756,6 +749,7 @@ function App() {
             path: filePath,
             icon: '',
             categoryId,
+            subcategoryId: null,
             pinyin: getPinyin(name),
             firstLetter: getFirstLetter(name),
             type: 'app'
@@ -771,6 +765,7 @@ function App() {
             path: filePath,
             icon: '',
             categoryId,
+            subcategoryId: null,
             pinyin: getPinyin(folderName),
             firstLetter: getFirstLetter(folderName),
             type: 'folder'
@@ -983,6 +978,7 @@ function App() {
         path: steamMatch.steamUrl,
         icon: '',
         categoryId: activeCategoryRef.current || categoriesRef.current[0].id,
+        subcategoryId: null,
         pinyin: getPinyin(gameName),
         firstLetter: getFirstLetter(gameName),
         type: 'steam'
@@ -1075,7 +1071,7 @@ function App() {
         </div>
       </header>
 
-      <div className="px-4 py-3">
+      <div className="px-4 py-2">
         <form onSubmit={handleSearchSubmit} className="relative flex items-center">
           {activeEngine && (
             <div className="absolute left-3 z-10 flex items-center">
@@ -1091,7 +1087,7 @@ function App() {
             onChange={handleSearchInputChange}
             onKeyDown={handleSearchKeyDown}
             placeholder={activeEngine ? `在 ${activeEngine.name} 中搜索...` : '搜索应用... (输入 b/g + 空格调用搜索引擎)'}
-            className={`w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+            className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 focus:bg-white transition-colors ${
               activeEngine ? 'pl-24' : ''
             }`}
           />
@@ -1241,7 +1237,8 @@ function App() {
 
       <main
         ref={dropZoneRef}
-        className="flex-1 overflow-auto p-4"
+        className="flex-1 overflow-y-scroll p-4"
+        style={{ scrollbarGutter: 'stable' }}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
@@ -1278,7 +1275,7 @@ function App() {
                     config?.ui?.gridColumns === 7 ? 'grid-cols-7' :
                     config?.ui?.gridColumns === 8 ? 'grid-cols-8' :
                     'grid-cols-6'
-                  }`}>
+                  }`} style={{ gridAutoRows: 'min-content' }}>
                     {group.apps.map(app => {
                       const ui = config?.ui
                       const pSize = ui?.cardSize === 'small' ? 'p-2' : ui?.cardSize === 'large' ? 'p-5' : 'p-4'

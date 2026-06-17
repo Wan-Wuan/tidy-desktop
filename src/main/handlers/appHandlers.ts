@@ -1,11 +1,11 @@
 import { ipcMain, shell, dialog } from 'electron'
-import { execSync, exec } from 'child_process'
+import { execFile, execFileSync } from 'child_process'
 
 export function registerAppHandlers() {
   ipcMain.handle('open-app', async (_, appPath: string) => {
     return new Promise((resolve) => {
       let resolved = false
-      const child = exec(`"${appPath}"`, { windowsHide: true }, (error) => {
+      const child = execFile(appPath, [], { windowsHide: true }, (error) => {
         if (resolved) return
         resolved = true
         clearTimeout(timer)
@@ -76,7 +76,7 @@ export function registerAppHandlers() {
     try {
       const escapedPath = filePath.replace(/'/g, "''")
       const psScript = `Add-Type -AssemblyName System.Windows.Forms; $dropList = New-Object System.Collections.Specialized.StringCollection; $dropList.Add('${escapedPath}') | Out-Null; [System.Windows.Forms.Clipboard]::SetFileDropList($dropList)`
-      execSync(`powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"')}"`, { windowsHide: true, timeout: 5000 })
+      execFileSync('powershell', ['-NoProfile', '-Command', psScript], { windowsHide: true, timeout: 5000 })
       return true
     } catch (error) {
       console.error('Failed to copy file to clipboard:', error)
@@ -88,7 +88,7 @@ export function registerAppHandlers() {
     try {
       const escapedPath = filePath.replace(/'/g, "''")
       const psScript = `Add-Type -AssemblyName System.Windows.Forms -AssemblyName System.Drawing; $img = [System.Drawing.Image]::FromFile('${escapedPath}'); $bmp = New-Object System.Drawing.Bitmap($img); [System.Windows.Forms.Clipboard]::SetImage($bmp); $bmp.Dispose(); $img.Dispose()`
-      execSync(`powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"')}"`, { windowsHide: true, timeout: 10000 })
+      execFileSync('powershell', ['-NoProfile', '-Command', psScript], { windowsHide: true, timeout: 10000 })
       return true
     } catch (error) {
       console.error('Failed to copy image to clipboard:', error)

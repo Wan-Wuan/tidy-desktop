@@ -13,6 +13,7 @@
 - **系统托盘**：最小化后驻留在系统托盘，双击可重新打开
 - **文件发送**：文档类文件可一键复制到剪贴板，直接粘贴到微信等应用
 - **图片拖拽复制**：图片文件可直接拖拽到任意应用（微信、Word、QQ等），或一键复制图片内容到剪贴板粘贴
+- **Steam 游戏集成**：拖入 Steam 链接自动获取游戏名和图标
 
 ### 搜索功能
 - **多关键词搜索**：`vs code` 匹配 `Visual Studio Code`
@@ -115,8 +116,12 @@ tidy-desktop/
 │   │       ├── main.tsx         # 主窗口入口
 │   │       ├── search-main.tsx  # 搜索窗口入口
 │   │       └── utils/           # 工具函数
-│   └── shared/                  # 共享类型定义
-│       └── types.ts
+│   │           ├── pinyin.ts    # 拼音工具
+│   │           ├── fileUtils.ts # 文件工具
+│   │           └── iconUtils.ts # 图标工具
+│   └── shared/                  # 共享类型和工具
+│       ├── types.ts             # TypeScript 接口
+│       └── utils.ts             # 共享工具函数
 ├── electron-builder.yml         # 打包配置
 ├── package.json
 ├── tsconfig.json
@@ -147,3 +152,16 @@ tidy-desktop/
 ## 许可证
 
 MIT
+
+## 更新日志
+
+### v1.8.7
+- **安全修复**：修复 `open-app` 中的命令注入漏洞（`exec()` → `execFile()`）
+- **安全修复**：修复 PowerShell 剪贴板和图标提取中的命令注入（`execSync` → `execFileSync`）
+- **修复**：添加应用时若已选子分类，新应用自动归入该子分类
+- **修复**：添加文件夹时自动归入当前活跃分类（而非空分类）
+- **修复**：新建应用/文件夹/Steam 游戏时显式设置 `subcategoryId`，避免类型不一致
+- **修复**：全局快捷键注册失败时输出警告日志
+- **修复**：搜索窗口失焦检测竞态条件（快速切换窗口时不再误隐藏）
+- **改进**：图标提取调用添加 try-catch 防止未处理异常
+- **改进**：消除重复的 `getPinyin`/`getFirstLetter` 函数，统一使用工具模块
