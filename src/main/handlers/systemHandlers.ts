@@ -28,14 +28,12 @@ export function registerSystemHandlers() {
   ipcMain.handle('resize-search-window', (_, height: number) => {
     const w = searchWindowRef.current
     if (w && !w.isDestroyed()) {
-      const width = 600
       const finalHeight = Math.max(60, height)
-      const display = screen.getPrimaryDisplay()
-      const newY = Math.round((display.workAreaSize.height * 0.3))
+      const bounds = w.getBounds()
       w.setBounds({
-        x: Math.round((display.workAreaSize.width - width) / 2),
-        y: newY,
-        width: width,
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
         height: finalHeight
       })
     }

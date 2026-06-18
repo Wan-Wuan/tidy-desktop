@@ -3,23 +3,21 @@ import { execFileSync } from 'child_process'
 
 export function registerAppHandlers() {
   ipcMain.handle('open-app', async (_, appPath: string) => {
-    try {
-      await shell.openPath(appPath)
-      return true
-    } catch (error) {
+    const error = await shell.openPath(appPath)
+    if (error) {
       console.error('Failed to open app:', error)
       return false
     }
+    return true
   })
 
   ipcMain.handle('open-folder', async (_, folderPath: string) => {
-    try {
-      await shell.openPath(folderPath)
-      return true
-    } catch (error) {
+    const error = await shell.openPath(folderPath)
+    if (error) {
       console.error('Failed to open folder:', error)
       return false
     }
+    return true
   })
 
   ipcMain.handle('open-url', async (_, url: string) => {
