@@ -8,9 +8,9 @@ interface SearchEngineInfo {
   url: string
 }
 
-const MAX_RESULTS = 20
-const INPUT_HEIGHT = 50
-const ROW_HEIGHT = 30
+const MAX_DISPLAY = 6
+const INPUT_HEIGHT = 56
+const ROW_HEIGHT = 57
 
 function SearchApp() {
   const [query, setQuery] = useState('')
@@ -53,7 +53,7 @@ function SearchApp() {
 
   const resizeWindow = (resultCount: number) => {
     if (resultCount > 0) {
-      const count = Math.min(resultCount, MAX_RESULTS)
+      const count = Math.min(resultCount, MAX_DISPLAY)
       const height = INPUT_HEIGHT + count * ROW_HEIGHT
       window.electronAPI.resizeSearchWindow(height)
     } else {
@@ -114,13 +114,13 @@ function SearchApp() {
 
     const suggestion = getFolderSuggestion(searchQuery)
     if (suggestion && matched.length === 0) {
-      return [suggestion].slice(0, MAX_RESULTS)
+      return [suggestion]
     }
     if (suggestion) {
-      return [suggestion, ...matched].slice(0, MAX_RESULTS)
+      return [suggestion, ...matched]
     }
 
-    return matched.slice(0, MAX_RESULTS)
+    return matched
   }, [apps])
 
   const resetAll = useCallback(() => {
