@@ -1,30 +1,15 @@
 import { ipcMain, shell, dialog } from 'electron'
-import { execFile, execFileSync } from 'child_process'
+import { execFileSync } from 'child_process'
 
 export function registerAppHandlers() {
   ipcMain.handle('open-app', async (_, appPath: string) => {
-    return new Promise((resolve) => {
-      let resolved = false
-      const child = execFile(appPath, [], { windowsHide: true }, (error) => {
-        if (resolved) return
-        resolved = true
-        clearTimeout(timer)
-        if (error) {
-          console.error('Failed to open app:', error)
-          resolve(false)
-        } else {
-          resolve(true)
-        }
-      })
-      const timer = setTimeout(() => {
-        if (resolved) return
-        resolved = true
-        if (!child.killed) {
-          child.kill()
-        }
-        resolve(true)
-      }, 5000)
-    })
+    try {
+      await shell.openPath(appPath)
+      return true
+    } catch (error) {
+      console.error('Failed to open app:', error)
+      return false
+    }
   })
 
   ipcMain.handle('open-folder', async (_, folderPath: string) => {
