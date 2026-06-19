@@ -40,6 +40,7 @@ function SearchApp() {
       resultsRef.current = []
       setActiveEngine(null)
       setActiveIndex(0)
+      loadData()
       window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
       setTimeout(() => inputRef.current?.focus(), 50)
     })
