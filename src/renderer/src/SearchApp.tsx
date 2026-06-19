@@ -59,6 +59,12 @@ function SearchApp() {
     }
   }, [])
 
+  // activeIndex 变化时滚动到可视区域
+  useEffect(() => {
+    const el = document.querySelector('.search-result-item.active')
+    if (el) el.scrollIntoView({ block: 'nearest' })
+  }, [activeIndex])
+
   const resizeWindow = useCallback((resultCount: number, hasQuery: boolean = false) => {
     if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
     resizeTimerRef.current = setTimeout(() => {
@@ -166,7 +172,8 @@ function SearchApp() {
     setTimeout(() => { isActiveRef.current = false }, 200)
   }
 
-  const handleSearch = useCallback(async () => {
+  const handleSearchRef = useRef<() => void>(() => {})
+  handleSearchRef.current = async () => {
     if (activeEngine) {
       if (queryRef.current.trim()) {
         isActiveRef.current = true
@@ -192,7 +199,9 @@ function SearchApp() {
       }
       setTimeout(() => { isActiveRef.current = false }, 200)
     }
-  }, [activeEngine, activeIndex, resetAll])
+  }
+
+  const handleSearch = useCallback(() => handleSearchRef.current(), [])
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
@@ -240,19 +249,14 @@ function SearchApp() {
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
-      if (resultsRef.current.length > 0) {
+      // 有内容（结果或输入）时先清空，无内容时才隐藏
+      if (resultsRef.current.length > 0 || queryRef.current || activeEngine) {
         setResults([])
         resultsRef.current = []
         setActiveIndex(0)
         setQuery('')
         queryRef.current = ''
         if (activeEngine) setActiveEngine(null)
-        currentHeightRef.current = INPUT_HEIGHT
-        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
-      } else if (activeEngine) {
-        setActiveEngine(null)
-        setQuery('')
-        queryRef.current = ''
         currentHeightRef.current = INPUT_HEIGHT
         window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
       } else {
@@ -331,9 +335,6 @@ function SearchApp() {
               onClick={() => handleOpenItem(app)}
               onMouseDown={(e) => { e.preventDefault(); isActiveRef.current = true }}
               onMouseEnter={() => setActiveIndex(index)}
-              ref={index === activeIndex ? (el) => {
-                if (el) el.scrollIntoView({ block: 'nearest' })
-              } : undefined}
             >
               <div className={`search-result-icon ${app.type === 'folder' ? 'folder' : ''}`}>
                 {app.icon ? (
