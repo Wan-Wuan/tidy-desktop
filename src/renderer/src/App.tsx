@@ -17,7 +17,6 @@ function App() {
   const [apps, setApps] = useState<AppItem[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [subcategories, setSubcategories] = useState<Subcategory[]>([])
-  const [activeSubcategoryId, setActiveSubcategoryId] = useState<string | null>(null)
   const [showSubcategoryManager, setShowSubcategoryManager] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
@@ -377,10 +376,6 @@ function App() {
       filtered = filtered.filter(app => app.categoryId === activeCategory)
     }
 
-    if (activeSubcategoryId) {
-      filtered = filtered.filter(app => app.subcategoryId === activeSubcategoryId)
-    }
-
     if (!searchQuery.trim()) {
       return filtered
     }
@@ -452,7 +447,7 @@ function App() {
     }
 
     return matched
-  }, [apps, searchQuery, activeCategory, activeSubcategoryId])
+  }, [apps, searchQuery, activeCategory])
 
   const handleOpenApp = async (app: AppItem) => {
     if (app.id === '__folder_path__') {
@@ -563,7 +558,7 @@ function App() {
       path,
       icon: '',
       categoryId,
-      subcategoryId: activeSubcategoryId || null,
+      subcategoryId: null,
       pinyin: getPinyin(name),
       firstLetter: getFirstLetter(name),
       type
@@ -858,7 +853,6 @@ function App() {
     const updated = subcategories.filter(s => s.id !== id)
     setSubcategories(updated)
     await window.electronAPI.saveCategories({ categories, subcategories: updated })
-    if (activeSubcategoryId === id) setActiveSubcategoryId(null)
     const currentApps = appsRef.current
     const updatedApps = currentApps.map(a => a.subcategoryId === id ? { ...a, subcategoryId: null } : a)
     setApps(updatedApps)
@@ -1105,7 +1099,7 @@ function App() {
           <button
             key={cat.id}
             data-category-id={cat.id}
-            onClick={() => { setActiveCategory(cat.id); setActiveSubcategoryId(null) }}
+            onClick={() => { setActiveCategory(cat.id) }}
             onDragOver={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -1166,7 +1160,10 @@ function App() {
             key={sub.id}
             data-subcategory-id={sub.id}
             draggable
-            onClick={() => setActiveSubcategoryId(sub.id)}
+            onClick={() => {
+              const el = document.getElementById(`subcat-${sub.id}`)
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }}
             onDragStart={(e) => {
               setDraggedSubId(sub.id)
               e.dataTransfer.effectAllowed = 'move'
@@ -1209,13 +1206,11 @@ function App() {
               setDragOverSubId(null)
             }}
             className={`px-2.5 py-1 rounded-full text-xs whitespace-nowrap transition-all ${
-              activeSubcategoryId === sub.id
-                ? 'bg-purple-500 text-white'
-                : dragOverSubId === sub.id
-                  ? 'bg-green-500 text-white scale-110 shadow-lg shadow-green-300/50 ring-2 ring-green-300 ring-offset-1'
-                  : draggedSubId === sub.id
-                    ? 'opacity-50 scale-95'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              dragOverSubId === sub.id
+                ? 'bg-green-500 text-white scale-110 shadow-lg shadow-green-300/50 ring-2 ring-green-300 ring-offset-1'
+                : draggedSubId === sub.id
+                  ? 'opacity-50 scale-95'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
             {sub.icon} {sub.name}
@@ -1247,21 +1242,17 @@ function App() {
       >
         {(() => {
           const groups: { sub: Subcategory | null; apps: typeof filteredApps }[] = []
-          if (activeCategory && !activeSubcategoryId) {
-            const noSub = filteredApps.filter(a => !a.subcategoryId)
-            if (noSub.length > 0) groups.push({ sub: null, apps: noSub })
-            for (const s of visibleSubcategories) {
-              const sApps = filteredApps.filter(a => a.subcategoryId === s.id)
-              if (sApps.length > 0) groups.push({ sub: s, apps: sApps })
-            }
-          } else {
-            groups.push({ sub: null, apps: filteredApps })
+          const noSub = filteredApps.filter(a => !a.subcategoryId)
+          if (noSub.length > 0) groups.push({ sub: null, apps: noSub })
+          for (const s of visibleSubcategories) {
+            const sApps = filteredApps.filter(a => a.subcategoryId === s.id)
+            if (sApps.length > 0) groups.push({ sub: s, apps: sApps })
           }
 
           return (
             <div>
               {groups.map((group, gi) => (
-                <div key={group.sub?.id || '__none__'} className={gi > 0 ? 'mt-6' : ''}>
+                <div key={group.sub?.id || '__none__'} id={group.sub ? `subcat-${group.sub.id}` : undefined} className={gi > 0 ? 'mt-6' : ''}>
                   {group.sub && (
                     <div className="flex items-center gap-2 mb-3 px-1">
                       <span className="text-sm">{group.sub.icon}</span>
