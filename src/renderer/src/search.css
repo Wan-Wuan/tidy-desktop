@@ -35,6 +35,7 @@ html, body {
   box-shadow: 0 8px 32px rgba(8, 145, 178, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
   width: 100%;
   max-width: 600px;
+  overflow: hidden;
 }
 
 .search-input-wrapper {
