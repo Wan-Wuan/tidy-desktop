@@ -1,14 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { AppItem, Category, Subcategory, Config, UISettings } from '../../shared/types'
-import { isFolderPath, getFolderSuggestion, checkSearchEngine, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
+import { isFolderPath, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
 
-
-interface SearchEngineInfo {
-  key: string
-  name: string
-  url: string
-}
 
 const EMOJI_LIST = ['🌐', '💻', '🎬', '📄', '🎮', '📦', '🎨', '📱', '🔧', '🎵', '📷', '🛒', '💼', '📚', '🗂️', '⚙️']
 
@@ -18,7 +12,6 @@ function App() {
   const [categories, setCategories] = useState<Category[]>([])
   const [subcategories, setSubcategories] = useState<Subcategory[]>([])
   const [showSubcategoryManager, setShowSubcategoryManager] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showAddApp, setShowAddApp] = useState(false)
@@ -29,8 +22,6 @@ function App() {
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [dragOverAppId, setDragOverAppId] = useState<string | null>(null)
-  const [activeEngine, setActiveEngine] = useState<SearchEngineInfo | null>(null)
-  const searchInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const categoryBarRef = useRef<HTMLDivElement>(null)
   const dragCounterRef = useRef(0)
@@ -341,118 +332,16 @@ function App() {
     return fileName.replace(/\.exe$/i, '').replace(/\.lnk$/i, '')
   }
 
-  const handleCheckSearchEngine = useCallback((input: string): { isEngine: boolean; engine?: SearchEngineInfo } => {
-    if (!config?.searchEngines) return { isEngine: false }
-    return checkSearchEngine(input, config.searchEngines) as { isEngine: boolean; engine?: SearchEngineInfo }
-  }, [config])
-
-  const handleSearch = useCallback((query: string) => {
-    setSearchQuery(query)
-    setActiveEngine(null)
-  }, [])
-
-  const handleSearchInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    setSearchQuery(value)
-
-    if (activeEngine) {
-      return
-    }
-
-    if (value.endsWith(' ')) {
-      const engineCheck = handleCheckSearchEngine(value)
-      if (engineCheck.isEngine && engineCheck.engine) {
-        setActiveEngine(engineCheck.engine)
-        setSearchQuery('')
-        return
-      }
-    }
-  }, [activeEngine, handleCheckSearchEngine])
-
   const filteredApps = useMemo(() => {
-    let filtered = apps
-
     if (activeCategory) {
-      filtered = filtered.filter(app => app.categoryId === activeCategory)
+      return apps.filter(app => app.categoryId === activeCategory)
     }
-
-    if (!searchQuery.trim()) {
-      return filtered
-    }
-
-    const terms = searchQuery.toLowerCase().trim().split(/\s+/)
-    
-    const matched = filtered.filter(app => {
-      const name = (app.name || '').toLowerCase()
-      const pinyin = (app.pinyin || '').toLowerCase()
-      const firstLetter = (app.firstLetter || '').toLowerCase()
-      const nameWords = name.split(/[\s\-_.,/\\|]+/)
-
-      return terms.every(term => {
-        if (name.includes(term)) return true
-        if (pinyin.includes(term)) return true
-        if (firstLetter.startsWith(term)) return true
-
-        for (let i = 0; i < nameWords.length; i++) {
-          if (nameWords[i].startsWith(term)) return true
-        }
-
-        let wi = 0
-        for (let ti = 0; ti < term.length && wi < nameWords.length; wi++) {
-          let wordMatched = false
-          for (let tj = ti; tj < term.length; tj++) {
-            const sub = term.slice(ti, tj + 1)
-            if (nameWords[wi] && nameWords[wi].startsWith(sub)) {
-              wordMatched = true
-              ti = tj + 1
-              break
-            }
-          }
-          if (!wordMatched) break
-        }
-
-        const flMatch = (() => {
-          let ti = 0
-          for (let wi = 0; wi < nameWords.length && ti < term.length; wi++) {
-            const ch = nameWords[wi][0]
-            if (ch === term[ti]) ti++
-          }
-          return ti === term.length
-        })()
-
-        if (flMatch) return true
-
-        const pinyinWords = pinyin.split(/[\s\-_.,/\\|]+/)
-        for (let i = 0; i < pinyinWords.length; i++) {
-          if (pinyinWords[i].startsWith(term)) return true
-        }
-
-        let pti = 0
-        for (let wi = 0; wi < pinyinWords.length && pti < term.length; wi++) {
-          const ch = pinyinWords[wi][0]
-          if (ch === term[pti]) pti++
-        }
-        if (pti === term.length) return true
-
-        return false
-      })
-    })
-
-    const suggestion = getFolderSuggestion(searchQuery)
-    if (suggestion && matched.length === 0) {
-      return [suggestion]
-    }
-    if (suggestion) {
-      return [suggestion, ...matched]
-    }
-
-    return matched
-  }, [apps, searchQuery, activeCategory])
+    return apps
+  }, [apps, activeCategory])
 
   const handleOpenApp = async (app: AppItem) => {
     if (app.id === '__folder_path__') {
       await window.electronAPI.openFolder(app.path)
-      setSearchQuery('')
       return
     }
     if (app.type === 'steam') {
@@ -462,7 +351,6 @@ function App() {
     } else {
       await window.electronAPI.openApp(app.path)
     }
-    setSearchQuery('')
   }
 
   const isDocFile = (app: AppItem): boolean => {
@@ -493,51 +381,6 @@ function App() {
     }
   }
 
-  const handleSearchSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (activeEngine) {
-      if (searchQuery.trim()) {
-        const url = activeEngine.url + encodeURIComponent(searchQuery.trim())
-        await window.electronAPI.openUrl(url)
-        setActiveEngine(null)
-        setSearchQuery('')
-      }
-      return
-    }
-
-    const query = searchQuery.trim()
-    if (!query) return
-
-    const searchEngineMatch = query.match(/^([a-z]+)\s+(.+)$/i)
-    if (searchEngineMatch) {
-      const [, prefix, searchTerm] = searchEngineMatch
-      const engine = config?.searchEngines[prefix.toLowerCase()]
-      if (engine) {
-        const url = engine.url + encodeURIComponent(searchTerm)
-        await window.electronAPI.openUrl(url)
-        setSearchQuery('')
-        return
-      }
-    }
-
-    const submitApps = filteredApps
-    if (submitApps.length > 0) {
-      await handleOpenApp(submitApps[0])
-    }
-  }
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      if (activeEngine) {
-        setActiveEngine(null)
-        setSearchQuery('')
-      }
-    }
-    if (e.key === 'Backspace' && searchQuery === '' && activeEngine) {
-      setActiveEngine(null)
-    }
-  }
 
   const handleAddApp = async (name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam' = 'app') => {
     if (categories.length === 0) {
@@ -1010,16 +853,6 @@ function App() {
     }
   }, [])
 
-  const getEngineDisplayName = (engine: SearchEngineInfo) => {
-    const names: { [key: string]: string } = {
-      b: 'Bing',
-      g: 'Google',
-      baidu: 'Baidu',
-      bd: 'Baidu'
-    }
-    return names[engine.key] || engine.name
-  }
-
   const handleReorderApp = async (sourceId: string, targetId: string) => {
     const currentApps = appsRef.current
     const sourceIndex = currentApps.findIndex(a => a.id === sourceId)
@@ -1064,35 +897,6 @@ function App() {
           </button>
         </div>
       </header>
-
-      <div className="px-4 py-2">
-        <form onSubmit={handleSearchSubmit} className="relative flex items-center">
-          {activeEngine && (
-            <div className="absolute left-3 z-10 flex items-center">
-              <span className="bg-blue-500 text-white px-2 py-0.5 rounded text-xs font-medium">
-                {getEngineDisplayName(activeEngine)}
-              </span>
-            </div>
-          )}
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={searchQuery}
-            onChange={handleSearchInputChange}
-            onKeyDown={handleSearchKeyDown}
-            placeholder={activeEngine ? `在 ${activeEngine.name} 中搜索...` : '搜索应用... (输入 b/g + 空格调用搜索引擎)'}
-            className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 focus:bg-white transition-colors ${
-              activeEngine ? 'pl-24' : ''
-            }`}
-          />
-          <button
-            type="submit"
-            className="absolute right-2 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-          >
-            {activeEngine ? '搜索' : '打开'}
-          </button>
-        </form>
-      </div>
 
       <div ref={categoryBarRef} className="px-4 pb-2 flex gap-2 overflow-x-auto">
         {categories.map(cat => (
@@ -1421,14 +1225,14 @@ function App() {
 
         {filteredApps.length === 0 && (
           <div className="text-center text-gray-500 py-12">
-            {searchQuery ? '未找到匹配的应用' : '暂无应用，点击"添加应用"或"添加文件夹"开始使用'}
+            '暂无应用，点击"添加应用"或"添加文件夹"开始使用'
           </div>
         )}
       </main>
 
       <footer className="bg-white border-t px-4 py-2 text-xs text-gray-400 flex justify-between">
         <span>Esc 关闭窗口</span>
-        <span>快捷键: {config?.hotkey || 'Alt+Space'} | 搜索: {config?.searchHotkey || 'Ctrl+K'}</span>
+        <span>快捷键: {config?.hotkey || 'Alt+Space'} | 搜索框: {config?.searchHotkey || 'Ctrl+K'}</span>
       </footer>
 
       {showSettings && config && (
