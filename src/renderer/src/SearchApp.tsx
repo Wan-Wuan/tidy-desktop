@@ -12,6 +12,7 @@ const MAX_DISPLAY = 6
 const INPUT_HEIGHT = 56
 const ROW_HEIGHT = 57
 const NO_RESULTS_HEIGHT = 40
+const RESIZE_DEBOUNCE_MS = 80
 
 function SearchApp() {
   const [query, setQuery] = useState('')
@@ -25,6 +26,7 @@ function SearchApp() {
   const queryRef = useRef('')
   const resultsRef = useRef<AppItem[]>([])
   const isActiveRef = useRef(false)
+  const resizeTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     loadData()
@@ -48,22 +50,26 @@ function SearchApp() {
 
     return () => {
       clearTimeout(focusTimer)
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
       removeBlur()
       removeReset()
     }
   }, [])
 
-  const resizeWindow = (resultCount: number, hasQuery: boolean = false) => {
-    if (resultCount > 0) {
-      const count = Math.min(resultCount, MAX_DISPLAY)
-      const height = INPUT_HEIGHT + count * ROW_HEIGHT
-      window.electronAPI.resizeSearchWindow(height)
-    } else if (hasQuery) {
-      window.electronAPI.resizeSearchWindow(INPUT_HEIGHT + NO_RESULTS_HEIGHT)
-    } else {
-      window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
-    }
-  }
+  const resizeWindow = useCallback((resultCount: number, hasQuery: boolean = false) => {
+    if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
+    resizeTimerRef.current = setTimeout(() => {
+      if (resultCount > 0) {
+        const count = Math.min(resultCount, MAX_DISPLAY)
+        const height = INPUT_HEIGHT + count * ROW_HEIGHT
+        window.electronAPI.resizeSearchWindow(height)
+      } else if (hasQuery) {
+        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT + NO_RESULTS_HEIGHT)
+      } else {
+        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
+      }
+    }, RESIZE_DEBOUNCE_MS)
+  }, [])
 
   const loadData = async () => {
     const [configData, appsData, categoriesData] = await Promise.all([
@@ -187,6 +193,7 @@ function SearchApp() {
     if (value.endsWith(' ') && config?.searchEngines) {
       const engineCheck = checkSearchEngine(value, config.searchEngines)
       if (engineCheck.isEngine && engineCheck.engine) {
+        if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
         setActiveEngine(engineCheck.engine)
         setQuery('')
         queryRef.current = ''
@@ -203,6 +210,7 @@ function SearchApp() {
     }
 
     if (!value.trim()) {
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
       setResults([])
       resultsRef.current = []
       setActiveIndex(0)
@@ -213,12 +221,14 @@ function SearchApp() {
     const filtered = filterApps(value)
     setResults(filtered)
     resultsRef.current = filtered
-    setActiveIndex(0)
+    const newIndex = filtered.length > 0 ? Math.min(0, filtered.length - 1) : 0
+    setActiveIndex(newIndex)
     resizeWindow(filtered.length, !!value.trim())
   }, [activeEngine, config, filterApps])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
       if (resultsRef.current.length > 0) {
         setResults([])
         resultsRef.current = []
@@ -240,13 +250,21 @@ function SearchApp() {
       handleSearch()
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
-      if (resultsRef.current.length > 0) {
-        setActiveIndex(prev => (prev + 1) % resultsRef.current.length)
+      const len = resultsRef.current.length
+      if (len > 0) {
+        setActiveIndex(prev => {
+          const next = prev + 1
+          return next >= len ? 0 : next
+        })
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      if (resultsRef.current.length > 0) {
-        setActiveIndex(prev => (prev - 1 + resultsRef.current.length) % resultsRef.current.length)
+      const len = resultsRef.current.length
+      if (len > 0) {
+        setActiveIndex(prev => {
+          const next = prev - 1
+          return next < 0 ? len - 1 : next
+        })
       }
     } else if (e.key === 'Backspace' && queryRef.current === '' && activeEngine) {
       setActiveEngine(null)
