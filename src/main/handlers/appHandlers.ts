@@ -1,6 +1,11 @@
 import { ipcMain, shell, dialog } from 'electron'
 import { execFileSync } from 'child_process'
 
+/** 安全地将 PowerShell 命令编码为 Base64，避免注入 */
+function encodePsCommand(script: string): string {
+  return Buffer.from(script, 'utf16le').toString('base64')
+}
+
 export function registerAppHandlers() {
   ipcMain.handle('open-app', async (_, appPath: string) => {
     const error = await shell.openPath(appPath)
@@ -57,9 +62,8 @@ export function registerAppHandlers() {
 
   ipcMain.handle('copy-file-to-clipboard', async (_, filePath: string) => {
     try {
-      const escapedPath = filePath.replace(/'/g, "''")
-      const psScript = `Add-Type -AssemblyName System.Windows.Forms; $dropList = New-Object System.Collections.Specialized.StringCollection; $dropList.Add('${escapedPath}') | Out-Null; [System.Windows.Forms.Clipboard]::SetFileDropList($dropList)`
-      execFileSync('powershell', ['-NoProfile', '-Command', psScript], { windowsHide: true, timeout: 5000 })
+      const psScript = `Add-Type -AssemblyName System.Windows.Forms; $dropList = New-Object System.Collections.Specialized.StringCollection; $dropList.Add('${filePath.replace(/'/g, "''")}') | Out-Null; [System.Windows.Forms.Clipboard]::SetFileDropList($dropList)`
+      execFileSync('powershell', ['-NoProfile', '-EncodedCommand', encodePsCommand(psScript)], { windowsHide: true, timeout: 5000 })
       return true
     } catch (error) {
       console.error('Failed to copy file to clipboard:', error)
@@ -69,9 +73,8 @@ export function registerAppHandlers() {
 
   ipcMain.handle('copy-image-to-clipboard', async (_, filePath: string) => {
     try {
-      const escapedPath = filePath.replace(/'/g, "''")
-      const psScript = `Add-Type -AssemblyName System.Windows.Forms -AssemblyName System.Drawing; $img = [System.Drawing.Image]::FromFile('${escapedPath}'); $bmp = New-Object System.Drawing.Bitmap($img); [System.Windows.Forms.Clipboard]::SetImage($bmp); $bmp.Dispose(); $img.Dispose()`
-      execFileSync('powershell', ['-NoProfile', '-Command', psScript], { windowsHide: true, timeout: 10000 })
+      const psScript = `Add-Type -AssemblyName System.Windows.Forms -AssemblyName System.Drawing; $img = [System.Drawing.Image]::FromFile('${filePath.replace(/'/g, "''")}'); $bmp = New-Object System.Drawing.Bitmap($img); [System.Windows.Forms.Clipboard]::SetImage($bmp); $bmp.Dispose(); $img.Dispose()`
+      execFileSync('powershell', ['-NoProfile', '-EncodedCommand', encodePsCommand(psScript)], { windowsHide: true, timeout: 10000 })
       return true
     } catch (error) {
       console.error('Failed to copy image to clipboard:', error)

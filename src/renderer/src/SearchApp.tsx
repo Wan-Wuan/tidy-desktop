@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { AppItem, Config, Category } from '../../shared/types'
-import { isFolderPath, getFolderSuggestion, checkSearchEngine } from '../../shared/utils'
+import { getFolderSuggestion, checkSearchEngine } from '../../shared/utils'
 
 interface SearchEngineInfo {
   key: string
@@ -11,7 +11,7 @@ interface SearchEngineInfo {
 const MAX_DISPLAY = 6
 const INPUT_HEIGHT = 56
 const ROW_HEIGHT = 57
-const NO_RESULTS_HEIGHT = 40
+const NO_RESULTS_HEIGHT = 44
 const RESIZE_DEBOUNCE_MS = 80
 
 function SearchApp() {

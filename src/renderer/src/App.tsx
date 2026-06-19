@@ -31,7 +31,6 @@ function App() {
   const categoriesRef = useRef<Category[]>([])
   const activeCategoryRef = useRef<string | null>(null)
   const isExternalDragRef = useRef(false)
-  const mouseButtonRef = useRef<number>(0)
   const nativeDragPathRef = useRef<string | null>(null)
   const rightDragRef = useRef<{ appId: string; active: boolean; startX: number; startY: number } | null>(null)
   const dragGhostRef = useRef<HTMLDivElement | null>(null)
@@ -180,6 +179,9 @@ function App() {
       document.removeEventListener('mouseup', handleMouseUp)
     }
   }, [])
+
+  const [draggedSubId, setDraggedSubId] = useState<string | null>(null)
+  const [dragOverSubId, setDragOverSubId] = useState<string | null>(null)
 
   useEffect(() => {
     // 右键自定义拖拽：图片/文档文件的右键拖拽排序分类（HTML5 draggable 不支持右键）
@@ -721,9 +723,6 @@ function App() {
     await window.electronAPI.saveApps({ apps: updatedApps })
   }
 
-  const [draggedSubId, setDraggedSubId] = useState<string | null>(null)
-  const [dragOverSubId, setDragOverSubId] = useState<string | null>(null)
-
   const handleReorderSubcategory = async (sourceId: string, targetId: string) => {
     const sourceIndex = subcategories.findIndex(s => s.id === sourceId)
     const targetIndex = subcategories.findIndex(s => s.id === targetId)
@@ -1107,7 +1106,6 @@ function App() {
                         data-app-id={app.id}
                         draggable
                         onMouseDown={(e) => {
-                          mouseButtonRef.current = e.button
                           // 右键图片/文档：准备原生拖拽（复制发送到外部应用）
                           if (e.button === 2 && canNativeDrag(app)) {
                             e.preventDefault()
@@ -1169,7 +1167,7 @@ function App() {
                           }, 100)
                         }}
                         style={{ borderRadius: br }}
-                        className={`glass ${pSize} hover:shadow-lg hover:shadow-cyan-500/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group relative ${
+                        className={`glass ${pSize} hover:shadow-lg hover:shadow-cyan-500/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group relative select-none ${
                           draggedAppId === app.id ? 'opacity-30 scale-95 blur-[2px]' : ''
                         } ${dragOverAppId === app.id ? 'scale-[1.03] ring-2 ring-[#0891B2] ring-offset-2 shadow-xl shadow-cyan-500/20 bg-cyan-50/50' : ''}`}
                         onClick={() => handleOpenApp(app)}
@@ -1327,7 +1325,7 @@ function App() {
   )
 }
 
-function SettingsModal({ config, onClose, onSave }: {
+const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSave }: {
   config: Config
   onClose: () => void
   onSave: (config: Config) => void
@@ -1559,9 +1557,9 @@ function SettingsModal({ config, onClose, onSave }: {
       </div>
     </div>
   )
-}
+})
 
-function AddAppModal({ categories, onClose, onAdd, defaultCategory }: {
+const AddAppModal = React.memo(function AddAppModal({ categories, onClose, onAdd, defaultCategory }: {
   categories: Category[]
   onClose: () => void
   onAdd: (name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam') => void
@@ -1763,9 +1761,9 @@ function AddAppModal({ categories, onClose, onAdd, defaultCategory }: {
       </div>
     </div>
   )
-}
+})
 
-function EditAppModal({ app, categories, onClose, onUpdate }: {
+const EditAppModal = React.memo(function EditAppModal({ app, categories, onClose, onUpdate }: {
   app: AppItem
   categories: Category[]
   onClose: () => void
@@ -1926,9 +1924,9 @@ function EditAppModal({ app, categories, onClose, onUpdate }: {
       </div>
     </div>
   )
-}
+})
 
-function CategoryManagerModal({ categories, onClose, onAdd, onDelete, onUpdate }: {
+const CategoryManagerModal = React.memo(function CategoryManagerModal({ categories, onClose, onAdd, onDelete, onUpdate }: {
   categories: Category[]
   onClose: () => void
   onAdd: (name: string, icon: string) => void
@@ -2132,9 +2130,9 @@ function CategoryManagerModal({ categories, onClose, onAdd, onDelete, onUpdate }
       </div>
     </div>
   )
-}
+})
 
-function SubcategoryManagerModal({ categories, subcategories, activeCategory, onClose, onAdd, onDelete, onUpdate, onMove }: {
+const SubcategoryManagerModal = React.memo(function SubcategoryManagerModal({ categories, subcategories, activeCategory, onClose, onAdd, onDelete, onUpdate, onMove }: {
   categories: Category[]
   subcategories: Subcategory[]
   activeCategory: string | null
@@ -2331,6 +2329,6 @@ function SubcategoryManagerModal({ categories, subcategories, activeCategory, on
       </div>
     </div>
   )
-}
+})
 
 export default App
