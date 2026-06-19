@@ -27,6 +27,7 @@ function SearchApp() {
   const resultsRef = useRef<AppItem[]>([])
   const isActiveRef = useRef(false)
   const resizeTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const currentHeightRef = useRef(INPUT_HEIGHT)
 
   useEffect(() => {
     loadData()
@@ -37,12 +38,14 @@ function SearchApp() {
     })
 
     const removeReset = window.electronAPI.onResetSearch(() => {
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
       setQuery('')
       queryRef.current = ''
       setResults([])
       resultsRef.current = []
       setActiveEngine(null)
       setActiveIndex(0)
+      currentHeightRef.current = INPUT_HEIGHT
       loadData()
       window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
       setTimeout(() => inputRef.current?.focus(), 50)
@@ -59,14 +62,18 @@ function SearchApp() {
   const resizeWindow = useCallback((resultCount: number, hasQuery: boolean = false) => {
     if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
     resizeTimerRef.current = setTimeout(() => {
+      let targetHeight: number
       if (resultCount > 0) {
         const count = Math.min(resultCount, MAX_DISPLAY)
-        const height = INPUT_HEIGHT + count * ROW_HEIGHT
-        window.electronAPI.resizeSearchWindow(height)
+        targetHeight = INPUT_HEIGHT + count * ROW_HEIGHT
       } else if (hasQuery) {
-        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT + NO_RESULTS_HEIGHT)
+        targetHeight = INPUT_HEIGHT + NO_RESULTS_HEIGHT
       } else {
-        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
+        targetHeight = INPUT_HEIGHT
+      }
+      if (targetHeight !== currentHeightRef.current) {
+        currentHeightRef.current = targetHeight
+        window.electronAPI.resizeSearchWindow(targetHeight)
       }
     }, RESIZE_DEBOUNCE_MS)
   }, [])
@@ -134,12 +141,14 @@ function SearchApp() {
   }, [apps])
 
   const resetAll = useCallback(() => {
+    if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
     setQuery('')
     queryRef.current = ''
     setResults([])
     resultsRef.current = []
     setActiveEngine(null)
     setActiveIndex(0)
+    currentHeightRef.current = INPUT_HEIGHT
     window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
   }, [])
 
@@ -200,6 +209,7 @@ function SearchApp() {
         setResults([])
         resultsRef.current = []
         setActiveIndex(0)
+        currentHeightRef.current = INPUT_HEIGHT
         window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
         return
       }
@@ -214,6 +224,7 @@ function SearchApp() {
       setResults([])
       resultsRef.current = []
       setActiveIndex(0)
+      currentHeightRef.current = INPUT_HEIGHT
       window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
       return
     }
@@ -236,11 +247,13 @@ function SearchApp() {
         setQuery('')
         queryRef.current = ''
         if (activeEngine) setActiveEngine(null)
+        currentHeightRef.current = INPUT_HEIGHT
         window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
       } else if (activeEngine) {
         setActiveEngine(null)
         setQuery('')
         queryRef.current = ''
+        currentHeightRef.current = INPUT_HEIGHT
         window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
       } else {
         window.electronAPI.hideSearchWindow()
@@ -268,6 +281,7 @@ function SearchApp() {
       }
     } else if (e.key === 'Backspace' && queryRef.current === '' && activeEngine) {
       setActiveEngine(null)
+      currentHeightRef.current = INPUT_HEIGHT
       window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
     }
   }, [activeEngine, handleSearch])
