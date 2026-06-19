@@ -868,37 +868,59 @@ function App() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
-      <header className="bg-white shadow-sm px-4 py-3 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-800">tidy_desktop</h1>
+      <header className="glass px-6 py-3.5 flex items-center justify-between sticky top-0 z-20">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center shadow-md shadow-cyan-500/20">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+              <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+              <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+              <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+            </svg>
+          </div>
+          <h1 className="text-lg font-semibold text-[#0E7490] tracking-tight">Tidy Desktop</h1>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowAddApp(true)}
-            className="px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+            className="px-3.5 py-1.5 bg-[#0891B2] text-white rounded-lg hover:bg-[#0E7490] text-sm font-medium transition-all duration-200 shadow-sm shadow-cyan-500/20 hover:shadow-md hover:shadow-cyan-500/30"
           >
-            添加应用
+            <span className="flex items-center gap-1.5">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              添加应用
+            </span>
           </button>
           <button
             onClick={handleAddFolder}
-            className="px-3 py-1.5 bg-orange-500 text-white rounded hover:bg-orange-600 text-sm"
+            className="px-3.5 py-1.5 bg-[#22D3EE] text-[#164E63] rounded-lg hover:bg-[#06B6D4] text-sm font-medium transition-all duration-200 shadow-sm shadow-cyan-400/20"
           >
-            添加文件夹
+            <span className="flex items-center gap-1.5">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              添加文件夹
+            </span>
           </button>
           <button
             onClick={() => setShowCategoryManager(true)}
-            className="px-3 py-1.5 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
+            className="px-3.5 py-1.5 bg-white/60 text-[#0E7490] rounded-lg hover:bg-white/80 text-sm font-medium transition-all duration-200 border border-cyan-200/50"
           >
-            管理分类
+            <span className="flex items-center gap-1.5">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+              管理分类
+            </span>
           </button>
           <button
             onClick={() => setShowSettings(true)}
-            className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm"
+            className="px-3.5 py-1.5 bg-white/60 text-[#475569] rounded-lg hover:bg-white/80 text-sm font-medium transition-all duration-200 border border-gray-200/50"
           >
-            设置
+            <span className="flex items-center gap-1.5">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              设置
+            </span>
           </button>
         </div>
       </header>
 
-      <div ref={categoryBarRef} className="px-4 pb-2 flex gap-2 overflow-x-auto">
+      <div ref={categoryBarRef} className="px-5 pt-3 pb-2 flex gap-2 overflow-x-auto">
         {categories.map(cat => (
           <button
             key={cat.id}
@@ -945,12 +967,12 @@ function App() {
                 }
               }
             }}
-            className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-all ${
+            className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${
               activeCategory === cat.id
-                ? 'bg-blue-500 text-white'
+                ? 'bg-[#0891B2] text-white shadow-md shadow-cyan-500/25'
                 : dragOverCategory === cat.id
-                  ? 'bg-green-500 text-white scale-110 shadow-lg shadow-green-300/50 ring-2 ring-green-300 ring-offset-1'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
+                  ? 'bg-[#22C55E] text-white scale-105 shadow-lg shadow-green-400/30 ring-2 ring-green-300'
+                  : 'bg-white/60 text-[#475569] hover:bg-white/80 hover:text-[#0E7490] border border-cyan-100/50'
             }`}
           >
             {cat.icon} {cat.name}
@@ -958,7 +980,7 @@ function App() {
         ))}
       </div>
 
-      <div className="px-4 pb-2 flex gap-2 overflow-x-auto">
+      <div className="px-5 pb-3 flex gap-2 overflow-x-auto">
         {visibleSubcategories.map(sub => (
           <button
             key={sub.id}
@@ -1009,12 +1031,12 @@ function App() {
               setDraggedSubId(null)
               setDragOverSubId(null)
             }}
-            className={`px-2.5 py-1 rounded-full text-xs whitespace-nowrap transition-all ${
+            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 ${
               dragOverSubId === sub.id
-                ? 'bg-green-500 text-white scale-110 shadow-lg shadow-green-300/50 ring-2 ring-green-300 ring-offset-1'
+                ? 'bg-[#22C55E] text-white scale-105 shadow-lg shadow-green-400/30 ring-2 ring-green-300'
                 : draggedSubId === sub.id
-                  ? 'opacity-50 scale-95'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'opacity-40 scale-95'
+                  : 'bg-white/50 text-[#64748B] hover:bg-white/70 hover:text-[#0E7490] border border-cyan-100/40'
             }`}
           >
             {sub.icon} {sub.name}
@@ -1022,13 +1044,13 @@ function App() {
         ))}
         <button
           onClick={() => setShowCategoryManager(true)}
-          className="px-2.5 py-1 rounded-full text-xs whitespace-nowrap bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all"
+          className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/40 text-[#94A3B8] hover:bg-white/60 hover:text-[#0E7490] transition-all duration-200 border border-dashed border-cyan-200/60"
         >
           + 分类
         </button>
         <button
           onClick={() => setShowSubcategoryManager(true)}
-          className="px-2.5 py-1 rounded-full text-xs whitespace-nowrap bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all"
+          className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/40 text-[#94A3B8] hover:bg-white/60 hover:text-[#0E7490] transition-all duration-200 border border-dashed border-cyan-200/60"
         >
           + 子分类
         </button>
@@ -1036,7 +1058,7 @@ function App() {
 
       <main
         ref={dropZoneRef}
-        className="flex-1 overflow-y-scroll p-4"
+        className="flex-1 overflow-y-scroll px-5 py-4"
         style={{ scrollbarGutter: 'stable' }}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
@@ -1058,13 +1080,13 @@ function App() {
               {groups.map((group, gi) => (
                 <div key={group.sub?.id || '__none__'} id={group.sub ? `subcat-${group.sub.id}` : undefined} className={gi > 0 ? 'mt-6' : ''}>
                   {group.sub && (
-                    <div className="flex items-center gap-2 mb-3 px-1">
+                    <div className="flex items-center gap-2.5 mb-3 px-1">
                       <span className="text-sm">{group.sub.icon}</span>
-                      <span className="text-sm font-medium text-gray-600">{group.sub.name}</span>
-                      <div className="flex-1 border-t border-gray-200"></div>
+                      <span className="text-sm font-semibold text-[#0E7490]">{group.sub.name}</span>
+                      <div className="flex-1 h-px bg-gradient-to-r from-cyan-200/60 to-transparent"></div>
                     </div>
                   )}
-                  <div className={`grid gap-4 ${
+                  <div className={`grid gap-3 ${
                     config?.ui?.gridColumns === 4 ? 'grid-cols-4' :
                     config?.ui?.gridColumns === 5 ? 'grid-cols-5' :
                     config?.ui?.gridColumns === 7 ? 'grid-cols-7' :
@@ -1147,9 +1169,9 @@ function App() {
                           }, 100)
                         }}
                         style={{ borderRadius: br }}
-                        className={`bg-white ${pSize} hover:shadow-md transition-all duration-150 cursor-pointer group relative ${
-                          draggedAppId === app.id ? 'opacity-40 scale-90 blur-[1px]' : ''
-                        } ${dragOverAppId === app.id ? 'scale-105 ring-2 ring-blue-400 ring-offset-2 shadow-xl shadow-blue-200/60 bg-blue-50/40' : ''}`}
+                        className={`glass ${pSize} hover:shadow-lg hover:shadow-cyan-500/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group relative ${
+                          draggedAppId === app.id ? 'opacity-30 scale-95 blur-[2px]' : ''
+                        } ${dragOverAppId === app.id ? 'scale-[1.03] ring-2 ring-[#0891B2] ring-offset-2 shadow-xl shadow-cyan-500/20 bg-cyan-50/50' : ''}`}
                         onClick={() => handleOpenApp(app)}
                       >
                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
@@ -1159,7 +1181,7 @@ function App() {
                               setEditingApp(app)
                               setShowEditApp(true)
                             }}
-                            className="text-gray-400 hover:text-blue-500 p-0.5"
+                            className="text-[#94A3B8] hover:text-[#0891B2] p-0.5 transition-colors"
                             title="编辑"
                           >
                             ✎
@@ -1169,7 +1191,7 @@ function App() {
                               e.stopPropagation()
                               handleDeleteApp(app.id)
                             }}
-                            className="text-gray-400 hover:text-red-500 p-0.5"
+                            className="text-[#94A3B8] hover:text-red-500 p-0.5 transition-colors"
                             title="删除"
                           >
                             ×
@@ -1201,7 +1223,7 @@ function App() {
                         </div>
                         {ui?.showIcon !== false && (
                           <div style={{ borderRadius: Math.min(br, 12) }} className={`${iconSize} flex items-center justify-center mb-3 mx-auto ${
-                            app.type === 'folder' ? 'bg-orange-100' : app.type === 'steam' ? 'bg-purple-100' : 'bg-blue-100'
+                            app.type === 'folder' ? 'bg-gradient-to-br from-orange-50 to-orange-100' : app.type === 'steam' ? 'bg-gradient-to-br from-purple-50 to-purple-100' : 'bg-gradient-to-br from-cyan-50 to-cyan-100'
                           }`}>
                             {app.icon ? (
                               <img src={app.icon} alt={app.name} className={iconInner} draggable={false} />
@@ -1211,7 +1233,7 @@ function App() {
                           </div>
                         )}
                         {ui?.showName !== false && (
-                          <p className={`${textSize} text-center text-gray-700 truncate`}>{app.name}</p>
+                          <p className={`${textSize} text-center text-[#334155] font-medium truncate`}>{app.name}</p>
                         )}
                       </div>
                       )
@@ -1224,15 +1246,33 @@ function App() {
         })()}
 
         {filteredApps.length === 0 && (
-          <div className="text-center text-gray-500 py-12">
-            '暂无应用，点击"添加应用"或"添加文件夹"开始使用'
+          <div className="text-center py-16">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-cyan-50 to-cyan-100 flex items-center justify-center">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0891B2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+                <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+                <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+                <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+              </svg>
+            </div>
+            <p className="text-[#94A3B8] text-sm">暂无应用</p>
+            <p className="text-[#CBD5E1] text-xs mt-1">点击「添加应用」或「添加文件夹」开始使用</p>
           </div>
         )}
       </main>
 
-      <footer className="bg-white border-t px-4 py-2 text-xs text-gray-400 flex justify-between">
+      <footer className="glass px-6 py-2 text-xs text-[#94A3B8] flex justify-between border-t border-cyan-100/30">
         <span>Esc 关闭窗口</span>
-        <span>快捷键: {config?.hotkey || 'Alt+Space'} | 搜索框: {config?.searchHotkey || 'Ctrl+K'}</span>
+        <span className="flex items-center gap-3">
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-white/60 text-[#64748B] font-mono text-[10px] border border-cyan-100/40">{config?.hotkey || 'Alt+Space'}</kbd>
+            显示/隐藏
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-white/60 text-[#64748B] font-mono text-[10px] border border-cyan-100/40">{config?.searchHotkey || 'Ctrl+K'}</kbd>
+            搜索
+          </span>
+        </span>
       </footer>
 
       {showSettings && config && (
