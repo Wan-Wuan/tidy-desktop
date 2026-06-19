@@ -46,7 +46,7 @@ function App() {
     if (!app) return
     const div = document.createElement('div')
     // 小型标签：圆角胶囊，跟随鼠标右下方
-    div.style.cssText = 'position:fixed;z-index:99999;pointer-events:none;display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:rgba(59,130,246,0.9);color:white;font-size:12px;font-weight:500;white-space:nowrap;box-shadow:0 4px 12px rgba(59,130,246,0.4);will-change:transform;transition:transform 100ms cubic-bezier(0.34,1.56,0.64,1),opacity 150ms ease-out;opacity:0;transform:translate(' + (x + 14) + 'px,' + (y + 18) + 'px) scale(0.5);'
+    div.style.cssText = 'position:fixed;z-index:99999;pointer-events:none;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:10px;background:rgba(8,145,178,0.92);backdrop-filter:blur(8px);color:white;font-family:Inter,sans-serif;font-size:12px;font-weight:500;white-space:nowrap;box-shadow:0 8px 24px rgba(8,145,178,0.35),0 2px 6px rgba(0,0,0,0.1);will-change:transform;transition:transform 120ms cubic-bezier(0.34,1.56,0.64,1),opacity 150ms ease-out;opacity:0;transform:translate(' + (x + 14) + 'px,' + (y + 18) + 'px) scale(0.5);'
     // 入场：淡入 + 弹性放大
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -60,7 +60,7 @@ function App() {
     if (app.icon && app.icon.startsWith('data:')) {
       const img = document.createElement('img')
       img.src = app.icon
-      img.style.cssText = 'width:16px;height:16px;border-radius:3px;'
+      img.style.cssText = 'width:18px;height:18px;border-radius:4px;'
       div.appendChild(img)
     }
     const span = document.createElement('span')
@@ -1202,7 +1202,7 @@ function App() {
                                 e.stopPropagation()
                                 handleCopyFile(app)
                               }}
-                              className="text-gray-400 hover:text-green-500 p-0.5"
+                              className="text-[#94A3B8] hover:text-[#22C55E] p-0.5 transition-colors"
                               title="发送文件（复制到剪贴板）"
                             >
                               📤
@@ -1214,7 +1214,7 @@ function App() {
                                 e.stopPropagation()
                                 handleCopyImage(app)
                               }}
-                              className="text-gray-400 hover:text-green-500 p-0.5"
+                              className="text-[#94A3B8] hover:text-[#22C55E] p-0.5 transition-colors"
                               title="复制图片（可粘贴到微信等应用）"
                             >
                               📤

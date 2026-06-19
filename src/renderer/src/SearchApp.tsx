@@ -11,6 +11,7 @@ interface SearchEngineInfo {
 const MAX_DISPLAY = 6
 const INPUT_HEIGHT = 56
 const ROW_HEIGHT = 57
+const NO_RESULTS_HEIGHT = 40
 
 function SearchApp() {
   const [query, setQuery] = useState('')
@@ -52,11 +53,13 @@ function SearchApp() {
     }
   }, [])
 
-  const resizeWindow = (resultCount: number) => {
+  const resizeWindow = (resultCount: number, hasQuery: boolean = false) => {
     if (resultCount > 0) {
       const count = Math.min(resultCount, MAX_DISPLAY)
       const height = INPUT_HEIGHT + count * ROW_HEIGHT
       window.electronAPI.resizeSearchWindow(height)
+    } else if (hasQuery) {
+      window.electronAPI.resizeSearchWindow(INPUT_HEIGHT + NO_RESULTS_HEIGHT)
     } else {
       window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
     }
@@ -211,7 +214,7 @@ function SearchApp() {
     setResults(filtered)
     resultsRef.current = filtered
     setActiveIndex(0)
-    resizeWindow(filtered.length)
+    resizeWindow(filtered.length, !!value.trim())
   }, [activeEngine, config, filterApps])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
