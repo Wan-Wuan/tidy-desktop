@@ -5,6 +5,7 @@ import { registerAppHandlers } from './handlers/appHandlers'
 import { registerFileHandlers } from './handlers/fileHandlers'
 import { registerIconHandlers } from './handlers/iconHandlers'
 import { registerSystemHandlers, setWindowRefs } from './handlers/systemHandlers'
+import { registerUpdateHandlers } from './handlers/updateHandlers'
 
 const isDev = !app.isPackaged
 
@@ -208,6 +209,7 @@ app.on('ready', () => {
   registerFileHandlers()
   registerIconHandlers()
   registerSystemHandlers()
+  registerUpdateHandlers()
 
   createWindow()
   createTray()

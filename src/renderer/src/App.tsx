@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { AppItem, Category, Subcategory, Config, UISettings } from '../../shared/types'
 import { isFolderPath, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
+import type { UpdateInfo, UpdateProgress } from '../../shared/electron.d'
 
 
 const EMOJI_LIST = ['🌐', '💻', '🎬', '📄', '🎮', '📦', '🎨', '📱', '🔧', '🎵', '📷', '🛒', '💼', '📚', '🗂️', '⚙️']
@@ -13,6 +14,10 @@ function App() {
   const [subcategories, setSubcategories] = useState<Subcategory[]>([])
   const [showSubcategoryManager, setShowSubcategoryManager] = useState(false)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+  const [updateDownloading, setUpdateDownloading] = useState(false)
+  const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null)
+  const [updateFilePath, setUpdateFilePath] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showAddApp, setShowAddApp] = useState(false)
   const [showEditApp, setShowEditApp] = useState(false)
@@ -45,7 +50,7 @@ function App() {
     if (!app) return
     const div = document.createElement('div')
     // 小型标签：圆角胶囊，跟随鼠标右下方
-    div.style.cssText = 'position:fixed;z-index:99999;pointer-events:none;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:10px;background:rgba(8,145,178,0.92);backdrop-filter:blur(8px);color:white;font-family:Inter,sans-serif;font-size:12px;font-weight:500;white-space:nowrap;box-shadow:0 8px 24px rgba(8,145,178,0.35),0 2px 6px rgba(0,0,0,0.1);will-change:transform;transition:transform 120ms cubic-bezier(0.34,1.56,0.64,1),opacity 150ms ease-out;opacity:0;transform:translate(' + (x + 14) + 'px,' + (y + 18) + 'px) scale(0.5);'
+    div.style.cssText = 'position:fixed;z-index:99999;pointer-events:none;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:10px;background:rgba(79,70,229,0.92);backdrop-filter:blur(8px);color:white;font-family:Inter,sans-serif;font-size:12px;font-weight:500;white-space:nowrap;box-shadow:0 8px 24px rgba(79,70,229,0.35),0 2px 6px rgba(0,0,0,0.1);will-change:transform;transition:transform 120ms cubic-bezier(0.34,1.56,0.64,1),opacity 150ms ease-out;opacity:0;transform:translate(' + (x + 14) + 'px,' + (y + 18) + 'px) scale(0.5);'
     // 入场：淡入 + 弹性放大
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -96,6 +101,18 @@ function App() {
 
   useEffect(() => {
     loadData()
+    // Check for updates on startup
+    window.electronAPI.checkForUpdate().then(info => {
+      if (info.available) setUpdateInfo(info)
+    }).catch(() => { /* ignore */ })
+  }, [])
+
+  // Update progress listener
+  useEffect(() => {
+    const unsub = window.electronAPI.onUpdateProgress((data) => {
+      setUpdateProgress(data)
+    })
+    return unsub
   }, [])
 
   useEffect(() => {
@@ -866,10 +883,17 @@ function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col h-screen relative">
+      {/* Aurora background orbs */}
+      <div className="aurora-bg">
+        <div className="aurora-orb aurora-orb--indigo" />
+        <div className="aurora-orb aurora-orb--frost" />
+        <div className="aurora-orb aurora-orb--violet" />
+      </div>
+
       <header className="glass px-6 py-3.5 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center shadow-md shadow-cyan-500/20">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-md shadow-brand-500/20">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="7" height="7" rx="1.5"/>
               <rect x="14" y="3" width="7" height="7" rx="1.5"/>
@@ -877,12 +901,12 @@ function App() {
               <rect x="14" y="14" width="7" height="7" rx="1.5"/>
             </svg>
           </div>
-          <h1 className="text-lg font-semibold text-[#0E7490] tracking-tight">Tidy Desktop</h1>
+          <h1 className="text-lg font-display font-bold text-brand-700 tracking-tight">Tidy Desktop</h1>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowAddApp(true)}
-            className="px-3.5 py-1.5 bg-[#0891B2] text-white rounded-lg hover:bg-[#0E7490] text-sm font-medium transition-all duration-200 shadow-sm shadow-cyan-500/20 hover:shadow-md hover:shadow-cyan-500/30"
+            className="px-3.5 py-1.5 bg-brand-600 text-white rounded-lg hover:bg-brand-700 text-sm font-medium transition-all duration-200 shadow-sm shadow-brand-500/20 hover:shadow-md hover:shadow-brand-500/30"
           >
             <span className="flex items-center gap-1.5">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -891,7 +915,7 @@ function App() {
           </button>
           <button
             onClick={handleAddFolder}
-            className="px-3.5 py-1.5 bg-[#22D3EE] text-[#164E63] rounded-lg hover:bg-[#06B6D4] text-sm font-medium transition-all duration-200 shadow-sm shadow-cyan-400/20"
+            className="px-3.5 py-1.5 bg-frost-400 text-brand-800 rounded-lg hover:bg-frost-500 text-sm font-medium transition-all duration-200 shadow-sm shadow-frost-400/20"
           >
             <span className="flex items-center gap-1.5">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
@@ -900,7 +924,7 @@ function App() {
           </button>
           <button
             onClick={() => setShowCategoryManager(true)}
-            className="px-3.5 py-1.5 bg-white/60 text-[#0E7490] rounded-lg hover:bg-white/80 text-sm font-medium transition-all duration-200 border border-cyan-200/50"
+            className="px-3.5 py-1.5 bg-white/60 text-brand-600 rounded-lg hover:bg-white/80 text-sm font-medium transition-all duration-200 border border-brand-200/50"
           >
             <span className="flex items-center gap-1.5">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -909,13 +933,54 @@ function App() {
           </button>
           <button
             onClick={() => setShowSettings(true)}
-            className="px-3.5 py-1.5 bg-white/60 text-[#475569] rounded-lg hover:bg-white/80 text-sm font-medium transition-all duration-200 border border-gray-200/50"
+            className="px-3.5 py-1.5 bg-white/60 text-slate-600 rounded-lg hover:bg-white/80 text-sm font-medium transition-all duration-200 border border-slate-200/50"
           >
             <span className="flex items-center gap-1.5">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
               设置
             </span>
           </button>
+          {updateInfo?.available && (
+            <button
+              onClick={async () => {
+                if (updateFilePath) {
+                  // Already downloaded — install
+                  await window.electronAPI.installUpdate(updateFilePath)
+                  return
+                }
+                setUpdateDownloading(true)
+                setUpdateProgress(null)
+                const result = await window.electronAPI.downloadUpdate()
+                if (result.success && result.filePath) {
+                  setUpdateFilePath(result.filePath)
+                  await window.electronAPI.installUpdate(result.filePath)
+                } else {
+                  setUpdateDownloading(false)
+                  setUpdateProgress(null)
+                }
+              }}
+              className="px-3.5 py-1.5 bg-brand-500 text-white rounded-lg hover:bg-brand-600 text-sm font-medium transition-all duration-200 shadow-sm shadow-brand-500/20 hover:shadow-md hover:shadow-brand-500/30"
+            >
+              <span className="flex items-center gap-1.5">
+                {updateDownloading && !updateFilePath ? (
+                  <>
+                    <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10" strokeDasharray="50" strokeDashoffset={50 - (updateProgress?.percent || 0) / 2} /></svg>
+                    {updateProgress ? `${updateProgress.percent}%` : '下载中...'}
+                  </>
+                ) : updateFilePath ? (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    安装 v{updateInfo.version}
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    更新 v{updateInfo.version}
+                  </>
+                )}
+              </span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -968,10 +1033,10 @@ function App() {
             }}
             className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${
               activeCategory === cat.id
-                ? 'bg-[#0891B2] text-white shadow-md shadow-cyan-500/25'
+                ? 'bg-brand-600 text-white shadow-md shadow-brand-500/25'
                 : dragOverCategory === cat.id
-                  ? 'bg-[#22C55E] text-white scale-105 shadow-lg shadow-green-400/30 ring-2 ring-green-300'
-                  : 'bg-white/60 text-[#475569] hover:bg-white/80 hover:text-[#0E7490] border border-cyan-100/50'
+                  ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
+                  : 'bg-white/60 text-slate-600 hover:bg-white/80 hover:text-brand-600 border border-brand-100/50'
             }`}
           >
             {cat.icon} {cat.name}
@@ -1032,10 +1097,10 @@ function App() {
             }}
             className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 ${
               dragOverSubId === sub.id
-                ? 'bg-[#22C55E] text-white scale-105 shadow-lg shadow-green-400/30 ring-2 ring-green-300'
+                ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
                 : draggedSubId === sub.id
                   ? 'opacity-40 scale-95'
-                  : 'bg-white/50 text-[#64748B] hover:bg-white/70 hover:text-[#0E7490] border border-cyan-100/40'
+                  : 'bg-white/50 text-slate-500 hover:bg-white/70 hover:text-brand-600 border border-brand-100/40'
             }`}
           >
             {sub.icon} {sub.name}
@@ -1043,13 +1108,13 @@ function App() {
         ))}
         <button
           onClick={() => setShowCategoryManager(true)}
-          className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/40 text-[#94A3B8] hover:bg-white/60 hover:text-[#0E7490] transition-all duration-200 border border-dashed border-cyan-200/60"
+          className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/40 text-slate-400 hover:bg-white/60 hover:text-brand-600 transition-all duration-200 border border-dashed border-brand-200/60"
         >
           + 分类
         </button>
         <button
           onClick={() => setShowSubcategoryManager(true)}
-          className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/40 text-[#94A3B8] hover:bg-white/60 hover:text-[#0E7490] transition-all duration-200 border border-dashed border-cyan-200/60"
+          className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/40 text-slate-400 hover:bg-white/60 hover:text-brand-600 transition-all duration-200 border border-dashed border-brand-200/60"
         >
           + 子分类
         </button>
@@ -1081,8 +1146,8 @@ function App() {
                   {group.sub && (
                     <div className="flex items-center gap-2.5 mb-3 px-1">
                       <span className="text-sm">{group.sub.icon}</span>
-                      <span className="text-sm font-semibold text-[#0E7490]">{group.sub.name}</span>
-                      <div className="flex-1 h-px bg-gradient-to-r from-cyan-200/60 to-transparent"></div>
+                      <span className="text-sm font-semibold font-display text-brand-700">{group.sub.name}</span>
+                      <div className="flex-1 h-px bg-gradient-to-r from-brand-200/60 to-transparent"></div>
                     </div>
                   )}
                   <div className={`grid gap-3 ${
@@ -1167,9 +1232,9 @@ function App() {
                           }, 100)
                         }}
                         style={{ borderRadius: br }}
-                        className={`glass ${pSize} hover:shadow-lg hover:shadow-cyan-500/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group relative select-none ${
+                        className={`glass ${pSize} hover:shadow-lg hover:shadow-brand-500/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group relative select-none ${
                           draggedAppId === app.id ? 'opacity-30 scale-95 blur-[2px]' : ''
-                        } ${dragOverAppId === app.id ? 'scale-[1.03] ring-2 ring-[#0891B2] ring-offset-2 shadow-xl shadow-cyan-500/20 bg-cyan-50/50' : ''}`}
+                        } ${dragOverAppId === app.id ? 'scale-[1.03] ring-2 ring-brand-500 ring-offset-2 shadow-xl shadow-brand-500/20 bg-brand-50/50' : ''}`}
                         onClick={() => handleOpenApp(app)}
                       >
                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
@@ -1179,7 +1244,7 @@ function App() {
                               setEditingApp(app)
                               setShowEditApp(true)
                             }}
-                            className="text-[#94A3B8] hover:text-[#0891B2] p-0.5 transition-colors"
+                            className="text-slate-400 hover:text-brand-500 p-0.5 transition-colors"
                             title="编辑"
                           >
                             ✎
@@ -1189,7 +1254,7 @@ function App() {
                               e.stopPropagation()
                               handleDeleteApp(app.id)
                             }}
-                            className="text-[#94A3B8] hover:text-red-500 p-0.5 transition-colors"
+                            className="text-slate-400 hover:text-red-500 p-0.5 transition-colors"
                             title="删除"
                           >
                             ×
@@ -1200,7 +1265,7 @@ function App() {
                                 e.stopPropagation()
                                 handleCopyFile(app)
                               }}
-                              className="text-[#94A3B8] hover:text-[#22C55E] p-0.5 transition-colors"
+                              className="text-slate-400 hover:text-emerald-500 p-0.5 transition-colors"
                               title="发送文件（复制到剪贴板）"
                             >
                               📤
@@ -1212,7 +1277,7 @@ function App() {
                                 e.stopPropagation()
                                 handleCopyImage(app)
                               }}
-                              className="text-[#94A3B8] hover:text-[#22C55E] p-0.5 transition-colors"
+                              className="text-slate-400 hover:text-emerald-500 p-0.5 transition-colors"
                               title="复制图片（可粘贴到微信等应用）"
                             >
                               📤
@@ -1221,7 +1286,7 @@ function App() {
                         </div>
                         {ui?.showIcon !== false && (
                           <div style={{ borderRadius: Math.min(br, 12) }} className={`${iconSize} flex items-center justify-center mb-3 mx-auto ${
-                            app.type === 'folder' ? 'bg-gradient-to-br from-orange-50 to-orange-100' : app.type === 'steam' ? 'bg-gradient-to-br from-purple-50 to-purple-100' : 'bg-gradient-to-br from-cyan-50 to-cyan-100'
+                            app.type === 'folder' ? 'bg-gradient-to-br from-orange-50 to-orange-100' : app.type === 'steam' ? 'bg-gradient-to-br from-aurora-50 to-aurora-100' : 'bg-gradient-to-br from-brand-50 to-brand-100'
                           }`}>
                             {app.icon ? (
                               <img src={app.icon} alt={app.name} className={iconInner} draggable={false} />
@@ -1231,7 +1296,7 @@ function App() {
                           </div>
                         )}
                         {ui?.showName !== false && (
-                          <p className={`${textSize} text-center text-[#334155] font-medium truncate`}>{app.name}</p>
+                          <p className={`${textSize} text-center text-slate-700 font-medium truncate`}>{app.name}</p>
                         )}
                       </div>
                       )
@@ -1245,29 +1310,29 @@ function App() {
 
         {filteredApps.length === 0 && (
           <div className="text-center py-16">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-cyan-50 to-cyan-100 flex items-center justify-center">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0891B2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 flex items-center justify-center">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#6366F1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="7" height="7" rx="1.5"/>
                 <rect x="14" y="3" width="7" height="7" rx="1.5"/>
                 <rect x="3" y="14" width="7" height="7" rx="1.5"/>
                 <rect x="14" y="14" width="7" height="7" rx="1.5"/>
               </svg>
             </div>
-            <p className="text-[#94A3B8] text-sm">暂无应用</p>
-            <p className="text-[#CBD5E1] text-xs mt-1">点击「添加应用」或「添加文件夹」开始使用</p>
+            <p className="text-slate-400 text-sm">暂无应用</p>
+            <p className="text-slate-300 text-xs mt-1">点击「添加应用」或「添加文件夹」开始使用</p>
           </div>
         )}
       </main>
 
-      <footer className="glass px-6 py-2 text-xs text-[#94A3B8] flex justify-between border-t border-cyan-100/30">
+      <footer className="glass px-6 py-2 text-xs text-slate-400 flex justify-between border-t border-brand-100/30">
         <span>Esc 关闭窗口</span>
         <span className="flex items-center gap-3">
           <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-white/60 text-[#64748B] font-mono text-[10px] border border-cyan-100/40">{config?.hotkey || 'Alt+Space'}</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-white/60 text-slate-500 font-mono text-[10px] border border-brand-100/40">{config?.hotkey || 'Alt+Space'}</kbd>
             显示/隐藏
           </span>
           <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-white/60 text-[#64748B] font-mono text-[10px] border border-cyan-100/40">{config?.searchHotkey || 'Ctrl+K'}</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-white/60 text-slate-500 font-mono text-[10px] border border-brand-100/40">{config?.searchHotkey || 'Ctrl+K'}</kbd>
             搜索
           </span>
         </span>
@@ -1278,6 +1343,7 @@ function App() {
           config={config}
           onClose={() => setShowSettings(false)}
           onSave={handleUpdateConfig}
+          updateInfo={updateInfo}
         />
       )}
 
@@ -1325,10 +1391,11 @@ function App() {
   )
 }
 
-const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSave }: {
+const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSave, updateInfo }: {
   config: Config
   onClose: () => void
   onSave: (config: Config) => void
+  updateInfo?: UpdateInfo | null
 }) {
   const [hotkey, setHotkey] = useState(config.hotkey)
   const [searchHotkey, setSearchHotkey] = useState(config.searchHotkey || 'Ctrl+K')
@@ -1384,27 +1451,27 @@ const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSav
   const cardSizeLabels: Record<string, string> = { small: '小', medium: '中', large: '大' }
 
   return (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    <div
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="bg-white rounded-lg p-6 w-[480px] max-h-[85vh] overflow-auto">
-        <h2 className="text-lg font-semibold mb-5">设置</h2>
+      <div className="glass rounded-2xl p-6 w-[480px] max-h-[85vh] overflow-auto shadow-xl shadow-brand-500/5">
+        <h2 className="text-lg font-display font-bold text-slate-800 mb-5">设置</h2>
 
         <div className="mb-5">
-          <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
             <span>🚀</span> 常规
           </h3>
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
             <div>
-              <div className="text-sm font-medium text-gray-700">开机自启动</div>
-              <div className="text-xs text-gray-500">系统启动时自动运行</div>
+              <div className="text-sm font-medium text-slate-700">开机自启动</div>
+              <div className="text-xs text-slate-500">系统启动时自动运行</div>
             </div>
             <button
               onClick={() => setAutoStart(!autoStart)}
-              className={`relative w-11 h-6 rounded-full transition-colors ${autoStart ? 'bg-blue-500' : 'bg-gray-300'}`}
+              className={`relative w-11 h-6 rounded-full transition-colors ${autoStart ? 'bg-brand-500' : 'bg-slate-300'}`}
             >
               <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${autoStart ? 'translate-x-5' : 'translate-x-0.5'}`} />
             </button>
@@ -1412,37 +1479,37 @@ const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSav
         </div>
 
         <div className="mb-5">
-          <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
             <span>⌨️</span> 快捷键
           </h3>
           <div className="space-y-2">
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
               <div>
-                <div className="text-sm font-medium text-gray-700">显示/隐藏主窗口</div>
-                <div className="text-xs text-gray-500">全局快捷键</div>
+                <div className="text-sm font-medium text-slate-700">显示/隐藏主窗口</div>
+                <div className="text-xs text-slate-500">全局快捷键</div>
               </div>
               <button
                 onClick={() => setRecording(recording === 'main' ? null : 'main')}
-                className={`px-3 py-1.5 rounded text-sm font-mono min-w-[120px] text-center transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-sm font-mono min-w-[120px] text-center transition-colors ${
                   recording === 'main'
-                    ? 'bg-blue-500 text-white animate-pulse'
-                    : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-400'
+                    ? 'bg-brand-500 text-white animate-pulse'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-400'
                 }`}
               >
                 {recording === 'main' ? '请按下快捷键...' : hotkey}
               </button>
             </div>
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
               <div>
-                <div className="text-sm font-medium text-gray-700">快速搜索框</div>
-                <div className="text-xs text-gray-500">仅弹出搜索框</div>
+                <div className="text-sm font-medium text-slate-700">快速搜索框</div>
+                <div className="text-xs text-slate-500">仅弹出搜索框</div>
               </div>
               <button
                 onClick={() => setRecording(recording === 'search' ? null : 'search')}
-                className={`px-3 py-1.5 rounded text-sm font-mono min-w-[120px] text-center transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-sm font-mono min-w-[120px] text-center transition-colors ${
                   recording === 'search'
-                    ? 'bg-blue-500 text-white animate-pulse'
-                    : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-400'
+                    ? 'bg-brand-500 text-white animate-pulse'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-400'
                 }`}
               >
                 {recording === 'search' ? '请按下快捷键...' : searchHotkey}
@@ -1452,15 +1519,15 @@ const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSav
         </div>
 
         <div className="mb-5">
-          <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
             <span>🔍</span> 搜索引擎
           </h3>
           <div className="mb-3">
-            <label className="text-xs text-gray-500 mb-1 block">默认搜索引擎</label>
+            <label className="text-xs text-slate-500 mb-1 block">默认搜索引擎</label>
             <select
               value={defaultEngine}
               onChange={(e) => setDefaultEngine(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-400"
             >
               {Object.entries(engines).map(([key, engine]) => (
                 <option key={key} value={key}>{engine.name} ({key} + 空格)</option>
@@ -1469,50 +1536,50 @@ const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSav
           </div>
           <div className="grid grid-cols-3 gap-2">
             {Object.entries(engines).map(([key, engine]) => (
-              <div key={key} className="flex items-center gap-1.5 p-2 bg-gray-50 rounded text-xs">
-                <span className="font-mono bg-gray-200 px-1.5 py-0.5 rounded">{key}</span>
-                <span className="text-gray-600 truncate">{engine.name}</span>
+              <div key={key} className="flex items-center gap-1.5 p-2 bg-brand-50/50 rounded-lg text-xs">
+                <span className="font-mono bg-brand-100 px-1.5 py-0.5 rounded">{key}</span>
+                <span className="text-slate-600 truncate">{engine.name}</span>
               </div>
             ))}
           </div>
-          <p className="text-xs text-gray-400 mt-2">输入 关键词 + 空格 调用搜索引擎</p>
+          <p className="text-xs text-slate-400 mt-2">输入 关键词 + 空格 调用搜索引擎</p>
         </div>
 
         <div className="mb-5">
-          <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
             <span>🎨</span> 界面
           </h3>
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <span className="text-sm text-gray-700">每行显示数量</span>
+            <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
+              <span className="text-sm text-slate-700">每行显示数量</span>
               <div className="flex gap-1">
                 {[4, 5, 6, 7, 8].map(n => (
                   <button
                     key={n}
                     onClick={() => setUi({ ...ui, gridColumns: n })}
-                    className={`w-8 h-8 rounded text-sm ${ui.gridColumns === n ? 'bg-blue-500 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:border-blue-400'}`}
+                    className={`w-8 h-8 rounded-lg text-sm ${ui.gridColumns === n ? 'bg-brand-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-brand-400'}`}
                   >
                     {n}
                   </button>
                 ))}
               </div>
             </div>
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <span className="text-sm text-gray-700">卡片大小</span>
+            <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
+              <span className="text-sm text-slate-700">卡片大小</span>
               <div className="flex gap-1">
                 {(['small', 'medium', 'large'] as const).map(s => (
                   <button
                     key={s}
                     onClick={() => setUi({ ...ui, cardSize: s })}
-                    className={`px-3 py-1 rounded text-sm ${ui.cardSize === s ? 'bg-blue-500 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:border-blue-400'}`}
+                    className={`px-3 py-1 rounded-lg text-sm ${ui.cardSize === s ? 'bg-brand-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-brand-400'}`}
                   >
                     {cardSizeLabels[s]}
                   </button>
                 ))}
               </div>
             </div>
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <span className="text-sm text-gray-700">圆角大小</span>
+            <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
+              <span className="text-sm text-slate-700">圆角大小</span>
               <div className="flex items-center gap-2">
                 <input
                   type="range"
@@ -1522,23 +1589,23 @@ const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSav
                   onChange={(e) => setUi({ ...ui, borderRadius: Number(e.target.value) })}
                   className="w-32"
                 />
-                <span className="text-sm text-gray-500 w-8">{ui.borderRadius}px</span>
+                <span className="text-sm text-slate-500 w-8">{ui.borderRadius}px</span>
               </div>
             </div>
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <span className="text-sm text-gray-700">显示图标</span>
+            <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
+              <span className="text-sm text-slate-700">显示图标</span>
               <button
                 onClick={() => setUi({ ...ui, showIcon: !ui.showIcon })}
-                className={`relative w-11 h-6 rounded-full transition-colors ${ui.showIcon ? 'bg-blue-500' : 'bg-gray-300'}`}
+                className={`relative w-11 h-6 rounded-full transition-colors ${ui.showIcon ? 'bg-brand-500' : 'bg-slate-300'}`}
               >
                 <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${ui.showIcon ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
             </div>
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <span className="text-sm text-gray-700">显示名称</span>
+            <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
+              <span className="text-sm text-slate-700">显示名称</span>
               <button
                 onClick={() => setUi({ ...ui, showName: !ui.showName })}
-                className={`relative w-11 h-6 rounded-full transition-colors ${ui.showName ? 'bg-blue-500' : 'bg-gray-300'}`}
+                className={`relative w-11 h-6 rounded-full transition-colors ${ui.showName ? 'bg-brand-500' : 'bg-slate-300'}`}
               >
                 <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${ui.showName ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
@@ -1546,11 +1613,29 @@ const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSav
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-2 border-t">
-          <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
+        <div className="mb-5">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+            <span>ℹ️</span> 关于
+          </h3>
+          <div className="p-3 bg-brand-50/50 rounded-xl">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-700">当前版本</span>
+              <span className="text-sm font-mono text-slate-500">v1.9.5</span>
+            </div>
+            {updateInfo?.available && (
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-brand-100/50">
+                <span className="text-sm text-brand-600 font-medium">新版本可用</span>
+                <span className="text-sm font-mono text-brand-600">v{updateInfo.version}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-brand-100/50">
+          <button onClick={onClose} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors">
             取消
           </button>
-          <button onClick={handleSave} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+          <button onClick={handleSave} className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors shadow-sm shadow-brand-500/20">
             保存
           </button>
         </div>
@@ -1648,48 +1733,48 @@ const AddAppModal = React.memo(function AddAppModal({ categories, onClose, onAdd
   }
 
   return (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    <div
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="bg-white rounded-lg p-6 w-96">
-        <h2 className="text-lg font-semibold mb-4">添加应用</h2>
+      <div className="glass rounded-2xl p-6 w-96 shadow-xl shadow-brand-500/5">
+        <h2 className="text-lg font-display font-bold text-slate-800 mb-4">添加应用</h2>
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               类型
             </label>
             <div className="flex gap-4 flex-wrap">
-              <label className="flex items-center">
+              <label className="flex items-center text-sm text-slate-600">
                 <input
                   type="radio"
                   value="app"
                   checked={type === 'app'}
                   onChange={(e) => setType(e.target.value as 'app' | 'folder' | 'steam')}
-                  className="mr-2"
+                  className="mr-2 accent-brand-500"
                 />
                 应用程序
               </label>
-              <label className="flex items-center">
+              <label className="flex items-center text-sm text-slate-600">
                 <input
                   type="radio"
                   value="folder"
                   checked={type === 'folder'}
                   onChange={(e) => setType(e.target.value as 'app' | 'folder' | 'steam')}
-                  className="mr-2"
+                  className="mr-2 accent-brand-500"
                 />
                 文件夹
               </label>
-              <label className="flex items-center">
+              <label className="flex items-center text-sm text-slate-600">
                 <input
                   type="radio"
                   value="steam"
                   checked={type === 'steam'}
                   onChange={(e) => setType(e.target.value as 'app' | 'folder' | 'steam')}
-                  className="mr-2"
+                  className="mr-2 accent-brand-500"
                 />
                 Steam 链接
               </label>
@@ -1697,41 +1782,41 @@ const AddAppModal = React.memo(function AddAppModal({ categories, onClose, onAdd
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               名称
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-400 text-sm"
               placeholder={placeholders[type].name}
               required
             />
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               {type === 'steam' ? 'Steam 链接' : '路径'}
             </label>
             <input
               type="text"
               value={path}
               onChange={(e) => handlePathChange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-400 text-sm"
               placeholder={placeholders[type].path}
               required
             />
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               分类
             </label>
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-400 text-sm"
             >
               <option value="">无分类</option>
               {categories.map(cat => (
@@ -1746,13 +1831,13 @@ const AddAppModal = React.memo(function AddAppModal({ categories, onClose, onAdd
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+              className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
             >
               取消
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors shadow-sm shadow-brand-500/20"
             >
               添加
             </button>
@@ -1811,48 +1896,48 @@ const EditAppModal = React.memo(function EditAppModal({ app, categories, onClose
   }
 
   return (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    <div
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="bg-white rounded-lg p-6 w-96">
-        <h2 className="text-lg font-semibold mb-4">编辑应用</h2>
+      <div className="glass rounded-2xl p-6 w-96 shadow-xl shadow-brand-500/5">
+        <h2 className="text-lg font-display font-bold text-slate-800 mb-4">编辑应用</h2>
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               类型
             </label>
             <div className="flex gap-4 flex-wrap">
-              <label className="flex items-center">
+              <label className="flex items-center text-sm text-slate-600">
                 <input
                   type="radio"
                   value="app"
                   checked={type === 'app'}
                   onChange={(e) => setType(e.target.value as 'app' | 'folder' | 'steam')}
-                  className="mr-2"
+                  className="mr-2 accent-brand-500"
                 />
                 应用程序
               </label>
-              <label className="flex items-center">
+              <label className="flex items-center text-sm text-slate-600">
                 <input
                   type="radio"
                   value="folder"
                   checked={type === 'folder'}
                   onChange={(e) => setType(e.target.value as 'app' | 'folder' | 'steam')}
-                  className="mr-2"
+                  className="mr-2 accent-brand-500"
                 />
                 文件夹
               </label>
-              <label className="flex items-center">
+              <label className="flex items-center text-sm text-slate-600">
                 <input
                   type="radio"
                   value="steam"
                   checked={type === 'steam'}
                   onChange={(e) => setType(e.target.value as 'app' | 'folder' | 'steam')}
-                  className="mr-2"
+                  className="mr-2 accent-brand-500"
                 />
                 Steam 链接
               </label>
@@ -1860,41 +1945,41 @@ const EditAppModal = React.memo(function EditAppModal({ app, categories, onClose
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               名称
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-400 text-sm"
               placeholder={placeholders[type].name}
               required
             />
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               {type === 'steam' ? 'Steam 链接' : '路径'}
             </label>
             <input
               type="text"
               value={path}
               onChange={(e) => setPath(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-400 text-sm"
               placeholder={placeholders[type].path}
               required
             />
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               分类
             </label>
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-400 text-sm"
             >
               <option value="">无分类</option>
               {categories.map(cat => (
@@ -1909,13 +1994,13 @@ const EditAppModal = React.memo(function EditAppModal({ app, categories, onClose
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+              className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
             >
               取消
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+              className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors shadow-sm shadow-emerald-500/20"
             >
               保存
             </button>
@@ -1977,29 +2062,29 @@ const CategoryManagerModal = React.memo(function CategoryManagerModal({ categori
   }
 
   return (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    <div
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="bg-white rounded-lg p-6 w-[480px] max-h-[80vh] overflow-auto">
-        <h2 className="text-lg font-semibold mb-4">管理分类</h2>
-        
-        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">添加新分类</h3>
+      <div className="glass rounded-2xl p-6 w-[480px] max-h-[80vh] overflow-auto shadow-xl shadow-brand-500/5">
+        <h2 className="text-lg font-display font-bold text-slate-800 mb-4">管理分类</h2>
+
+        <div className="mb-4 p-3 bg-brand-50/50 rounded-xl">
+          <h3 className="text-sm font-medium text-slate-700 mb-2">添加新分类</h3>
           <div className="flex gap-2">
             <div className="relative">
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setShowEmojiPicker(showEmojiPicker === 'new' ? null : 'new')}
-                className="w-10 h-10 border border-gray-300 rounded flex items-center justify-center text-xl hover:bg-gray-100"
+                className="w-10 h-10 border border-slate-200 rounded-lg flex items-center justify-center text-xl hover:bg-brand-50"
               >
                 {newIcon}
               </button>
               {showEmojiPicker === 'new' && (
-                <div className="absolute top-12 left-0 z-20 bg-white border rounded-lg shadow-lg p-2 grid grid-cols-8 gap-1 w-64"
+                <div className="absolute top-12 left-0 z-20 bg-white border border-slate-200 rounded-xl shadow-xl p-2 grid grid-cols-8 gap-1 w-64"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {EMOJI_LIST.map(emoji => (
@@ -2008,7 +2093,7 @@ const CategoryManagerModal = React.memo(function CategoryManagerModal({ categori
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => handleEmojiSelect(emoji, 'new')}
-                      className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded text-lg"
+                      className="w-8 h-8 flex items-center justify-center hover:bg-brand-50 rounded-lg text-lg"
                     >
                       {emoji}
                     </button>
@@ -2021,13 +2106,13 @@ const CategoryManagerModal = React.memo(function CategoryManagerModal({ categori
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-400 text-sm"
               placeholder="分类名称"
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
             />
             <button
               onClick={handleAdd}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors shadow-sm shadow-brand-500/20"
             >
               添加
             </button>
@@ -2036,7 +2121,7 @@ const CategoryManagerModal = React.memo(function CategoryManagerModal({ categori
 
         <div className="space-y-2">
           {categories.map(cat => (
-            <div key={cat.id} className="flex items-center gap-2 p-2 bg-white border rounded-lg">
+            <div key={cat.id} className="flex items-center gap-2 p-2 bg-white/60 border border-brand-100/40 rounded-xl">
               {editingId === cat.id ? (
                 <>
                   <div className="relative">
@@ -2044,12 +2129,12 @@ const CategoryManagerModal = React.memo(function CategoryManagerModal({ categori
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => setShowEmojiPicker(showEmojiPicker === cat.id ? null : cat.id)}
-                      className="w-10 h-10 border border-gray-300 rounded flex items-center justify-center text-xl hover:bg-gray-100"
+                      className="w-10 h-10 border border-slate-200 rounded-lg flex items-center justify-center text-xl hover:bg-brand-50"
                     >
                       {editIcon}
                     </button>
                     {showEmojiPicker === cat.id && (
-                      <div className="absolute top-12 left-0 z-20 bg-white border rounded-lg shadow-lg p-2 grid grid-cols-8 gap-1 w-64"
+                      <div className="absolute top-12 left-0 z-20 bg-white border border-slate-200 rounded-xl shadow-xl p-2 grid grid-cols-8 gap-1 w-64"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {EMOJI_LIST.map(emoji => (
@@ -2058,7 +2143,7 @@ const CategoryManagerModal = React.memo(function CategoryManagerModal({ categori
                             type="button"
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={() => handleEmojiSelect(emoji, cat.id)}
-                            className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded text-lg"
+                            className="w-8 h-8 flex items-center justify-center hover:bg-brand-50 rounded-lg text-lg"
                           >
                             {emoji}
                           </button>
@@ -2070,19 +2155,19 @@ const CategoryManagerModal = React.memo(function CategoryManagerModal({ categori
                     type="text"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                    className="flex-1 px-2 py-1 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500/30 focus:border-brand-400 text-sm"
                     onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
                     autoFocus
                   />
                   <button
                     onClick={handleSaveEdit}
-                    className="px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
+                    className="px-2 py-1 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-sm transition-colors"
                   >
                     保存
                   </button>
                   <button
                     onClick={handleCancelEdit}
-                    className="px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm"
+                    className="px-2 py-1 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm transition-colors"
                   >
                     取消
                   </button>
@@ -2090,11 +2175,11 @@ const CategoryManagerModal = React.memo(function CategoryManagerModal({ categori
               ) : (
                 <>
                   <span className="text-xl w-10 h-10 flex items-center justify-center">{cat.icon}</span>
-                  <span className="flex-1 text-sm font-medium">{cat.name}</span>
-                  <span className="text-xs text-gray-400">ID: {cat.id.slice(0, 8)}...</span>
+                  <span className="flex-1 text-sm font-medium text-slate-700">{cat.name}</span>
+                  <span className="text-xs text-slate-400">ID: {cat.id.slice(0, 8)}...</span>
                   <button
                     onClick={() => handleStartEdit(cat)}
-                    className="px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm"
+                    className="px-2 py-1 bg-brand-50 text-brand-600 rounded-lg hover:bg-brand-100 text-sm transition-colors"
                   >
                     编辑
                   </button>
@@ -2103,7 +2188,7 @@ const CategoryManagerModal = React.memo(function CategoryManagerModal({ categori
                       const confirmed = await window.electronAPI.confirm(`确定要删除分类"${cat.name}"吗？该分类下的应用将被移到"其他"分类。`)
                       if (confirmed) onDelete(cat.id)
                     }}
-                    className="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 text-sm"
+                    className="px-2 py-1 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 text-sm transition-colors"
                   >
                     删除
                   </button>
@@ -2114,7 +2199,7 @@ const CategoryManagerModal = React.memo(function CategoryManagerModal({ categori
         </div>
 
         {categories.length === 0 && (
-          <div className="text-center text-gray-500 py-8">
+          <div className="text-center text-slate-400 py-8">
             暂无分类，请添加新分类
           </div>
         )}
@@ -2122,7 +2207,7 @@ const CategoryManagerModal = React.memo(function CategoryManagerModal({ categori
         <div className="flex justify-end mt-4">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+            className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
           >
             关闭
           </button>
@@ -2179,29 +2264,29 @@ const SubcategoryManagerModal = React.memo(function SubcategoryManagerModal({ ca
   }
 
   return (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    <div
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="bg-white rounded-lg p-6 w-[520px] max-h-[80vh] overflow-auto">
-        <h2 className="text-lg font-semibold mb-4">管理子分类</h2>
-        
-        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">添加子分类</h3>
+      <div className="glass rounded-2xl p-6 w-[520px] max-h-[80vh] overflow-auto shadow-xl shadow-brand-500/5">
+        <h2 className="text-lg font-display font-bold text-slate-800 mb-4">管理子分类</h2>
+
+        <div className="mb-4 p-3 bg-brand-50/50 rounded-xl">
+          <h3 className="text-sm font-medium text-slate-700 mb-2">添加子分类</h3>
           <div className="flex gap-2">
             <div className="relative">
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setShowEmojiPicker(showEmojiPicker === 'new' ? null : 'new')}
-                className="w-10 h-10 border border-gray-300 rounded flex items-center justify-center text-xl hover:bg-gray-100"
+                className="w-10 h-10 border border-slate-200 rounded-lg flex items-center justify-center text-xl hover:bg-brand-50"
               >
                 {newIcon}
               </button>
               {showEmojiPicker === 'new' && (
-                <div className="absolute top-12 left-0 z-20 bg-white border rounded-lg shadow-lg p-2 grid grid-cols-8 gap-1 w-64"
+                <div className="absolute top-12 left-0 z-20 bg-white border border-slate-200 rounded-xl shadow-xl p-2 grid grid-cols-8 gap-1 w-64"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {EMOJI_LIST.map(emoji => (
@@ -2210,7 +2295,7 @@ const SubcategoryManagerModal = React.memo(function SubcategoryManagerModal({ ca
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => handleEmojiSelect(emoji, 'new')}
-                      className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded text-lg"
+                      className="w-8 h-8 flex items-center justify-center hover:bg-brand-50 rounded-lg text-lg"
                     >
                       {emoji}
                     </button>
@@ -2223,21 +2308,21 @@ const SubcategoryManagerModal = React.memo(function SubcategoryManagerModal({ ca
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-400 text-sm"
               placeholder="子分类名称"
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
             />
             <select
               value={newParentId || ''}
               onChange={(e) => setNewParentId(e.target.value || null)}
-              className="px-2 py-2 border border-gray-300 rounded text-sm"
+              className="px-2 py-2 border border-slate-200 rounded-lg text-sm"
             >
               <option value="">全局</option>
               {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
             </select>
             <button
               onClick={handleAdd}
-              className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
+              className="px-4 py-2 bg-aurora-500 text-white rounded-lg hover:bg-aurora-600 transition-colors shadow-sm shadow-aurora-500/20"
             >
               添加
             </button>
@@ -2246,7 +2331,7 @@ const SubcategoryManagerModal = React.memo(function SubcategoryManagerModal({ ca
 
         <div className="space-y-2">
           {subcategories.map(sub => (
-            <div key={sub.id} className="flex items-center gap-2 p-2 bg-white border rounded-lg">
+            <div key={sub.id} className="flex items-center gap-2 p-2 bg-white/60 border border-brand-100/40 rounded-xl">
               {editingId === sub.id ? (
                 <>
                   <div className="relative">
@@ -2254,12 +2339,12 @@ const SubcategoryManagerModal = React.memo(function SubcategoryManagerModal({ ca
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => setShowEmojiPicker(showEmojiPicker === sub.id ? null : sub.id)}
-                      className="w-10 h-10 border border-gray-300 rounded flex items-center justify-center text-xl hover:bg-gray-100"
+                      className="w-10 h-10 border border-slate-200 rounded-lg flex items-center justify-center text-xl hover:bg-brand-50"
                     >
                       {editIcon}
                     </button>
                     {showEmojiPicker === sub.id && (
-                      <div className="absolute top-12 left-0 z-20 bg-white border rounded-lg shadow-lg p-2 grid grid-cols-8 gap-1 w-64"
+                      <div className="absolute top-12 left-0 z-20 bg-white border border-slate-200 rounded-xl shadow-xl p-2 grid grid-cols-8 gap-1 w-64"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {EMOJI_LIST.map(emoji => (
@@ -2268,7 +2353,7 @@ const SubcategoryManagerModal = React.memo(function SubcategoryManagerModal({ ca
                             type="button"
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={() => handleEmojiSelect(emoji, sub.id)}
-                            className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded text-lg"
+                            className="w-8 h-8 flex items-center justify-center hover:bg-brand-50 rounded-lg text-lg"
                           >
                             {emoji}
                           </button>
@@ -2280,38 +2365,38 @@ const SubcategoryManagerModal = React.memo(function SubcategoryManagerModal({ ca
                     type="text"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                    className="flex-1 px-2 py-1 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500/30 focus:border-brand-400 text-sm"
                     onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
                     autoFocus
                   />
-                  <button onClick={handleSaveEdit} className="px-2 py-1 bg-green-500 text-white rounded text-sm">保存</button>
-                  <button onClick={() => setEditingId(null)} className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-sm">取消</button>
+                  <button onClick={handleSaveEdit} className="px-2 py-1 bg-emerald-500 text-white rounded-lg text-sm transition-colors">保存</button>
+                  <button onClick={() => setEditingId(null)} className="px-2 py-1 bg-slate-100 text-slate-700 rounded-lg text-sm transition-colors">取消</button>
                 </>
               ) : (
                 <>
                   <span className="text-xl w-10 h-10 flex items-center justify-center">{sub.icon}</span>
                   <div className="flex-1 min-w-0">
-                    <span className="text-sm font-medium block truncate">{sub.name}</span>
-                    <span className="text-xs text-gray-400">{getParentName(sub.parentId)}</span>
+                    <span className="text-sm font-medium text-slate-700 block truncate">{sub.name}</span>
+                    <span className="text-xs text-slate-400">{getParentName(sub.parentId)}</span>
                   </div>
                   <select
                     value={sub.parentId || ''}
                     onChange={(e) => onMove(sub.id, e.target.value || null)}
-                    className="px-2 py-1 border border-gray-300 rounded text-xs max-w-[120px]"
+                    className="px-2 py-1 border border-slate-200 rounded-lg text-xs max-w-[120px]"
                   >
                     <option value="">全局</option>
                     {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
                   </select>
                   <button
                     onClick={() => { setEditingId(sub.id); setEditName(sub.name); setEditIcon(sub.icon) }}
-                    className="px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm"
+                    className="px-2 py-1 bg-brand-50 text-brand-600 rounded-lg hover:bg-brand-100 text-sm transition-colors"
                   >编辑</button>
                   <button
                     onClick={async () => {
                       const confirmed = await window.electronAPI.confirm(`确定要删除子分类"${sub.name}"吗？`)
                       if (confirmed) onDelete(sub.id)
                     }}
-                    className="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 text-sm"
+                    className="px-2 py-1 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 text-sm transition-colors"
                   >删除</button>
                 </>
               )}
@@ -2320,11 +2405,11 @@ const SubcategoryManagerModal = React.memo(function SubcategoryManagerModal({ ca
         </div>
 
         {subcategories.length === 0 && (
-          <div className="text-center text-gray-400 py-6 text-sm">暂无子分类</div>
+          <div className="text-center text-slate-400 py-6 text-sm">暂无子分类</div>
         )}
 
         <div className="flex justify-end mt-4">
-          <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">关闭</button>
+          <button onClick={onClose} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors">关闭</button>
         </div>
       </div>
     </div>

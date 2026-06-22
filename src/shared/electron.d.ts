@@ -1,5 +1,18 @@
 import type { AppItem, Category, Subcategory, Config } from './types'
 
+export interface UpdateInfo {
+  available: boolean
+  version?: string
+  downloadUrl?: string
+  releaseNotes?: string
+}
+
+export interface UpdateProgress {
+  percent: number
+  transferred: number
+  total: number
+}
+
 declare global {
   interface Window {
     electronAPI: {
@@ -28,6 +41,10 @@ declare global {
       resizeSearchWindow: (height: number) => Promise<void>
       onBlur: (callback: () => void) => () => void
       onResetSearch: (callback: () => void) => () => void
+      checkForUpdate: () => Promise<UpdateInfo>
+      downloadUpdate: () => Promise<{ success: boolean; filePath?: string; error?: string }>
+      installUpdate: (filePath: string) => Promise<boolean>
+      onUpdateProgress: (callback: (data: UpdateProgress) => void) => () => void
     }
   }
 }

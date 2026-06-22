@@ -33,5 +33,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = () => callback()
     ipcRenderer.on('reset-search', handler)
     return () => ipcRenderer.removeListener('reset-search', handler)
+  },
+  checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
+  installUpdate: (filePath: string) => ipcRenderer.invoke('install-update', filePath),
+  onUpdateProgress: (callback: (data: { percent: number; transferred: number; total: number }) => void) => {
+    const handler = (_event: any, data: any) => callback(data)
+    ipcRenderer.on('update-progress', handler)
+    return () => ipcRenderer.removeListener('update-progress', handler)
   }
 })
