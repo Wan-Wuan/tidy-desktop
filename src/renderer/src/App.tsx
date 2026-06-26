@@ -947,6 +947,7 @@ function App() {
             <button
               disabled={updateDownloading}
               onClick={async () => {
+                if (updateDownloading) return
                 if (updateFilePath) {
                   // Already downloaded — install
                   const ok = await window.electronAPI.installUpdate(updateFilePath)
