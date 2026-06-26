@@ -106,7 +106,7 @@ function App() {
     window.electronAPI.getVersion().then(setCurrentVersion).catch(() => { /* ignore */ })
     // Check for updates on startup
     window.electronAPI.checkForUpdate().then(info => {
-      if (info.available) setUpdateInfo(info)
+      setUpdateInfo(info)
     }).catch(() => { /* ignore */ })
   }, [])
 

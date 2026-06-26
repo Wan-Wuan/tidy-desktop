@@ -3,7 +3,7 @@ import https from 'https'
 import http from 'http'
 import fs from 'fs'
 import path from 'path'
-import { execFile } from 'child_process'
+import { spawn } from 'child_process'
 
 const GITHUB_API = 'https://api.github.com/repos/Wan-Wuan/tidy-desktop/releases/latest'
 const UPDATE_FILE = path.join(app.getPath('temp'), 'tidy-desktop-update.exe')
@@ -229,12 +229,17 @@ export function registerUpdateHandlers() {
     }
 
     try {
-      const child = execFile(installerPath, ['/S'], { detached: true, stdio: 'ignore' } as any)
-      child.on('error', () => { /* spawn failed — nothing we can do after exit */ })
+      // Use spawn with shell + detached for full process separation on Windows
+      const child = spawn(installerPath, ['/S'], {
+        detached: true,
+        stdio: 'ignore',
+        shell: true
+      })
+      child.on('error', () => { /* spawn failed */ })
       child.unref()
 
-      // Release file locks so the installer can overwrite old files
-      setTimeout(() => app.exit(0), 1500)
+      // Graceful quit — allows before-quit handlers to run, then exits
+      setTimeout(() => app.quit(), 2000)
       return true
     } catch {
       return false
