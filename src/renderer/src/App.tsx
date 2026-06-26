@@ -942,24 +942,36 @@ function App() {
           </button>
           {updateInfo?.available && (
             <button
+              disabled={updateDownloading}
               onClick={async () => {
                 if (updateFilePath) {
                   // Already downloaded — install
-                  await window.electronAPI.installUpdate(updateFilePath)
+                  const ok = await window.electronAPI.installUpdate(updateFilePath)
+                  if (!ok) {
+                    setUpdateFilePath(null)
+                    setUpdateDownloading(false)
+                  }
                   return
                 }
                 setUpdateDownloading(true)
                 setUpdateProgress(null)
-                const result = await window.electronAPI.downloadUpdate(updateInfo?.downloadUrl)
-                if (result.success && result.filePath) {
-                  setUpdateFilePath(result.filePath)
-                  await window.electronAPI.installUpdate(result.filePath)
-                } else {
+                try {
+                  const result = await window.electronAPI.downloadUpdate(updateInfo?.downloadUrl)
+                  if (result.success && result.filePath) {
+                    setUpdateFilePath(result.filePath)
+                    const ok = await window.electronAPI.installUpdate(result.filePath)
+                    if (!ok) {
+                      setUpdateFilePath(null)
+                    }
+                  }
+                } catch {
+                  // download promise rejected unexpectedly
+                } finally {
                   setUpdateDownloading(false)
                   setUpdateProgress(null)
                 }
               }}
-              className="px-3.5 py-1.5 bg-brand-500 text-white rounded-lg hover:bg-brand-600 text-sm font-medium transition-colors duration-200 shadow-sm shadow-brand-500/20 hover:shadow-md hover:shadow-brand-500/30"
+              className="px-3.5 py-1.5 bg-brand-500 text-white rounded-lg hover:bg-brand-600 text-sm font-medium transition-colors duration-200 shadow-sm shadow-brand-500/20 hover:shadow-md hover:shadow-brand-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="flex items-center gap-1.5">
                 {updateDownloading && !updateFilePath ? (
@@ -1402,6 +1414,7 @@ const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSav
   const [hotkey, setHotkey] = useState(config.hotkey)
   const [searchHotkey, setSearchHotkey] = useState(config.searchHotkey || 'Ctrl+K')
   const [autoStart, setAutoStart] = useState(false)
+  const [currentVersion, setCurrentVersion] = useState('')
   const [defaultEngine, setDefaultEngine] = useState(config.defaultEngine || 'b')
   const [ui, setUi] = useState<UISettings>(config.ui || {
     gridColumns: 6, cardSize: 'medium', showIcon: true, showName: true, borderRadius: 8
@@ -1411,6 +1424,7 @@ const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSav
 
   useEffect(() => {
     window.electronAPI.getAutoStart().then(setAutoStart)
+    window.electronAPI.getVersion().then(setCurrentVersion)
   }, [])
 
   useEffect(() => {
@@ -1622,7 +1636,7 @@ const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSav
           <div className="p-3 bg-brand-50/50 rounded-xl">
             <div className="flex items-center justify-between">
               <span className="text-sm text-slate-700">当前版本</span>
-              <span className="text-sm font-mono text-slate-500">v1.9.5</span>
+              <span className="text-sm font-mono text-slate-500">{currentVersion ? `v${currentVersion}` : '...'}</span>
             </div>
             {updateInfo?.available && (
               <div className="flex items-center justify-between mt-2 pt-2 border-t border-brand-100/50">

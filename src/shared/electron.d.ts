@@ -42,6 +42,7 @@ declare global {
       resizeSearchWindow: (height: number) => Promise<void>
       onBlur: (callback: () => void) => () => void
       onResetSearch: (callback: () => void) => () => void
+      getVersion: () => Promise<string>
       checkForUpdate: () => Promise<UpdateInfo>
       downloadUpdate: (downloadUrl?: string) => Promise<{ success: boolean; filePath?: string; error?: string }>
       installUpdate: (filePath: string) => Promise<boolean>

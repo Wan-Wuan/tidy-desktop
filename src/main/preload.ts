@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('reset-search', handler)
     return () => ipcRenderer.removeListener('reset-search', handler)
   },
+  getVersion: () => ipcRenderer.invoke('get-version'),
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
   downloadUpdate: (downloadUrl?: string) => ipcRenderer.invoke('download-update', downloadUrl),
   installUpdate: (filePath: string) => ipcRenderer.invoke('install-update', filePath),

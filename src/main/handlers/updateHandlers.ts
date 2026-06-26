@@ -1,4 +1,4 @@
-import { ipcMain, app, BrowserWindow } from 'electron'
+import { ipcMain, app } from 'electron'
 import https from 'https'
 import http from 'http'
 import fs from 'fs'
@@ -7,10 +7,15 @@ import { execFile } from 'child_process'
 
 const GITHUB_API = 'https://api.github.com/repos/Wan-Wuan/tidy-desktop/releases/latest'
 const UPDATE_FILE = path.join(app.getPath('temp'), 'tidy-desktop-update.exe')
+const MAX_REDIRECTS = 5
+
+let downloading = false
 
 function compareVersions(a: string, b: string): number {
-  const pa = a.split('.').map(Number)
-  const pb = b.split('.').map(Number)
+  // Strip pre-release suffixes (e.g. "2.0.0-beta1" → "2.0.0")
+  const clean = (v: string) => v.replace(/-.*$/, '')
+  const pa = clean(a).split('.').map(Number)
+  const pb = clean(b).split('.').map(Number)
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
     const na = pa[i] || 0
     const nb = pb[i] || 0
@@ -20,16 +25,29 @@ function compareVersions(a: string, b: string): number {
   return 0
 }
 
-function fetchJson(url: string): Promise<any> {
+function fetchJson(url: string, redirectsLeft = MAX_REDIRECTS): Promise<any> {
   return new Promise((resolve, reject) => {
+    if (redirectsLeft <= 0) {
+      reject(new Error('Too many redirects'))
+      return
+    }
     const client = url.startsWith('https') ? https : http
     const req = client.get(url, {
       headers: { 'User-Agent': 'tidy-desktop-updater' }
     }, (res) => {
       if (res.statusCode === 302 || res.statusCode === 301) {
         const redirect = res.headers.location
-        if (redirect) {
-          fetchJson(redirect).then(resolve).catch(reject)
+        if (redirect && redirect.startsWith('https://')) {
+          fetchJson(redirect, redirectsLeft - 1).then(resolve).catch(reject)
+          return
+        }
+        reject(new Error('Invalid redirect'))
+        return
+      }
+      if (res.statusCode === 403) {
+        const remaining = res.headers['x-ratelimit-remaining']
+        if (remaining === '0') {
+          reject(new Error('GitHub API rate limited, try again later'))
           return
         }
       }
@@ -55,47 +73,81 @@ function cleanupFile(filePath: string) {
 
 function downloadFile(url: string, dest: string, onProgress?: (percent: number, transferred: number, total: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
-    const follow = (downloadUrl: string) => {
+    const follow = (downloadUrl: string, redirectsLeft: number) => {
+      if (redirectsLeft <= 0) {
+        cleanupFile(dest)
+        reject(new Error('Too many redirects'))
+        return
+      }
+
       const client = downloadUrl.startsWith('https') ? https : http
       const req = client.get(downloadUrl, (res) => {
         if (res.statusCode === 302 || res.statusCode === 301) {
           const redirect = res.headers.location
-          if (redirect) { follow(redirect); return }
+          if (redirect && redirect.startsWith('https://')) {
+            follow(redirect, redirectsLeft - 1)
+            return
+          }
+          cleanupFile(dest)
+          reject(new Error('Invalid redirect'))
+          return
         }
         if (res.statusCode !== 200) {
           cleanupFile(dest)
           reject(new Error(`Download failed: HTTP ${res.statusCode}`))
           return
         }
+
         const total = parseInt(res.headers['content-length'] || '0', 10)
         let transferred = 0
+
         const file = fs.createWriteStream(dest)
+
+        // Use pipe() for proper backpressure handling
+        res.pipe(file)
+
         res.on('data', (chunk) => {
-          file.write(chunk)
           transferred += chunk.length
           if (onProgress) {
             onProgress(total > 0 ? Math.round((transferred / total) * 100) : 0, transferred, total)
           }
         })
-        res.on('end', () => {
-          file.end(() => resolve())
+
+        file.on('finish', () => {
+          // Validate content-length if provided
+          if (total > 0 && transferred !== total) {
+            cleanupFile(dest)
+            reject(new Error(`Download incomplete: ${transferred}/${total} bytes`))
+            return
+          }
+          resolve()
         })
+
+        file.on('error', (err) => {
+          res.destroy()
+          cleanupFile(dest)
+          reject(err)
+        })
+
         res.on('error', (err) => {
-          file.end(() => cleanupFile(dest))
+          file.destroy()
+          cleanupFile(dest)
           reject(err)
         })
       })
+
       req.on('error', (err) => {
         cleanupFile(dest)
         reject(err)
       })
+
       req.setTimeout(120000, () => {
         req.destroy()
         cleanupFile(dest)
         reject(new Error('download timeout'))
       })
     }
-    follow(url)
+    follow(url, MAX_REDIRECTS)
   })
 }
 
@@ -132,6 +184,11 @@ export function registerUpdateHandlers() {
   })
 
   ipcMain.handle('download-update', async (event, downloadUrl?: string) => {
+    if (downloading) {
+      return { success: false, error: 'Download already in progress' }
+    }
+    downloading = true
+
     try {
       let url = downloadUrl
 
@@ -159,6 +216,8 @@ export function registerUpdateHandlers() {
     } catch (err: any) {
       cleanupFile(UPDATE_FILE)
       return { success: false, error: err.message || 'Download failed' }
+    } finally {
+      downloading = false
     }
   })
 
@@ -168,16 +227,38 @@ export function registerUpdateHandlers() {
       return false
     }
 
-    try {
-      const child = execFile(installerPath, ['/S'], { detached: true, stdio: 'ignore' } as any)
-      child.on('error', () => { /* spawn failed — nothing we can do after exit */ })
-      child.unref()
+    return new Promise<boolean>((resolve) => {
+      try {
+        const child = execFile(installerPath, ['/S'], { detached: true, stdio: 'ignore' } as any)
+        let exited = false
 
-      // Brief delay so the installer process can fully start before we release file locks
-      setTimeout(() => app.exit(0), 500)
-      return true
-    } catch {
-      return false
-    }
+        child.on('spawn', () => {
+          child.unref()
+          // Brief delay so the installer process can fully start before we release file locks
+          const timer = setTimeout(() => app.exit(0), 500)
+          // Cancel exit if installer errors or exits non-zero
+          child.on('error', () => { clearTimeout(timer); exited = true; resolve(false) })
+          child.on('exit', (code) => {
+            if (exited) return
+            if (code !== 0) { clearTimeout(timer); resolve(false) }
+          })
+        })
+
+        child.on('error', () => {
+          if (!exited) resolve(false)
+        })
+
+        // Safety timeout — if spawn never fires, resolve false after 3s
+        setTimeout(() => {
+          if (!exited) resolve(false)
+        }, 3000)
+      } catch {
+        resolve(false)
+      }
+    })
+  })
+
+  ipcMain.handle('get-version', () => {
+    return app.getVersion()
   })
 }
