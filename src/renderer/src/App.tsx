@@ -18,6 +18,7 @@ function App() {
   const [updateDownloading, setUpdateDownloading] = useState(false)
   const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null)
   const [updateFilePath, setUpdateFilePath] = useState<string | null>(null)
+  const [currentVersion, setCurrentVersion] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [showAddApp, setShowAddApp] = useState(false)
   const [showEditApp, setShowEditApp] = useState(false)
@@ -101,6 +102,8 @@ function App() {
 
   useEffect(() => {
     loadData()
+    // Load current version
+    window.electronAPI.getVersion().then(setCurrentVersion).catch(() => { /* ignore */ })
     // Check for updates on startup
     window.electronAPI.checkForUpdate().then(info => {
       if (info.available) setUpdateInfo(info)
@@ -1355,6 +1358,7 @@ function App() {
       {showSettings && config && (
         <SettingsModal
           config={config}
+          currentVersion={currentVersion}
           onClose={() => setShowSettings(false)}
           onSave={handleUpdateConfig}
           updateInfo={updateInfo}
@@ -1405,8 +1409,9 @@ function App() {
   )
 }
 
-const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSave, updateInfo }: {
+const SettingsModal = React.memo(function SettingsModal({ config, currentVersion, onClose, onSave, updateInfo }: {
   config: Config
+  currentVersion: string
   onClose: () => void
   onSave: (config: Config) => void
   updateInfo?: UpdateInfo | null
@@ -1414,7 +1419,6 @@ const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSav
   const [hotkey, setHotkey] = useState(config.hotkey)
   const [searchHotkey, setSearchHotkey] = useState(config.searchHotkey || 'Ctrl+K')
   const [autoStart, setAutoStart] = useState(false)
-  const [currentVersion, setCurrentVersion] = useState('')
   const [defaultEngine, setDefaultEngine] = useState(config.defaultEngine || 'b')
   const [ui, setUi] = useState<UISettings>(config.ui || {
     gridColumns: 6, cardSize: 'medium', showIcon: true, showName: true, borderRadius: 8
@@ -1424,7 +1428,6 @@ const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSav
 
   useEffect(() => {
     window.electronAPI.getAutoStart().then(setAutoStart)
-    window.electronAPI.getVersion().then(setCurrentVersion)
   }, [])
 
   useEffect(() => {
