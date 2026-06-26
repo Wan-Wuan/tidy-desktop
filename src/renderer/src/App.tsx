@@ -681,6 +681,7 @@ function App() {
     }
     const updatedCategories = [...categories, newCategory]
     setCategories(updatedCategories)
+    setActiveCategory(newCategory.id)
     await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories })
   }
 
@@ -1135,7 +1136,13 @@ function App() {
           + 分类
         </button>
         <button
-          onClick={() => setShowSubcategoryManager(true)}
+          onClick={() => {
+            if (categories.length === 0) {
+              alert('请先创建一个主分类，然后再添加子分类。')
+              return
+            }
+            setShowSubcategoryManager(true)
+          }}
           className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/40 text-slate-400 hover:bg-white/60 hover:text-brand-600 transition-colors duration-200 border border-dashed border-brand-200/60"
         >
           + 子分类
