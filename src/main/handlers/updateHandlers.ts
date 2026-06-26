@@ -73,10 +73,18 @@ function cleanupFile(filePath: string) {
 
 function downloadFile(url: string, dest: string, onProgress?: (percent: number, transferred: number, total: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
+    let settled = false
+
+    const fail = (err: Error) => {
+      if (settled) return
+      settled = true
+      cleanupFile(dest)
+      reject(err)
+    }
+
     const follow = (downloadUrl: string, redirectsLeft: number) => {
       if (redirectsLeft <= 0) {
-        cleanupFile(dest)
-        reject(new Error('Too many redirects'))
+        fail(new Error('Too many redirects'))
         return
       }
 
@@ -88,13 +96,11 @@ function downloadFile(url: string, dest: string, onProgress?: (percent: number, 
             follow(redirect, redirectsLeft - 1)
             return
           }
-          cleanupFile(dest)
-          reject(new Error('Invalid redirect'))
+          fail(new Error('Invalid redirect'))
           return
         }
         if (res.statusCode !== 200) {
-          cleanupFile(dest)
-          reject(new Error(`Download failed: HTTP ${res.statusCode}`))
+          fail(new Error(`Download failed: HTTP ${res.statusCode}`))
           return
         }
 
@@ -114,37 +120,32 @@ function downloadFile(url: string, dest: string, onProgress?: (percent: number, 
         })
 
         file.on('finish', () => {
+          if (settled) return
           // Validate content-length if provided
           if (total > 0 && transferred !== total) {
-            cleanupFile(dest)
-            reject(new Error(`Download incomplete: ${transferred}/${total} bytes`))
+            fail(new Error(`Download incomplete: ${transferred}/${total} bytes`))
             return
           }
+          settled = true
           resolve()
         })
 
-        file.on('error', (err) => {
+        file.on('error', () => {
           res.destroy()
-          cleanupFile(dest)
-          reject(err)
+          fail(new Error('Write failed'))
         })
 
-        res.on('error', (err) => {
+        res.on('error', () => {
           file.destroy()
-          cleanupFile(dest)
-          reject(err)
+          fail(new Error('Download stream error'))
         })
       })
 
-      req.on('error', (err) => {
-        cleanupFile(dest)
-        reject(err)
-      })
+      req.on('error', (err) => fail(err))
 
       req.setTimeout(120000, () => {
         req.destroy()
-        cleanupFile(dest)
-        reject(new Error('download timeout'))
+        fail(new Error('download timeout'))
       })
     }
     follow(url, MAX_REDIRECTS)
@@ -230,28 +231,40 @@ export function registerUpdateHandlers() {
     return new Promise<boolean>((resolve) => {
       try {
         const child = execFile(installerPath, ['/S'], { detached: true, stdio: 'ignore' } as any)
-        let exited = false
-
-        child.on('spawn', () => {
-          child.unref()
-          // Brief delay so the installer process can fully start before we release file locks
-          const timer = setTimeout(() => app.exit(0), 500)
-          // Cancel exit if installer errors or exits non-zero
-          child.on('error', () => { clearTimeout(timer); exited = true; resolve(false) })
-          child.on('exit', (code) => {
-            if (exited) return
-            if (code !== 0) { clearTimeout(timer); resolve(false) }
-          })
-        })
-
-        child.on('error', () => {
-          if (!exited) resolve(false)
-        })
+        let settled = false
 
         // Safety timeout — if spawn never fires, resolve false after 3s
-        setTimeout(() => {
-          if (!exited) resolve(false)
+        const safetyTimer = setTimeout(() => {
+          if (!settled) { settled = true; resolve(false) }
         }, 3000)
+
+        child.on('error', () => {
+          if (settled) return
+          settled = true
+          clearTimeout(safetyTimer)
+          resolve(false)
+        })
+
+        child.on('spawn', () => {
+          clearTimeout(safetyTimer)
+          child.unref()
+          // Brief delay so the installer process can fully start before we release file locks
+          const exitTimer = setTimeout(() => app.exit(0), 500)
+          child.on('error', () => {
+            if (settled) return
+            settled = true
+            clearTimeout(exitTimer)
+            resolve(false)
+          })
+          child.on('exit', (code) => {
+            if (settled) return
+            if (code !== 0) {
+              settled = true
+              clearTimeout(exitTimer)
+              resolve(false)
+            }
+          })
+        })
       } catch {
         resolve(false)
       }
