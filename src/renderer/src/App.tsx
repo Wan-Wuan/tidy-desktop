@@ -1363,6 +1363,7 @@ function App() {
           onClose={() => setShowSettings(false)}
           onSave={handleUpdateConfig}
           updateInfo={updateInfo}
+          onUpdateInfo={setUpdateInfo}
         />
       )}
 
@@ -1410,12 +1411,13 @@ function App() {
   )
 }
 
-const SettingsModal = React.memo(function SettingsModal({ config, currentVersion, onClose, onSave, updateInfo }: {
+const SettingsModal = React.memo(function SettingsModal({ config, currentVersion, onClose, onSave, updateInfo, onUpdateInfo }: {
   config: Config
   currentVersion: string
   onClose: () => void
   onSave: (config: Config) => void
   updateInfo?: UpdateInfo | null
+  onUpdateInfo?: (info: UpdateInfo | null) => void
 }) {
   const [hotkey, setHotkey] = useState(config.hotkey)
   const [searchHotkey, setSearchHotkey] = useState(config.searchHotkey || 'Ctrl+K')
@@ -1425,11 +1427,27 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
     gridColumns: 6, cardSize: 'medium', showIcon: true, showName: true, borderRadius: 8
   })
   const [recording, setRecording] = useState<'main' | 'search' | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [localUpdateInfo, setLocalUpdateInfo] = useState(updateInfo)
   const engines = config.searchEngines
 
   useEffect(() => {
     window.electronAPI.getAutoStart().then(setAutoStart)
   }, [])
+
+  // Save-on-change: persist config whenever a setting changes
+  const saveConfig = (overrides: Partial<Config> = {}) => {
+    const newConfig: Config = {
+      ...config,
+      hotkey: overrides.hotkey ?? hotkey,
+      searchHotkey: overrides.searchHotkey ?? searchHotkey,
+      searchEngines: engines,
+      autoStart: overrides.autoStart ?? autoStart,
+      ui: overrides.ui ?? ui,
+      defaultEngine: overrides.defaultEngine ?? defaultEngine
+    }
+    onSave(newConfig)
+  }
 
   useEffect(() => {
     if (!recording) return
@@ -1445,28 +1463,14 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
       if (!['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
         parts.push(key)
         const combo = parts.join('+')
-        if (recording === 'main') setHotkey(combo)
-        else setSearchHotkey(combo)
+        if (recording === 'main') { setHotkey(combo); saveConfig({ hotkey: combo }) }
+        else { setSearchHotkey(combo); saveConfig({ searchHotkey: combo }) }
         setRecording(null)
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [recording])
-
-  const handleSave = async () => {
-    await window.electronAPI.setAutoStart(autoStart)
-    onSave({
-      ...config,
-      hotkey,
-      searchHotkey,
-      searchEngines: engines,
-      autoStart,
-      ui,
-      defaultEngine
-    })
-    onClose()
-  }
 
   const cardSizeLabels: Record<string, string> = { small: '小', medium: '中', large: '大' }
 
@@ -1490,7 +1494,12 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
               <div className="text-xs text-slate-500">系统启动时自动运行</div>
             </div>
             <button
-              onClick={() => setAutoStart(!autoStart)}
+              onClick={() => {
+                const next = !autoStart
+                setAutoStart(next)
+                window.electronAPI.setAutoStart(next)
+                saveConfig({ autoStart: next })
+              }}
               className={`relative w-11 h-6 rounded-full transition-colors ${autoStart ? 'bg-brand-500' : 'bg-slate-300'}`}
             >
               <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${autoStart ? 'translate-x-5' : 'translate-x-0.5'}`} />
@@ -1546,7 +1555,7 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
             <label className="text-xs text-slate-500 mb-1 block">默认搜索引擎</label>
             <select
               value={defaultEngine}
-              onChange={(e) => setDefaultEngine(e.target.value)}
+              onChange={(e) => { setDefaultEngine(e.target.value); saveConfig({ defaultEngine: e.target.value }) }}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-400"
             >
               {Object.entries(engines).map(([key, engine]) => (
@@ -1576,7 +1585,7 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
                 {[4, 5, 6, 7, 8].map(n => (
                   <button
                     key={n}
-                    onClick={() => setUi({ ...ui, gridColumns: n })}
+                    onClick={() => { const next = { ...ui, gridColumns: n }; setUi(next); saveConfig({ ui: next }) }}
                     className={`w-8 h-8 rounded-lg text-sm ${ui.gridColumns === n ? 'bg-brand-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-brand-400'}`}
                   >
                     {n}
@@ -1590,7 +1599,7 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
                 {(['small', 'medium', 'large'] as const).map(s => (
                   <button
                     key={s}
-                    onClick={() => setUi({ ...ui, cardSize: s })}
+                    onClick={() => { const next = { ...ui, cardSize: s }; setUi(next); saveConfig({ ui: next }) }}
                     className={`px-3 py-1 rounded-lg text-sm ${ui.cardSize === s ? 'bg-brand-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-brand-400'}`}
                   >
                     {cardSizeLabels[s]}
@@ -1606,7 +1615,7 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
                   min="0"
                   max="20"
                   value={ui.borderRadius}
-                  onChange={(e) => setUi({ ...ui, borderRadius: Number(e.target.value) })}
+                  onChange={(e) => { const next = { ...ui, borderRadius: Number(e.target.value) }; setUi(next); saveConfig({ ui: next }) }}
                   className="w-32"
                 />
                 <span className="text-sm text-slate-500 w-8">{ui.borderRadius}px</span>
@@ -1615,7 +1624,7 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
             <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
               <span className="text-sm text-slate-700">显示图标</span>
               <button
-                onClick={() => setUi({ ...ui, showIcon: !ui.showIcon })}
+                onClick={() => { const next = { ...ui, showIcon: !ui.showIcon }; setUi(next); saveConfig({ ui: next }) }}
                 className={`relative w-11 h-6 rounded-full transition-colors ${ui.showIcon ? 'bg-brand-500' : 'bg-slate-300'}`}
               >
                 <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${ui.showIcon ? 'translate-x-5' : 'translate-x-0.5'}`} />
@@ -1624,7 +1633,7 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
             <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
               <span className="text-sm text-slate-700">显示名称</span>
               <button
-                onClick={() => setUi({ ...ui, showName: !ui.showName })}
+                onClick={() => { const next = { ...ui, showName: !ui.showName }; setUi(next); saveConfig({ ui: next }) }}
                 className={`relative w-11 h-6 rounded-full transition-colors ${ui.showName ? 'bg-brand-500' : 'bg-slate-300'}`}
               >
                 <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${ui.showName ? 'translate-x-5' : 'translate-x-0.5'}`} />
@@ -1642,21 +1651,36 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
               <span className="text-sm text-slate-700">当前版本</span>
               <span className="text-sm font-mono text-slate-500">{currentVersion ? `v${currentVersion}` : '...'}</span>
             </div>
-            {updateInfo?.available && (
+            {localUpdateInfo?.available && (
               <div className="flex items-center justify-between mt-2 pt-2 border-t border-brand-100/50">
                 <span className="text-sm text-brand-600 font-medium">新版本可用</span>
-                <span className="text-sm font-mono text-brand-600">v{updateInfo.version}</span>
+                <span className="text-sm font-mono text-brand-600">v{localUpdateInfo.version}</span>
               </div>
             )}
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-brand-100/50">
+              <span className="text-sm text-slate-600">检查更新</span>
+              <button
+                disabled={checking}
+                onClick={async () => {
+                  setChecking(true)
+                  try {
+                    const info = await window.electronAPI.checkForUpdate()
+                    setLocalUpdateInfo(info)
+                    if (info.available && onUpdateInfo) onUpdateInfo(info)
+                  } catch { /* ignore */ }
+                  setChecking(false)
+                }}
+                className="px-3 py-1 bg-brand-500 text-white rounded-lg hover:bg-brand-600 text-xs font-medium transition-colors disabled:opacity-50"
+              >
+                {checking ? '检查中...' : '检查更新'}
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-2 border-t border-brand-100/50">
+        <div className="flex justify-end pt-2 border-t border-brand-100/50">
           <button onClick={onClose} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors">
-            取消
-          </button>
-          <button onClick={handleSave} className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors shadow-sm shadow-brand-500/20">
-            保存
+            关闭
           </button>
         </div>
       </div>
