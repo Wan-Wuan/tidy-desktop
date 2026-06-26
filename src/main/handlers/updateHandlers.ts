@@ -38,6 +38,8 @@ function fetchJson(url: string, redirectsLeft = MAX_REDIRECTS): Promise<any> {
       if (res.statusCode === 302 || res.statusCode === 301) {
         const redirect = res.headers.location
         if (redirect && redirect.startsWith('https://')) {
+          // Drain the response body to free the socket for reuse
+          res.resume()
           fetchJson(redirect, redirectsLeft - 1).then(resolve).catch(reject)
           return
         }
@@ -74,10 +76,12 @@ function cleanupFile(filePath: string) {
 function downloadFile(url: string, dest: string, onProgress?: (percent: number, transferred: number, total: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     let settled = false
+    let file: fs.WriteStream | null = null
 
     const fail = (err: Error) => {
       if (settled) return
       settled = true
+      if (file) { file.destroy(); file = null }
       cleanupFile(dest)
       reject(err)
     }
@@ -93,6 +97,8 @@ function downloadFile(url: string, dest: string, onProgress?: (percent: number, 
         if (res.statusCode === 302 || res.statusCode === 301) {
           const redirect = res.headers.location
           if (redirect && redirect.startsWith('https://')) {
+            // Drain the response body to free the socket for reuse
+            res.resume()
             follow(redirect, redirectsLeft - 1)
             return
           }
@@ -107,7 +113,7 @@ function downloadFile(url: string, dest: string, onProgress?: (percent: number, 
         const total = parseInt(res.headers['content-length'] || '0', 10)
         let transferred = 0
 
-        const file = fs.createWriteStream(dest)
+        file = fs.createWriteStream(dest)
 
         // Use pipe() for proper backpressure handling
         res.pipe(file)
@@ -119,7 +125,7 @@ function downloadFile(url: string, dest: string, onProgress?: (percent: number, 
           }
         })
 
-        file.on('finish', () => {
+        file!.on('finish', () => {
           if (settled) return
           // Validate content-length if provided
           if (total > 0 && transferred !== total) {
@@ -136,7 +142,7 @@ function downloadFile(url: string, dest: string, onProgress?: (percent: number, 
         })
 
         res.on('error', () => {
-          file.destroy()
+          file!.destroy()
           fail(new Error('Download stream error'))
         })
       })
@@ -228,6 +234,14 @@ export function registerUpdateHandlers() {
       return false
     }
 
+    // Validate the path is the expected update file to prevent arbitrary execution
+    const resolvedPath = path.resolve(installerPath)
+    const expectedPath = path.resolve(UPDATE_FILE)
+    if (resolvedPath !== expectedPath) {
+      console.error('install-update: rejected path mismatch:', resolvedPath)
+      return false
+    }
+
     try {
       // Use spawn with shell + detached for full process separation on Windows
       const child = spawn(installerPath, ['/S'], {
@@ -235,12 +249,29 @@ export function registerUpdateHandlers() {
         stdio: 'ignore',
         shell: true
       })
-      child.on('error', () => { /* spawn failed */ })
-      child.unref()
 
-      // Graceful quit — allows before-quit handlers to run, then exits
-      setTimeout(() => app.quit(), 2000)
-      return true
+      // Wait for spawn to succeed before returning true
+      return new Promise<boolean>((resolve) => {
+        let spawnCalled = false
+        child.on('spawn', () => {
+          spawnCalled = true
+          child.unref()
+          // Graceful quit — allows before-quit handlers to run, then exits
+          setTimeout(() => app.quit(), 2000)
+          resolve(true)
+        })
+        child.on('error', (err) => {
+          console.error('install-update: spawn error:', err)
+          if (!spawnCalled) resolve(false)
+        })
+        // Fallback timeout in case neither event fires
+        setTimeout(() => {
+          if (!spawnCalled) {
+            child.kill()
+            resolve(false)
+          }
+        }, 5000)
+      })
     } catch {
       return false
     }

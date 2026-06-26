@@ -28,7 +28,10 @@ export function registerSystemHandlers() {
   ipcMain.handle('resize-search-window', (_, height: number) => {
     const w = searchWindowRef.current
     if (w && !w.isDestroyed()) {
-      const finalHeight = Math.max(60, height)
+      // Clamp height: min 60px, max 80% of primary display height
+      const { height: screenHeight } = screen.getPrimaryDisplay().workAreaSize
+      const maxHeight = Math.round(screenHeight * 0.8)
+      const finalHeight = Math.min(Math.max(60, height), maxHeight)
       const bounds = w.getBounds()
       w.setBounds({
         x: bounds.x,

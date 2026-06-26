@@ -125,8 +125,10 @@ function createSearchWindow() {
     const cancelHandler = () => { cancelled = true }
     blurredWin.once('focus', cancelHandler)
     setTimeout(() => {
+      // Guard against the window being destroyed during the timeout
+      if (blurredWin.isDestroyed()) return
       blurredWin.removeListener('focus', cancelHandler)
-      if (!cancelled && blurredWin && !blurredWin.isDestroyed() && !blurredWin.isFocused()) {
+      if (!cancelled && !blurredWin.isFocused()) {
         blurredWin.webContents.send('blur-event')
       }
     }, 200)

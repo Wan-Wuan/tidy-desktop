@@ -85,17 +85,22 @@ function SearchApp() {
   }, [])
 
   const loadData = async () => {
-    const [configData, appsData, categoriesData] = await Promise.all([
-      window.electronAPI.getConfig(),
-      window.electronAPI.getApps(),
-      window.electronAPI.getCategories()
-    ])
-    setConfig(configData)
-    setApps(appsData.apps)
-    setCategories(categoriesData.categories)
+    try {
+      const [configData, appsData, categoriesData] = await Promise.all([
+        window.electronAPI.getConfig(),
+        window.electronAPI.getApps(),
+        window.electronAPI.getCategories()
+      ])
+      setConfig(configData)
+      setApps(appsData?.apps || [])
+      setCategories(categoriesData?.categories || [])
+    } catch (err) {
+      console.error('SearchApp: loadData failed:', err)
+    }
   }
 
-  const getCategoryName = (categoryId: string): string => {
+  const getCategoryName = (categoryId: string | null): string => {
+    if (!categoryId) return ''
     const cat = categories.find(c => c.id === categoryId)
     return cat ? cat.name : ''
   }
@@ -241,7 +246,7 @@ function SearchApp() {
     const filtered = filterApps(value)
     setResults(filtered)
     resultsRef.current = filtered
-    const newIndex = filtered.length > 0 ? Math.min(0, filtered.length - 1) : 0
+    const newIndex = 0
     setActiveIndex(newIndex)
     resizeWindow(filtered.length, !!value.trim())
   }, [activeEngine, config, filterApps])
@@ -313,7 +318,7 @@ function SearchApp() {
           value={query}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          onFocus={() => { isActiveRef.current = true }}
+          onFocus={() => { /* isActiveRef intentionally NOT set here — only set on mousedown/open to allow blur-refocus */ }}
           onBlur={() => {
             setTimeout(() => {
               if (!isActiveRef.current) {

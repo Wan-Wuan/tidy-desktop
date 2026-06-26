@@ -3,7 +3,7 @@
   name: string
   path: string
   icon: string
-  categoryId: string
+  categoryId: string | null
   subcategoryId?: string | null
   pinyin: string
   firstLetter: string

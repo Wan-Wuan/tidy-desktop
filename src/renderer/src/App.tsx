@@ -338,12 +338,17 @@ function App() {
         }
       }
       if (allIcons.length > 0) {
-        const updated = loadedApps.map(a => {
-          const found = allIcons.find(r => r.id === a.id)
-          return found ? { ...a, icon: found.icon } : a
+        // Use functional setApps to merge icons into the CURRENT state,
+        // avoiding overwriting user mutations made during icon extraction.
+        setApps(prev => {
+          const updated = prev.map(a => {
+            const found = allIcons.find(r => r.id === a.id)
+            return found ? { ...a, icon: found.icon } : a
+          })
+          // Persist to disk (use updated array, not stale loadedApps)
+          window.electronAPI.saveApps({ apps: updated })
+          return updated
         })
-        setApps(updated)
-        await window.electronAPI.saveApps({ apps: updated })
       }
     }
   }
@@ -356,7 +361,8 @@ function App() {
 
   const filteredApps = useMemo(() => {
     if (activeCategory) {
-      return apps.filter(app => app.categoryId === activeCategory)
+      // Show apps in this category + orphaned apps (categoryId is null/empty)
+      return apps.filter(app => app.categoryId === activeCategory || !app.categoryId)
     }
     return apps
   }, [apps, activeCategory])
@@ -692,8 +698,8 @@ function App() {
     }
 
     const currentApps = appsRef.current
-    const updatedApps = currentApps.map(app => 
-      app.categoryId === id ? { ...app, categoryId: '' } : app
+    const updatedApps = currentApps.map(app =>
+      app.categoryId === id ? { ...app, categoryId: null } : app
     )
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
@@ -1428,6 +1434,7 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
   })
   const [recording, setRecording] = useState<'main' | 'search' | null>(null)
   const [checking, setChecking] = useState(false)
+  const [checked, setChecked] = useState(false)
   const [localUpdateInfo, setLocalUpdateInfo] = useState(updateInfo)
   const engines = config.searchEngines
 
@@ -1449,6 +1456,10 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
     onSave(newConfig)
   }
 
+  // Use a ref for saveConfig to avoid stale closures in the keydown handler
+  const saveConfigRef = useRef(saveConfig)
+  saveConfigRef.current = saveConfig
+
   useEffect(() => {
     if (!recording) return
     const handler = (e: KeyboardEvent) => {
@@ -1463,8 +1474,8 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
       if (!['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
         parts.push(key)
         const combo = parts.join('+')
-        if (recording === 'main') { setHotkey(combo); saveConfig({ hotkey: combo }) }
-        else { setSearchHotkey(combo); saveConfig({ searchHotkey: combo }) }
+        if (recording === 'main') { setHotkey(combo); saveConfigRef.current({ hotkey: combo }) }
+        else { setSearchHotkey(combo); saveConfigRef.current({ searchHotkey: combo }) }
         setRecording(null)
       }
     }
@@ -1651,21 +1662,17 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
               <span className="text-sm text-slate-700">当前版本</span>
               <span className="text-sm font-mono text-slate-500">{currentVersion ? `v${currentVersion}` : '...'}</span>
             </div>
-            {localUpdateInfo?.available && (
-              <div className="flex items-center justify-between mt-2 pt-2 border-t border-brand-100/50">
-                <span className="text-sm text-brand-600 font-medium">新版本可用</span>
-                <span className="text-sm font-mono text-brand-600">v{localUpdateInfo.version}</span>
-              </div>
-            )}
             <div className="flex items-center justify-between mt-2 pt-2 border-t border-brand-100/50">
               <span className="text-sm text-slate-600">检查更新</span>
               <button
                 disabled={checking}
                 onClick={async () => {
                   setChecking(true)
+                  setChecked(false)
                   try {
                     const info = await window.electronAPI.checkForUpdate()
                     setLocalUpdateInfo(info)
+                    setChecked(true)
                     if (info.available && onUpdateInfo) onUpdateInfo(info)
                   } catch { /* ignore */ }
                   setChecking(false)
@@ -1675,6 +1682,30 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
                 {checking ? '检查中...' : '检查更新'}
               </button>
             </div>
+            {checking && (
+              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-brand-100/50">
+                <svg className="animate-spin w-4 h-4 text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeDasharray="50" strokeDashoffset="15" /></svg>
+                <span className="text-sm text-slate-500">正在检查更新...</span>
+              </div>
+            )}
+            {!checking && checked && localUpdateInfo?.available && (
+              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-brand-100/50">
+                <span className="text-sm text-emerald-500">🎉</span>
+                <span className="text-sm text-brand-600 font-medium">发现新版本 v{localUpdateInfo.version}</span>
+              </div>
+            )}
+            {!checking && checked && localUpdateInfo && !localUpdateInfo.available && (
+              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-brand-100/50">
+                <span className="text-sm text-emerald-500">✓</span>
+                <span className="text-sm text-emerald-600">已是最新版本</span>
+              </div>
+            )}
+            {!checking && checked && localUpdateInfo?.error && (
+              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-brand-100/50">
+                <span className="text-sm text-red-500">✕</span>
+                <span className="text-sm text-red-500">检查失败：{localUpdateInfo.error}</span>
+              </div>
+            )}
           </div>
         </div>
 

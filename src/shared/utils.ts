@@ -40,7 +40,7 @@ export function isFolderPath(query: string): boolean {
 /**
  * 获取文件夹建议
  */
-export function getFolderSuggestion(query: string): { id: string; name: string; path: string; icon: string; categoryId: string; subcategoryId: null; pinyin: string; firstLetter: string; type: 'folder' } | null {
+export function getFolderSuggestion(query: string): { id: string; name: string; path: string; icon: string; categoryId: string | null; subcategoryId: null; pinyin: string; firstLetter: string; type: 'folder' } | null {
   const trimmed = query.trim()
   if (!isFolderPath(trimmed)) return null
   const folderName = trimmed.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || trimmed
@@ -49,7 +49,7 @@ export function getFolderSuggestion(query: string): { id: string; name: string; 
     name: `打开文件夹: ${folderName}`,
     path: trimmed,
     icon: '',
-    categoryId: '',
+    categoryId: null,
     subcategoryId: null,
     pinyin: '',
     firstLetter: '',

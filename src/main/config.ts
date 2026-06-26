@@ -43,10 +43,15 @@ export function readJsonFile<T>(filePath: string, defaultValue: T): T {
 export function writeJsonFile(filePath: string, data: unknown): boolean {
   try {
     ensureDataDir()
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
+    // Atomic write: write to temp file first, then rename (rename is atomic on most filesystems)
+    const tmpPath = filePath + '.tmp'
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8')
+    fs.renameSync(tmpPath, filePath)
     return true
   } catch (error) {
     console.error(`Error writing ${filePath}:`, error)
+    // Clean up temp file if it exists
+    try { fs.unlinkSync(filePath + '.tmp') } catch { /* ignore */ }
     return false
   }
 }
