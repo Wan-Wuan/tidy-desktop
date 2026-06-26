@@ -228,47 +228,17 @@ export function registerUpdateHandlers() {
       return false
     }
 
-    return new Promise<boolean>((resolve) => {
-      try {
-        const child = execFile(installerPath, ['/S'], { detached: true, stdio: 'ignore' } as any)
-        let settled = false
+    try {
+      const child = execFile(installerPath, ['/S'], { detached: true, stdio: 'ignore' } as any)
+      child.on('error', () => { /* spawn failed — nothing we can do after exit */ })
+      child.unref()
 
-        // Safety timeout — if spawn never fires, resolve false after 3s
-        const safetyTimer = setTimeout(() => {
-          if (!settled) { settled = true; resolve(false) }
-        }, 3000)
-
-        child.on('error', () => {
-          if (settled) return
-          settled = true
-          clearTimeout(safetyTimer)
-          resolve(false)
-        })
-
-        child.on('spawn', () => {
-          clearTimeout(safetyTimer)
-          child.unref()
-          // Brief delay so the installer process can fully start before we release file locks
-          const exitTimer = setTimeout(() => app.exit(0), 500)
-          child.on('error', () => {
-            if (settled) return
-            settled = true
-            clearTimeout(exitTimer)
-            resolve(false)
-          })
-          child.on('exit', (code) => {
-            if (settled) return
-            if (code !== 0) {
-              settled = true
-              clearTimeout(exitTimer)
-              resolve(false)
-            }
-          })
-        })
-      } catch {
-        resolve(false)
-      }
-    })
+      // Release file locks so the installer can overwrite old files
+      setTimeout(() => app.exit(0), 1500)
+      return true
+    } catch {
+      return false
+    }
   })
 
   ipcMain.handle('get-version', () => {
