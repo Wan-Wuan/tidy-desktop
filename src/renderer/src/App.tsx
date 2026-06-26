@@ -950,7 +950,7 @@ function App() {
                 }
                 setUpdateDownloading(true)
                 setUpdateProgress(null)
-                const result = await window.electronAPI.downloadUpdate()
+                const result = await window.electronAPI.downloadUpdate(updateInfo?.downloadUrl)
                 if (result.success && result.filePath) {
                   setUpdateFilePath(result.filePath)
                   await window.electronAPI.installUpdate(result.filePath)

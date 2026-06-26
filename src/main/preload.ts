@@ -35,7 +35,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('reset-search', handler)
   },
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
-  downloadUpdate: () => ipcRenderer.invoke('download-update'),
+  downloadUpdate: (downloadUrl?: string) => ipcRenderer.invoke('download-update', downloadUrl),
   installUpdate: (filePath: string) => ipcRenderer.invoke('install-update', filePath),
   onUpdateProgress: (callback: (data: { percent: number; transferred: number; total: number }) => void) => {
     const handler = (_event: any, data: any) => callback(data)

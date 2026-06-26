@@ -5,6 +5,7 @@ export interface UpdateInfo {
   version?: string
   downloadUrl?: string
   releaseNotes?: string
+  error?: string
 }
 
 export interface UpdateProgress {
@@ -42,7 +43,7 @@ declare global {
       onBlur: (callback: () => void) => () => void
       onResetSearch: (callback: () => void) => () => void
       checkForUpdate: () => Promise<UpdateInfo>
-      downloadUpdate: () => Promise<{ success: boolean; filePath?: string; error?: string }>
+      downloadUpdate: (downloadUrl?: string) => Promise<{ success: boolean; filePath?: string; error?: string }>
       installUpdate: (filePath: string) => Promise<boolean>
       onUpdateProgress: (callback: (data: UpdateProgress) => void) => () => void
     }

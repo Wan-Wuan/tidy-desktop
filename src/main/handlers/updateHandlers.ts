@@ -49,6 +49,10 @@ function fetchJson(url: string): Promise<any> {
   })
 }
 
+function cleanupFile(filePath: string) {
+  try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath) } catch { /* ignore */ }
+}
+
 function downloadFile(url: string, dest: string, onProgress?: (percent: number, transferred: number, total: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const follow = (downloadUrl: string) => {
@@ -59,6 +63,7 @@ function downloadFile(url: string, dest: string, onProgress?: (percent: number, 
           if (redirect) { follow(redirect); return }
         }
         if (res.statusCode !== 200) {
+          cleanupFile(dest)
           reject(new Error(`Download failed: HTTP ${res.statusCode}`))
           return
         }
@@ -68,20 +73,27 @@ function downloadFile(url: string, dest: string, onProgress?: (percent: number, 
         res.on('data', (chunk) => {
           file.write(chunk)
           transferred += chunk.length
-          if (onProgress && total > 0) {
-            onProgress(Math.round((transferred / total) * 100), transferred, total)
+          if (onProgress) {
+            onProgress(total > 0 ? Math.round((transferred / total) * 100) : 0, transferred, total)
           }
         })
         res.on('end', () => {
           file.end(() => resolve())
         })
         res.on('error', (err) => {
-          file.end()
+          file.end(() => cleanupFile(dest))
           reject(err)
         })
       })
-      req.on('error', reject)
-      req.setTimeout(120000, () => { req.destroy(); reject(new Error('download timeout')) })
+      req.on('error', (err) => {
+        cleanupFile(dest)
+        reject(err)
+      })
+      req.setTimeout(120000, () => {
+        req.destroy()
+        cleanupFile(dest)
+        reject(new Error('download timeout'))
+      })
     }
     follow(url)
   })
@@ -114,27 +126,30 @@ export function registerUpdateHandlers() {
         downloadUrl: exeAsset.browser_download_url,
         releaseNotes: release.body || ''
       }
-    } catch {
-      // Network error, rate limit, etc. — silently ignore
-      return { available: false }
+    } catch (err: any) {
+      return { available: false, error: err.message || 'check failed' }
     }
   })
 
-  ipcMain.handle('download-update', async (event) => {
+  ipcMain.handle('download-update', async (event, downloadUrl?: string) => {
     try {
-      const release = await fetchJson(GITHUB_API)
-      const assets = release.assets || []
-      const exeAsset = assets.find((a: any) =>
-        a.name && a.name.endsWith('.exe') && !a.name.includes('blockmap')
-      )
+      let url = downloadUrl
 
-      if (!exeAsset) {
-        return { success: false, error: 'No installer found' }
+      if (!url) {
+        const release = await fetchJson(GITHUB_API)
+        const assets = release.assets || []
+        const exeAsset = assets.find((a: any) =>
+          a.name && a.name.endsWith('.exe') && !a.name.includes('blockmap')
+        )
+        if (!exeAsset) {
+          return { success: false, error: 'No installer found' }
+        }
+        url = exeAsset.browser_download_url
       }
 
       const sender = event.sender
 
-      await downloadFile(exeAsset.browser_download_url, UPDATE_FILE, (percent, transferred, total) => {
+      await downloadFile(url!, UPDATE_FILE, (percent, transferred, total) => {
         if (!sender.isDestroyed()) {
           sender.send('update-progress', { percent, transferred, total })
         }
@@ -142,6 +157,7 @@ export function registerUpdateHandlers() {
 
       return { success: true, filePath: UPDATE_FILE }
     } catch (err: any) {
+      cleanupFile(UPDATE_FILE)
       return { success: false, error: err.message || 'Download failed' }
     }
   })
@@ -152,15 +168,16 @@ export function registerUpdateHandlers() {
       return false
     }
 
-    // Spawn installer with /S (silent) flag, then quit app
-    const child = execFile(installerPath, ['/S'], { detached: true, stdio: 'ignore' } as any)
-    child.unref()
+    try {
+      const child = execFile(installerPath, ['/S'], { detached: true, stdio: 'ignore' } as any)
+      child.on('error', () => { /* spawn failed — nothing we can do after exit */ })
+      child.unref()
 
-    // Quit after a short delay to let the installer start
-    setTimeout(() => {
-      app.quit()
-    }, 500)
-
-    return true
+      // Brief delay so the installer process can fully start before we release file locks
+      setTimeout(() => app.exit(0), 500)
+      return true
+    } catch {
+      return false
+    }
   })
 }
