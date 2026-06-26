@@ -243,8 +243,39 @@ export function registerUpdateHandlers() {
     }
 
     try {
-      // Use spawn with shell + detached for full process separation on Windows
-      const child = spawn(installerPath, ['/S'], {
+      const batPath = path.join(app.getPath('temp'), 'tidy-desktop-update.bat')
+      const appName = path.basename(process.execPath)
+      const escapedInstallerPath = installerPath.replace(/\//g, '\\')
+
+      // Batch script: wait for app to exit (max 30s), then run installer, self-delete
+      const batContent = [
+        '@echo off',
+        'setlocal',
+        'set TIMEOUT=30',
+        'set ELAPSED=0',
+        '',
+        ':wait_loop',
+        `tasklist /FI "IMAGENAME eq ${appName}" 2>nul | find /I "${appName}" >nul`,
+        'if errorlevel 1 (',
+        '    goto :install',
+        ')',
+        'timeout /t 1 /nobreak >nul',
+        'set /a ELAPSED+=1',
+        'if %ELAPSED% geq %TIMEOUT% (',
+        '    goto :install',
+        ')',
+        'goto :wait_loop',
+        '',
+        ':install',
+        `start "" "${escapedInstallerPath}" /S`,
+        'timeout /t 2 /nobreak >nul',
+        'del "%~f0"'
+      ].join('\r\n')
+
+      fs.writeFileSync(batPath, batContent, 'utf-8')
+
+      // Spawn the batch script instead of the installer directly
+      const child = spawn(batPath, [], {
         detached: true,
         stdio: 'ignore',
         shell: true
@@ -256,9 +287,9 @@ export function registerUpdateHandlers() {
         child.on('spawn', () => {
           spawnCalled = true
           child.unref()
-          // Graceful quit — allows before-quit handlers to run, then exits
-          setTimeout(() => app.quit(), 2000)
           resolve(true)
+          // Quit after confirming spawn — batch script waits for process exit
+          setTimeout(() => app.quit(), 500)
         })
         child.on('error', (err) => {
           console.error('install-update: spawn error:', err)
