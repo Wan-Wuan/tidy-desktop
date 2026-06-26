@@ -23,13 +23,24 @@ function createWindow() {
     show: false,
     frame: true,
     resizable: true,
-    autoHideMenuBar: true,
     title: 'tidy_desktop',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     }
+  })
+
+  win.setMenu(null)
+  win.setMenuBarVisibility(false)
+
+  // 拦截 Windows 系统菜单消息（Alt / Alt+Space）
+  const WM_SYSCOMMAND = 0x0112
+  const SC_KEYMENU = 0xF100
+  win.hookWindowMessage(WM_SYSCOMMAND, (wParam: Buffer) => {
+    const cmd = wParam.readUInt16LE(0) & 0xFFF0
+    if (cmd === SC_KEYMENU) return true
+    return false
   })
 
   if (isDev) {
@@ -199,6 +210,7 @@ function registerGlobalShortcut() {
 }
 
 app.on('ready', () => {
+  Menu.setApplicationMenu(null)
   ensureDataDir()
 
   // Set up window refs for system handlers before registration

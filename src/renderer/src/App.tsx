@@ -906,7 +906,7 @@ function App() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowAddApp(true)}
-            className="px-3.5 py-1.5 bg-brand-600 text-white rounded-lg hover:bg-brand-700 text-sm font-medium transition-all duration-200 shadow-sm shadow-brand-500/20 hover:shadow-md hover:shadow-brand-500/30"
+            className="px-3.5 py-1.5 bg-brand-600 text-white rounded-lg hover:bg-brand-700 text-sm font-medium transition-colors duration-200 shadow-sm shadow-brand-500/20 hover:shadow-md hover:shadow-brand-500/30"
           >
             <span className="flex items-center gap-1.5">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -915,7 +915,7 @@ function App() {
           </button>
           <button
             onClick={handleAddFolder}
-            className="px-3.5 py-1.5 bg-frost-400 text-brand-800 rounded-lg hover:bg-frost-500 text-sm font-medium transition-all duration-200 shadow-sm shadow-frost-400/20"
+            className="px-3.5 py-1.5 bg-frost-400 text-brand-800 rounded-lg hover:bg-frost-500 text-sm font-medium transition-colors duration-200 shadow-sm shadow-frost-400/20"
           >
             <span className="flex items-center gap-1.5">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
@@ -924,7 +924,7 @@ function App() {
           </button>
           <button
             onClick={() => setShowCategoryManager(true)}
-            className="px-3.5 py-1.5 bg-white/60 text-brand-600 rounded-lg hover:bg-white/80 text-sm font-medium transition-all duration-200 border border-brand-200/50"
+            className="px-3.5 py-1.5 bg-white/60 text-brand-600 rounded-lg hover:bg-white/80 text-sm font-medium transition-colors duration-200 border border-brand-200/50"
           >
             <span className="flex items-center gap-1.5">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -933,7 +933,7 @@ function App() {
           </button>
           <button
             onClick={() => setShowSettings(true)}
-            className="px-3.5 py-1.5 bg-white/60 text-slate-600 rounded-lg hover:bg-white/80 text-sm font-medium transition-all duration-200 border border-slate-200/50"
+            className="px-3.5 py-1.5 bg-white/60 text-slate-600 rounded-lg hover:bg-white/80 text-sm font-medium transition-colors duration-200 border border-slate-200/50"
           >
             <span className="flex items-center gap-1.5">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -959,7 +959,7 @@ function App() {
                   setUpdateProgress(null)
                 }
               }}
-              className="px-3.5 py-1.5 bg-brand-500 text-white rounded-lg hover:bg-brand-600 text-sm font-medium transition-all duration-200 shadow-sm shadow-brand-500/20 hover:shadow-md hover:shadow-brand-500/30"
+              className="px-3.5 py-1.5 bg-brand-500 text-white rounded-lg hover:bg-brand-600 text-sm font-medium transition-colors duration-200 shadow-sm shadow-brand-500/20 hover:shadow-md hover:shadow-brand-500/30"
             >
               <span className="flex items-center gap-1.5">
                 {updateDownloading && !updateFilePath ? (
@@ -1031,7 +1031,7 @@ function App() {
                 }
               }
             }}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${
+            className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${
               activeCategory === cat.id
                 ? 'bg-brand-600 text-white shadow-md shadow-brand-500/25'
                 : dragOverCategory === cat.id
@@ -1095,7 +1095,7 @@ function App() {
               setDraggedSubId(null)
               setDragOverSubId(null)
             }}
-            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 ${
+            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors duration-200 ${
               dragOverSubId === sub.id
                 ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
                 : draggedSubId === sub.id
@@ -1108,13 +1108,13 @@ function App() {
         ))}
         <button
           onClick={() => setShowCategoryManager(true)}
-          className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/40 text-slate-400 hover:bg-white/60 hover:text-brand-600 transition-all duration-200 border border-dashed border-brand-200/60"
+          className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/40 text-slate-400 hover:bg-white/60 hover:text-brand-600 transition-colors duration-200 border border-dashed border-brand-200/60"
         >
           + 分类
         </button>
         <button
           onClick={() => setShowSubcategoryManager(true)}
-          className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/40 text-slate-400 hover:bg-white/60 hover:text-brand-600 transition-all duration-200 border border-dashed border-brand-200/60"
+          className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/40 text-slate-400 hover:bg-white/60 hover:text-brand-600 transition-colors duration-200 border border-dashed border-brand-200/60"
         >
           + 子分类
         </button>
@@ -1123,13 +1123,14 @@ function App() {
       <main
         ref={dropZoneRef}
         className="flex-1 overflow-y-scroll px-5 py-4"
-        style={{ scrollbarGutter: 'stable' }}
+        style={{ scrollbarGutter: 'stable', willChange: 'scroll-position', backdropFilter: 'blur(40px) saturate(1.2)', WebkitBackdropFilter: 'blur(40px) saturate(1.2)' }}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
         onDrop={handleDrop}
       >
+        <div key={activeCategory} className="tab-fade-enter" style={{ contain: 'content' }}>
         {(() => {
           const groups: { sub: Subcategory | null; apps: typeof filteredApps }[] = []
           const noSub = filteredApps.filter(a => !a.subcategoryId)
@@ -1150,13 +1151,13 @@ function App() {
                       <div className="flex-1 h-px bg-gradient-to-r from-brand-200/60 to-transparent"></div>
                     </div>
                   )}
-                  <div className={`grid gap-3 ${
+                  <div className={`grid gap-3 stagger-enter ${
                     config?.ui?.gridColumns === 4 ? 'grid-cols-4' :
                     config?.ui?.gridColumns === 5 ? 'grid-cols-5' :
                     config?.ui?.gridColumns === 7 ? 'grid-cols-7' :
                     config?.ui?.gridColumns === 8 ? 'grid-cols-8' :
                     'grid-cols-6'
-                  }`} style={{ gridAutoRows: 'min-content' }}>
+                  }`} style={{ gridAutoRows: 'min-content', contain: 'layout style' }}>
                     {group.apps.map(app => {
                       const ui = config?.ui
                       const pSize = ui?.cardSize === 'small' ? 'p-2' : ui?.cardSize === 'large' ? 'p-5' : 'p-4'
@@ -1232,7 +1233,7 @@ function App() {
                           }, 100)
                         }}
                         style={{ borderRadius: br }}
-                        className={`glass ${pSize} hover:shadow-lg hover:shadow-brand-500/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group relative select-none ${
+                        className={`glass-card ${pSize} card-hover cursor-pointer group relative select-none ${
                           draggedAppId === app.id ? 'opacity-30 scale-95 blur-[2px]' : ''
                         } ${dragOverAppId === app.id ? 'scale-[1.03] ring-2 ring-brand-500 ring-offset-2 shadow-xl shadow-brand-500/20 bg-brand-50/50' : ''}`}
                         onClick={() => handleOpenApp(app)}
@@ -1322,6 +1323,7 @@ function App() {
             <p className="text-slate-300 text-xs mt-1">点击「添加应用」或「添加文件夹」开始使用</p>
           </div>
         )}
+        </div>
       </main>
 
       <footer className="glass px-6 py-2 text-xs text-slate-400 flex justify-between border-t border-brand-100/30">
@@ -1452,12 +1454,12 @@ const SettingsModal = React.memo(function SettingsModal({ config, onClose, onSav
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 modal-backdrop"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="glass rounded-2xl p-6 w-[480px] max-h-[85vh] overflow-auto shadow-xl shadow-brand-500/5">
+      <div className="glass rounded-2xl p-6 w-[480px] max-h-[85vh] overflow-auto shadow-xl shadow-brand-500/5 modal-enter">
         <h2 className="text-lg font-display font-bold text-slate-800 mb-5">设置</h2>
 
         <div className="mb-5">
@@ -1734,12 +1736,12 @@ const AddAppModal = React.memo(function AddAppModal({ categories, onClose, onAdd
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 modal-backdrop"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="glass rounded-2xl p-6 w-96 shadow-xl shadow-brand-500/5">
+      <div className="glass rounded-2xl p-6 w-96 shadow-xl shadow-brand-500/5 modal-enter">
         <h2 className="text-lg font-display font-bold text-slate-800 mb-4">添加应用</h2>
 
         <form onSubmit={handleSubmit}>
@@ -1897,12 +1899,12 @@ const EditAppModal = React.memo(function EditAppModal({ app, categories, onClose
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 modal-backdrop"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="glass rounded-2xl p-6 w-96 shadow-xl shadow-brand-500/5">
+      <div className="glass rounded-2xl p-6 w-96 shadow-xl shadow-brand-500/5 modal-enter">
         <h2 className="text-lg font-display font-bold text-slate-800 mb-4">编辑应用</h2>
 
         <form onSubmit={handleSubmit}>
@@ -2063,12 +2065,12 @@ const CategoryManagerModal = React.memo(function CategoryManagerModal({ categori
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 modal-backdrop"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="glass rounded-2xl p-6 w-[480px] max-h-[80vh] overflow-auto shadow-xl shadow-brand-500/5">
+      <div className="glass rounded-2xl p-6 w-[480px] max-h-[80vh] overflow-auto shadow-xl shadow-brand-500/5 modal-enter">
         <h2 className="text-lg font-display font-bold text-slate-800 mb-4">管理分类</h2>
 
         <div className="mb-4 p-3 bg-brand-50/50 rounded-xl">
@@ -2265,12 +2267,12 @@ const SubcategoryManagerModal = React.memo(function SubcategoryManagerModal({ ca
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 modal-backdrop"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="glass rounded-2xl p-6 w-[520px] max-h-[80vh] overflow-auto shadow-xl shadow-brand-500/5">
+      <div className="glass rounded-2xl p-6 w-[520px] max-h-[80vh] overflow-auto shadow-xl shadow-brand-500/5 modal-enter">
         <h2 className="text-lg font-display font-bold text-slate-800 mb-4">管理子分类</h2>
 
         <div className="mb-4 p-3 bg-brand-50/50 rounded-xl">
