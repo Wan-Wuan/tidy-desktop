@@ -1,6 +1,6 @@
 {
   "name": "tidy-desktop",
-  "version": "1.10.12",
+  "version": "1.10.13",
   "description": "桌面整理应用",
   "main": "dist/main/main/index.js",
   "scripts": {
