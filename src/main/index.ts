@@ -5,7 +5,7 @@ import { registerAppHandlers } from './handlers/appHandlers'
 import { registerFileHandlers } from './handlers/fileHandlers'
 import { registerIconHandlers } from './handlers/iconHandlers'
 import { registerSystemHandlers, setWindowRefs } from './handlers/systemHandlers'
-import { registerUpdateHandlers } from './handlers/updateHandlers'
+import { registerUpdateHandlers } from './update'
 
 const isDev = !app.isPackaged
 
