@@ -34,18 +34,21 @@ export function runInstaller(installerPath: string): Promise<InstallResult> {
     const psScript = `
 try {
   $logFile = '${escapedLogPath}'
-  $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-  "[$timestamp] Waiting for app PID ${currentPid} to exit..." | Out-File -FilePath $logFile -Encoding UTF8
+  $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+  "[$ts] Waiting for app PID ${currentPid} to exit..." | Out-File -FilePath $logFile -Encoding UTF8
 
   Wait-Process -Id ${currentPid} -Timeout 30
 
-  "[$timestamp] App exited, starting installer..." | Out-File -FilePath $logFile -Append -Encoding UTF8
+  $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+  "[$ts] App exited, starting installer..." | Out-File -FilePath $logFile -Append -Encoding UTF8
   Start-Process -FilePath '${escapedInstallerPath}' -ArgumentList '/S' -Wait
 
-  "[$timestamp] Installation completed." | Out-File -FilePath $logFile -Append -Encoding UTF8
+  $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+  "[$ts] Installation completed." | Out-File -FilePath $logFile -Append -Encoding UTF8
 } catch {
+  $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
   $errMsg = $_.Exception.Message
-  "[$timestamp] Error: $errMsg" | Out-File -FilePath $logFile -Append -Encoding UTF8
+  "[$ts] Error: $errMsg" | Out-File -FilePath $logFile -Append -Encoding UTF8
 } finally {
   Remove-Item -Path '${escapedScriptPath}' -Force -ErrorAction SilentlyContinue
 }
