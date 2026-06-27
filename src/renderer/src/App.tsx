@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { AppItem, Category, Subcategory, Config, UISettings } from '../../shared/types'
 import { isFolderPath, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
-import type { UpdateInfo, UpdateProgress } from '../../shared/electron.d'
+import { useUpdate } from './hooks/useUpdate'
+import { UpdateButton, UpdateDialog } from './components/UpdateButton'
 
 
 const EMOJI_LIST = ['🌐', '💻', '🎬', '📄', '🎮', '📦', '🎨', '📱', '🔧', '🎵', '📷', '🛒', '💼', '📚', '🗂️', '⚙️']
@@ -14,11 +15,18 @@ function App() {
   const [subcategories, setSubcategories] = useState<Subcategory[]>([])
   const [showSubcategoryManager, setShowSubcategoryManager] = useState(false)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
-  const [updateDownloading, setUpdateDownloading] = useState(false)
-  const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null)
-  const [updateFilePath, setUpdateFilePath] = useState<string | null>(null)
-  const [currentVersion, setCurrentVersion] = useState('')
+  const {
+    state: updateState,
+    version: updateVersion,
+    progress: updateProgress,
+    releaseNotes: updateReleaseNotes,
+    error: updateError,
+    currentVersion,
+    checkForUpdate: manualCheckForUpdate,
+    retryDownload,
+    confirmInstall,
+    dismissUpdate
+  } = useUpdate()
   const [showSettings, setShowSettings] = useState(false)
   const [showAddApp, setShowAddApp] = useState(false)
   const [showEditApp, setShowEditApp] = useState(false)
@@ -102,20 +110,6 @@ function App() {
 
   useEffect(() => {
     loadData()
-    // Load current version
-    window.electronAPI.getVersion().then(setCurrentVersion).catch(() => { /* ignore */ })
-    // Check for updates on startup
-    window.electronAPI.checkForUpdate().then(info => {
-      setUpdateInfo(info)
-    }).catch(() => { /* ignore */ })
-  }, [])
-
-  // Update progress listener
-  useEffect(() => {
-    const unsub = window.electronAPI.onUpdateProgress((data) => {
-      setUpdateProgress(data)
-    })
-    return unsub
   }, [])
 
   useEffect(() => {
@@ -950,60 +944,7 @@ function App() {
               设置
             </span>
           </button>
-          {updateInfo?.available && (
-            <button
-              disabled={updateDownloading}
-              onClick={async () => {
-                if (updateDownloading) return
-                if (updateFilePath) {
-                  // Already downloaded — install
-                  const ok = await window.electronAPI.installUpdate(updateFilePath)
-                  if (!ok) {
-                    setUpdateFilePath(null)
-                    setUpdateDownloading(false)
-                  }
-                  return
-                }
-                setUpdateDownloading(true)
-                setUpdateProgress(null)
-                try {
-                  const result = await window.electronAPI.downloadUpdate(updateInfo?.downloadUrl)
-                  if (result.success && result.filePath) {
-                    setUpdateFilePath(result.filePath)
-                    const ok = await window.electronAPI.installUpdate(result.filePath)
-                    if (!ok) {
-                      setUpdateFilePath(null)
-                    }
-                  }
-                } catch {
-                  // download promise rejected unexpectedly
-                } finally {
-                  setUpdateDownloading(false)
-                  setUpdateProgress(null)
-                }
-              }}
-              className="px-3.5 py-1.5 bg-brand-500 text-white rounded-lg hover:bg-brand-600 text-sm font-medium transition-colors duration-200 shadow-sm shadow-brand-500/20 hover:shadow-md hover:shadow-brand-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span className="flex items-center gap-1.5">
-                {updateDownloading && !updateFilePath ? (
-                  <>
-                    <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10" strokeDasharray="50" strokeDashoffset={50 - (updateProgress?.percent || 0) / 2} /></svg>
-                    {updateProgress ? `${updateProgress.percent}%` : '下载中...'}
-                  </>
-                ) : updateFilePath ? (
-                  <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                    安装 v{updateInfo.version}
-                  </>
-                ) : (
-                  <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    更新 v{updateInfo.version}
-                  </>
-                )}
-              </span>
-            </button>
-          )}
+          <UpdateButton state={updateState} version={updateVersion} progress={updateProgress ?? undefined} />
         </div>
       </header>
 
@@ -1375,8 +1316,10 @@ function App() {
           currentVersion={currentVersion}
           onClose={() => setShowSettings(false)}
           onSave={handleUpdateConfig}
-          updateInfo={updateInfo}
-          onUpdateInfo={setUpdateInfo}
+          updateState={updateState}
+          updateVersion={updateVersion}
+          updateError={updateError}
+          onCheckUpdate={manualCheckForUpdate}
         />
       )}
 
@@ -1420,17 +1363,28 @@ function App() {
           onMove={handleMoveSubcategory}
         />
       )}
+
+      {updateState === 'downloaded' && (
+        <UpdateDialog
+          version={updateVersion}
+          releaseNotes={updateReleaseNotes}
+          onConfirm={confirmInstall}
+          onDismiss={dismissUpdate}
+        />
+      )}
     </div>
   )
 }
 
-const SettingsModal = React.memo(function SettingsModal({ config, currentVersion, onClose, onSave, updateInfo, onUpdateInfo }: {
+const SettingsModal = React.memo(function SettingsModal({ config, currentVersion, onClose, onSave, updateState, updateVersion, updateError, onCheckUpdate }: {
   config: Config
   currentVersion: string
   onClose: () => void
   onSave: (config: Config) => void
-  updateInfo?: UpdateInfo | null
-  onUpdateInfo?: (info: UpdateInfo | null) => void
+  updateState?: string
+  updateVersion?: string
+  updateError?: string
+  onCheckUpdate?: () => Promise<void>
 }) {
   const [hotkey, setHotkey] = useState(config.hotkey)
   const [searchHotkey, setSearchHotkey] = useState(config.searchHotkey || 'Ctrl+K')
@@ -1440,9 +1394,6 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
     gridColumns: 6, cardSize: 'medium', showIcon: true, showName: true, borderRadius: 8
   })
   const [recording, setRecording] = useState<'main' | 'search' | null>(null)
-  const [checking, setChecking] = useState(false)
-  const [checked, setChecked] = useState(false)
-  const [localUpdateInfo, setLocalUpdateInfo] = useState(updateInfo)
   const engines = config.searchEngines
 
   useEffect(() => {
@@ -1672,45 +1623,35 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
             <div className="flex items-center justify-between mt-2 pt-2 border-t border-brand-100/50">
               <span className="text-sm text-slate-600">检查更新</span>
               <button
-                disabled={checking}
-                onClick={async () => {
-                  setChecking(true)
-                  setChecked(false)
-                  try {
-                    const info = await window.electronAPI.checkForUpdate()
-                    setLocalUpdateInfo(info)
-                    setChecked(true)
-                    if (info.available && onUpdateInfo) onUpdateInfo(info)
-                  } catch { /* ignore */ }
-                  setChecking(false)
-                }}
+                disabled={updateState === 'checking'}
+                onClick={onCheckUpdate}
                 className="px-3 py-1 bg-brand-500 text-white rounded-lg hover:bg-brand-600 text-xs font-medium transition-colors disabled:opacity-50"
               >
-                {checking ? '检查中...' : '检查更新'}
+                {updateState === 'checking' ? '检查中...' : '检查更新'}
               </button>
             </div>
-            {checking && (
+            {updateState === 'checking' && (
               <div className="flex items-center gap-2 mt-2 pt-2 border-t border-brand-100/50">
                 <svg className="animate-spin w-4 h-4 text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeDasharray="50" strokeDashoffset="15" /></svg>
                 <span className="text-sm text-slate-500">正在检查更新...</span>
               </div>
             )}
-            {!checking && checked && localUpdateInfo?.available && (
+            {updateState === 'available' && (
               <div className="flex items-center gap-2 mt-2 pt-2 border-t border-brand-100/50">
                 <span className="text-sm text-emerald-500">🎉</span>
-                <span className="text-sm text-brand-600 font-medium">发现新版本 v{localUpdateInfo.version}</span>
+                <span className="text-sm text-brand-600 font-medium">发现新版本 v{updateVersion}</span>
               </div>
             )}
-            {!checking && checked && localUpdateInfo && !localUpdateInfo.available && (
+            {updateState === 'idle' && !updateError && (
               <div className="flex items-center gap-2 mt-2 pt-2 border-t border-brand-100/50">
                 <span className="text-sm text-emerald-500">✓</span>
                 <span className="text-sm text-emerald-600">已是最新版本</span>
               </div>
             )}
-            {!checking && checked && localUpdateInfo?.error && (
+            {updateError && (
               <div className="flex items-center gap-2 mt-2 pt-2 border-t border-brand-100/50">
                 <span className="text-sm text-red-500">✕</span>
-                <span className="text-sm text-red-500">检查失败：{localUpdateInfo.error}</span>
+                <span className="text-sm text-red-500">检查失败：{updateError}</span>
               </div>
             )}
           </div>
