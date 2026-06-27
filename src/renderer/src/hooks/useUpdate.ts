@@ -76,7 +76,10 @@ export function useUpdate(): UseUpdateReturn {
   }, [])
 
   const checkForUpdateInternal = useCallback(async (autoDownload = false) => {
-    if (mountedRef.current) setState('checking')
+    if (mountedRef.current) {
+      setState('checking')
+      setError(undefined)
+    }
     try {
       const info = await window.electronAPI.checkForUpdate()
       if (!mountedRef.current) return
@@ -126,7 +129,10 @@ export function useUpdate(): UseUpdateReturn {
   }, [])
 
   const dismissUpdate = useCallback(() => {
-    if (mountedRef.current) setState('idle')
+    if (mountedRef.current) {
+      setState('idle')
+      setError(undefined)
+    }
   }, [])
 
   // Cleanup on unmount
