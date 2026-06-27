@@ -56,7 +56,10 @@ try {
 
     fs.writeFileSync(PS_SCRIPT, psScript, 'utf-8')
 
-    const child = spawn('powershell', [
+    // Use cmd /c start to launch PowerShell as a fully independent process
+    // This ensures the script survives after app.quit() on Windows
+    const child = spawn('cmd.exe', [
+      '/c', 'start', '', 'powershell',
       '-ExecutionPolicy', 'Bypass',
       '-WindowStyle', 'Hidden',
       '-File', PS_SCRIPT
