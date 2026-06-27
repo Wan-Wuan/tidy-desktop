@@ -76,8 +76,9 @@ try {
         spawnCalled = true
         child.unref()
         resolve({ success: true })
-        // Quit after confirming spawn — PowerShell script waits for process exit
-        setTimeout(() => app.quit(), 500)
+        // Force exit immediately — skip window close handlers that would hide instead of quit
+        // PowerShell script (cmd /c start) is already independent, no need to wait
+        setTimeout(() => app.exit(0), 500)
       })
 
       child.on('error', (err) => {
