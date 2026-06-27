@@ -1,6 +1,7 @@
 import https from 'https'
 import http from 'http'
 import fs from 'fs'
+import { DownloadProgress } from './types'
 
 const MAX_REDIRECTS = 5
 
@@ -64,4 +65,113 @@ export function fetchJson<T = any>(url: string, redirectsLeft = MAX_REDIRECTS): 
 
 export function cleanupFile(filePath: string): void {
   try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath) } catch { /* ignore */ }
+}
+
+export function downloadFile(
+  url: string,
+  dest: string,
+  onProgress?: (progress: DownloadProgress) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+
+    const fail = (err: Error) => {
+      if (settled) return
+      settled = true
+      cleanupFile(dest)
+      reject(err)
+    }
+
+    // Check existing partial file
+    let existingSize = 0
+    try {
+      if (fs.existsSync(dest)) {
+        const stat = fs.statSync(dest)
+        existingSize = stat.size
+      }
+    } catch {
+      existingSize = 0
+    }
+
+    const follow = (downloadUrl: string, redirectsLeft: number) => {
+      if (redirectsLeft <= 0) {
+        fail(new Error('Too many redirects'))
+        return
+      }
+
+      const options: https.RequestOptions = {}
+      if (existingSize > 0) {
+        options.headers = { Range: `bytes=${existingSize}-` }
+      }
+
+      const client = downloadUrl.startsWith('https') ? https : http
+      const req = client.get(downloadUrl, options, (res) => {
+        if (res.statusCode === 302 || res.statusCode === 301) {
+          const redirect = res.headers.location
+          if (redirect && redirect.startsWith('https://')) {
+            res.resume()
+            follow(redirect, redirectsLeft - 1)
+            return
+          }
+          fail(new Error('Invalid redirect'))
+          return
+        }
+
+        // 206 = Partial Content (resume supported)
+        // 200 = Full content (resume not supported, start fresh)
+        if (res.statusCode === 200 && existingSize > 0) {
+          // Server doesn't support range, restart
+          existingSize = 0
+          cleanupFile(dest)
+        } else if (res.statusCode !== 200 && res.statusCode !== 206) {
+          fail(new Error(`Download failed: HTTP ${res.statusCode}`))
+          return
+        }
+
+        const contentLength = parseInt(res.headers['content-length'] || '0', 10)
+        const total = existingSize + contentLength
+        let transferred = existingSize
+
+        const file = fs.createWriteStream(dest, existingSize > 0 ? { flags: 'a' } : {})
+
+        res.pipe(file)
+
+        res.on('data', (chunk) => {
+          transferred += chunk.length
+          if (onProgress && total > 0) {
+            onProgress({ percent: Math.round((transferred / total) * 100), transferred, total })
+          }
+        })
+
+        file.on('finish', () => {
+          if (settled) return
+          // Validate total size if known
+          if (total > 0 && transferred !== total) {
+            fail(new Error(`Download incomplete: ${transferred}/${total} bytes`))
+            return
+          }
+          settled = true
+          resolve()
+        })
+
+        file.on('error', () => {
+          res.destroy()
+          fail(new Error('Write failed'))
+        })
+
+        res.on('error', () => {
+          file.destroy()
+          fail(new Error('Download stream error'))
+        })
+      })
+
+      req.on('error', (err) => fail(err))
+      req.setTimeout(120000, () => {
+        req.destroy()
+        fail(new Error('download timeout'))
+      })
+    }
+
+    follow(url, MAX_REDIRECTS)
+  })
 }
