@@ -12,6 +12,7 @@ interface UseUpdateReturn {
   currentVersion: string
 
   checkForUpdate: () => Promise<void>
+  startDownload: () => void
   confirmInstall: () => Promise<void>
   dismissUpdate: () => void
 }
@@ -23,6 +24,7 @@ export function useUpdate(): UseUpdateReturn {
   const [error, setError] = useState<string | undefined>()
   const [releaseNotes, setReleaseNotes] = useState<string | undefined>()
   const [currentVersion, setCurrentVersion] = useState('')
+  const [downloadUrl, setDownloadUrl] = useState<string | undefined>()
   const mountedRef = useRef(true)
 
   // Load current version on mount
@@ -83,11 +85,9 @@ export function useUpdate(): UseUpdateReturn {
 
       if (info.available) {
         setVersion(info.version)
+        setDownloadUrl(info.downloadUrl)
         setReleaseNotes(info.releaseNotes)
-
-        // Always trigger download (both auto-check on startup and manual check)
         setState('available')
-        await startDownloadInternal(info.downloadUrl)
       } else {
         setState('idle')
         if (info.error) setError(info.error)
@@ -98,11 +98,15 @@ export function useUpdate(): UseUpdateReturn {
         setError(err.message)
       }
     }
-  }, [startDownloadInternal])
+  }, [])
 
   const checkForUpdate = useCallback(async () => {
     await checkForUpdateInternal()
   }, [checkForUpdateInternal])
+
+  const startDownload = useCallback(async () => {
+    await startDownloadInternal(downloadUrl)
+  }, [startDownloadInternal, downloadUrl])
 
   const confirmInstall = useCallback(async () => {
     if (mountedRef.current) setState('installing')
@@ -136,6 +140,7 @@ export function useUpdate(): UseUpdateReturn {
     releaseNotes,
     currentVersion,
     checkForUpdate,
+    startDownload,
     confirmInstall,
     dismissUpdate
   }

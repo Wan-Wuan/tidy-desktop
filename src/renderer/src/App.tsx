@@ -23,6 +23,7 @@ function App() {
     error: updateError,
     currentVersion,
     checkForUpdate: manualCheckForUpdate,
+    startDownload,
     confirmInstall,
     dismissUpdate
   } = useUpdate()
@@ -1361,6 +1362,40 @@ function App() {
           onUpdate={handleUpdateSubcategory}
           onMove={handleMoveSubcategory}
         />
+      )}
+
+      {updateState === 'available' && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 modal-backdrop"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) dismissUpdate() }}
+        >
+          <div className="glass rounded-2xl p-6 w-[400px] shadow-xl shadow-brand-500/5 modal-enter">
+            <h3 className="text-lg font-display font-bold text-slate-800 mb-2">
+              🎉 发现新版本 v{updateVersion}
+            </h3>
+            {updateReleaseNotes && (
+              <div className="text-sm text-slate-600 mb-4 max-h-40 overflow-y-auto">
+                <p className="font-medium mb-1">更新内容：</p>
+                <div className="whitespace-pre-wrap">{updateReleaseNotes}</div>
+              </div>
+            )}
+            <p className="text-sm text-slate-500 mb-4">是否下载更新？</p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={dismissUpdate}
+                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                稍后再说
+              </button>
+              <button
+                onClick={startDownload}
+                className="px-4 py-2 text-sm bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
+              >
+                下载更新
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {updateState === 'downloaded' && (
