@@ -23,7 +23,6 @@ function App() {
     error: updateError,
     currentVersion,
     checkForUpdate: manualCheckForUpdate,
-    retryDownload,
     confirmInstall,
     dismissUpdate
   } = useUpdate()

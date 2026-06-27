@@ -194,7 +194,7 @@ export async function downloadWithRetry(
       lastError = err
 
       // Don't retry on non-retryable errors
-      if (err.message?.includes('HTTP 404') || err.message?.includes('too many redirects')) {
+      if (err.message?.includes('HTTP 404') || err.message?.includes('Too many redirects')) {
         throw err
       }
 

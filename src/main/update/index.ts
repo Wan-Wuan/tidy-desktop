@@ -1,8 +1,7 @@
 import { ipcMain, app } from 'electron'
-import fs from 'fs'
 import { compareVersions, fetchJson, downloadWithRetry, cleanupFile } from './network'
 import { runInstaller, getUpdateFilePath } from './installer'
-import { UpdateInfo, UpdateStatus } from './types'
+import { UpdateInfo } from './types'
 
 const GITHUB_API = 'https://api.github.com/repos/Wan-Wuan/tidy-desktop/releases/latest'
 
@@ -37,17 +36,6 @@ export function registerUpdateHandlers() {
     } catch (err: any) {
       return { available: false, error: err.message || 'check failed' }
     }
-  })
-
-  ipcMain.handle('get-update-status', async (): Promise<UpdateStatus> => {
-    const updateFile = getUpdateFilePath()
-    if (fs.existsSync(updateFile)) {
-      const stat = fs.statSync(updateFile)
-      if (stat.size > 0) {
-        return { state: 'downloaded' }
-      }
-    }
-    return { state: 'idle' }
   })
 
   ipcMain.handle('download-update', async (event, downloadUrl?: string) => {

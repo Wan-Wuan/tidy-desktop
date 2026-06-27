@@ -1,5 +1,3 @@
-export type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing'
-
 export interface UpdateInfo {
   available: boolean
   version?: string
@@ -14,21 +12,7 @@ export interface DownloadProgress {
   total: number
 }
 
-export interface DownloadResult {
-  success: boolean
-  filePath?: string
-  error?: string
-}
-
 export interface InstallResult {
   success: boolean
   error?: string
-}
-
-export interface UpdateStatus {
-  state: UpdateState
-  version?: string
-  progress?: DownloadProgress
-  error?: string
-  releaseNotes?: string
 }

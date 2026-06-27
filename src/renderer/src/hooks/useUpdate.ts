@@ -12,7 +12,6 @@ interface UseUpdateReturn {
   currentVersion: string
 
   checkForUpdate: () => Promise<void>
-  retryDownload: () => Promise<void>
   confirmInstall: () => Promise<void>
   dismissUpdate: () => void
 }
@@ -24,8 +23,6 @@ export function useUpdate(): UseUpdateReturn {
   const [error, setError] = useState<string | undefined>()
   const [releaseNotes, setReleaseNotes] = useState<string | undefined>()
   const [currentVersion, setCurrentVersion] = useState('')
-  const [downloadUrl, setDownloadUrl] = useState<string | undefined>()
-
   const mountedRef = useRef(true)
 
   // Load current version on mount
@@ -37,7 +34,7 @@ export function useUpdate(): UseUpdateReturn {
 
   // Auto-check for updates on mount
   useEffect(() => {
-    checkForUpdateInternal(true)
+    checkForUpdateInternal()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Progress listener
@@ -75,7 +72,7 @@ export function useUpdate(): UseUpdateReturn {
     }
   }, [])
 
-  const checkForUpdateInternal = useCallback(async (autoDownload = false) => {
+  const checkForUpdateInternal = useCallback(async () => {
     if (mountedRef.current) {
       setState('checking')
       setError(undefined)
@@ -86,16 +83,11 @@ export function useUpdate(): UseUpdateReturn {
 
       if (info.available) {
         setVersion(info.version)
-        setDownloadUrl(info.downloadUrl)
         setReleaseNotes(info.releaseNotes)
 
-        if (autoDownload) {
-          // Auto-download on startup
-          setState('available')
-          await startDownloadInternal(info.downloadUrl)
-        } else {
-          setState('available')
-        }
+        // Always trigger download (both auto-check on startup and manual check)
+        setState('available')
+        await startDownloadInternal(info.downloadUrl)
       } else {
         setState('idle')
         if (info.error) setError(info.error)
@@ -109,12 +101,8 @@ export function useUpdate(): UseUpdateReturn {
   }, [startDownloadInternal])
 
   const checkForUpdate = useCallback(async () => {
-    await checkForUpdateInternal(false)
+    await checkForUpdateInternal()
   }, [checkForUpdateInternal])
-
-  const retryDownload = useCallback(async () => {
-    await startDownloadInternal(downloadUrl)
-  }, [startDownloadInternal, downloadUrl])
 
   const confirmInstall = useCallback(async () => {
     if (mountedRef.current) setState('installing')
@@ -148,7 +136,6 @@ export function useUpdate(): UseUpdateReturn {
     releaseNotes,
     currentVersion,
     checkForUpdate,
-    retryDownload,
     confirmInstall,
     dismissUpdate
   }
