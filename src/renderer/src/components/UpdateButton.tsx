@@ -43,9 +43,14 @@ interface UpdateDialogProps {
 
 export function UpdateDialog({ version, releaseNotes, onConfirm, onDismiss }: UpdateDialogProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="bg-white/90 backdrop-blur-md rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
-        <h3 className="text-lg font-semibold text-slate-800 mb-2">
+    <div
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 modal-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onDismiss()
+      }}
+    >
+      <div className="glass rounded-2xl p-6 w-[400px] shadow-xl shadow-brand-500/5 modal-enter">
+        <h3 className="text-lg font-display font-bold text-slate-800 mb-2">
           🎉 新版本 v{version} 已准备就绪
         </h3>
         {releaseNotes && (
