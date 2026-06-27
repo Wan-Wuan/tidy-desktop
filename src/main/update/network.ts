@@ -99,9 +99,11 @@ export function downloadFile(
         return
       }
 
-      const options: https.RequestOptions = {}
-      if (existingSize > 0) {
-        options.headers = { Range: `bytes=${existingSize}-` }
+      const options: https.RequestOptions = {
+        headers: {
+          'User-Agent': 'tidy-desktop-updater',
+          ...(existingSize > 0 ? { Range: `bytes=${existingSize}-` } : {})
+        }
       }
 
       const client = downloadUrl.startsWith('https') ? https : http
