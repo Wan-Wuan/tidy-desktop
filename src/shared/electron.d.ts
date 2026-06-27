@@ -14,6 +14,14 @@ export interface UpdateProgress {
   total: number
 }
 
+export interface UpdateStatus {
+  state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing'
+  version?: string
+  progress?: UpdateProgress
+  error?: string
+  releaseNotes?: string
+}
+
 declare global {
   interface Window {
     electronAPI: {
@@ -44,6 +52,7 @@ declare global {
       onResetSearch: (callback: () => void) => () => void
       getVersion: () => Promise<string>
       checkForUpdate: () => Promise<UpdateInfo>
+      getUpdateStatus: () => Promise<UpdateStatus>
       downloadUpdate: (downloadUrl?: string) => Promise<{ success: boolean; filePath?: string; error?: string }>
       installUpdate: (filePath: string) => Promise<boolean>
       onUpdateProgress: (callback: (data: UpdateProgress) => void) => () => void

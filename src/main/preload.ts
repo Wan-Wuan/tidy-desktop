@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getVersion: () => ipcRenderer.invoke('get-version'),
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
+  getUpdateStatus: () => ipcRenderer.invoke('get-update-status'),
   downloadUpdate: (downloadUrl?: string) => ipcRenderer.invoke('download-update', downloadUrl),
   installUpdate: (filePath: string) => ipcRenderer.invoke('install-update', filePath),
   onUpdateProgress: (callback: (data: { percent: number; transferred: number; total: number }) => void) => {
