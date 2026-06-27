@@ -177,3 +177,34 @@ export function downloadFile(
     follow(url, MAX_REDIRECTS)
   })
 }
+
+export async function downloadWithRetry(
+  url: string,
+  dest: string,
+  onProgress?: (progress: DownloadProgress) => void,
+  maxRetries = 3
+): Promise<void> {
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await downloadFile(url, dest, onProgress)
+      return // success
+    } catch (err: any) {
+      lastError = err
+
+      // Don't retry on non-retryable errors
+      if (err.message?.includes('HTTP 404') || err.message?.includes('too many redirects')) {
+        throw err
+      }
+
+      // Wait before retry (exponential backoff: 1s, 2s, 4s)
+      if (attempt < maxRetries) {
+        const delay = Math.pow(2, attempt) * 1000
+        await new Promise(r => setTimeout(r, delay))
+      }
+    }
+  }
+
+  throw lastError || new Error('Download failed after retries')
+}
