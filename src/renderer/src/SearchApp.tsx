@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'
 import { AppItem, Config, Category } from '../../shared/types'
 import { getFolderSuggestion, checkSearchEngine } from '../../shared/utils'
 
@@ -10,7 +10,9 @@ interface SearchEngineInfo {
 
 const MAX_DISPLAY = 6
 const INPUT_HEIGHT = 56
-const ROW_HEIGHT = 57
+const RESULT_ITEM_HEIGHT = 51
+const RESULT_ITEM_GAP = 4
+const RESULTS_PADDING_Y = 8
 const NO_RESULTS_HEIGHT = 44
 const RESIZE_DEBOUNCE_MS = 80
 
@@ -25,6 +27,7 @@ function SearchApp() {
   const inputRef = useRef<HTMLInputElement>(null)
   const queryRef = useRef('')
   const resultsRef = useRef<AppItem[]>([])
+  const resultsContainerRef = useRef<HTMLDivElement>(null)
   const isActiveRef = useRef(false)
   const resizeTimerRef = useRef<NodeJS.Timeout | null>(null)
   const currentHeightRef = useRef(INPUT_HEIGHT)
@@ -60,10 +63,27 @@ function SearchApp() {
   }, [])
 
   // activeIndex 变化时滚动到可视区域
-  useEffect(() => {
-    const el = document.querySelector('.search-result-item.active')
-    if (el) el.scrollIntoView({ block: 'nearest' })
-  }, [activeIndex])
+  useLayoutEffect(() => {
+    const container = resultsContainerRef.current
+    if (!container) return
+
+    const item = container.querySelector<HTMLElement>('.search-result-item.active')
+    if (!item) return
+
+    const style = window.getComputedStyle(container)
+    const paddingTop = parseFloat(style.paddingTop) || 0
+    const paddingBottom = parseFloat(style.paddingBottom) || 0
+    const itemTop = item.offsetTop - paddingTop
+    const itemBottom = itemTop + item.offsetHeight
+    const visibleTop = container.scrollTop
+    const visibleBottom = visibleTop + container.clientHeight
+
+    if (itemTop < visibleTop) {
+      container.scrollTop = itemTop
+    } else if (itemBottom > visibleBottom) {
+      container.scrollTop = itemBottom - container.clientHeight + paddingBottom
+    }
+  }, [activeIndex, results])
 
   const resizeWindow = useCallback((resultCount: number, hasQuery: boolean = false) => {
     if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
@@ -71,7 +91,11 @@ function SearchApp() {
       let targetHeight: number
       if (resultCount > 0) {
         const count = Math.min(resultCount, MAX_DISPLAY)
-        targetHeight = INPUT_HEIGHT + count * ROW_HEIGHT
+        const resultsHeight =
+          RESULTS_PADDING_Y * 2 +
+          count * RESULT_ITEM_HEIGHT +
+          Math.max(0, count - 1) * RESULT_ITEM_GAP
+        targetHeight = INPUT_HEIGHT + resultsHeight
       } else if (hasQuery) {
         targetHeight = INPUT_HEIGHT + NO_RESULTS_HEIGHT
       } else {
@@ -347,7 +371,7 @@ function SearchApp() {
       </div>
 
       {hasResults && (
-        <div className="search-results">
+        <div className="search-results" ref={resultsContainerRef}>
           {results.map((app, index) => (
             <div
               key={app.id}

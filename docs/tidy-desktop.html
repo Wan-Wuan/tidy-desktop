@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tidy Desktop - 桌面整理启动台</title>
+  <link rel="icon" type="image/svg+xml" href="../public/favicon.svg" />
+  <style>
+    :root {
+      --ink: #071312;
+      --pine: #10201f;
+      --reef: #25bba6;
+      --mint: #c8fff2;
+      --cloud: #f4fffc;
+      --blue: #4e7fff;
+      --amber: #ffb545;
+      --line: rgba(244, 255, 252, .18);
+      --muted: rgba(244, 255, 252, .68);
+      --paper: #eef8f4;
+      --text: #132522;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    html,
+    body {
+      width: 100%;
+      overflow-x: hidden;
+    }
+
+    body {
+      margin: 0;
+      color: var(--cloud);
+      background: var(--ink);
+      font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      line-height: 1.55;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    a:focus-visible,
+    .button:focus-visible {
+      outline: 3px solid var(--amber);
+      outline-offset: 4px;
+    }
+
+    .page {
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(7, 19, 18, .2), var(--ink) 720px),
+        radial-gradient(circle at 50% 18%, rgba(37, 187, 166, .2), transparent 32%),
+        var(--ink);
+    }
+
+    .hero {
+      position: relative;
+      min-height: 92vh;
+      padding: 28px clamp(20px, 5vw, 72px) 64px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      isolation: isolate;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -2;
+      background:
+        linear-gradient(90deg, rgba(244, 255, 252, .09) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(244, 255, 252, .07) 1px, transparent 1px);
+      background-size: 72px 72px;
+      mask-image: linear-gradient(to bottom, black, transparent 82%);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 26px;
+      width: min(960px, calc(100vw - 40px));
+      height: 72px;
+      transform: translateX(-50%);
+      z-index: -1;
+      border: 1px solid rgba(200, 255, 242, .22);
+      border-radius: 999px;
+      background: linear-gradient(90deg, transparent, rgba(200, 255, 242, .13), transparent);
+    }
+
+    .nav {
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+      letter-spacing: .02em;
+    }
+
+    .brand img {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: clamp(12px, 3vw, 28px);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .nav-links a,
+    .brand {
+      cursor: pointer;
+      transition: color 180ms ease;
+    }
+
+    .nav-links a:hover,
+    .brand:hover {
+      color: var(--cloud);
+    }
+
+    .hero-inner {
+      position: relative;
+      display: grid;
+      align-content: center;
+      justify-items: center;
+      text-align: center;
+      padding: 42px 0 0;
+    }
+
+    .icon-stage {
+      position: relative;
+      width: min(270px, 48vw);
+      margin-bottom: 26px;
+      aspect-ratio: 1;
+    }
+
+    .icon-stage img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border-radius: 28%;
+      box-shadow: 0 34px 90px rgba(0, 0, 0, .42);
+    }
+
+    .icon-stage::before,
+    .icon-stage::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      width: min(150%, calc(100vw - 40px));
+      height: 18px;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      background: rgba(200, 255, 242, .12);
+    }
+
+    .icon-stage::before {
+      top: 28%;
+      z-index: -1;
+    }
+
+    .icon-stage::after {
+      bottom: 16%;
+      z-index: -1;
+      background: rgba(255, 181, 69, .14);
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 920px;
+      font-size: clamp(48px, 11vw, 126px);
+      line-height: .86;
+      letter-spacing: 0;
+      font-weight: 850;
+    }
+
+    .subtitle {
+      max-width: 720px;
+      margin: 26px auto 0;
+      color: var(--muted);
+      font-size: clamp(17px, 2.4vw, 24px);
+    }
+
+    .actions {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 34px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 0 22px;
+      border-radius: 999px;
+      font-weight: 700;
+      border: 1px solid rgba(244, 255, 252, .22);
+      cursor: pointer;
+      transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .button:hover {
+      border-color: rgba(244, 255, 252, .42);
+    }
+
+    .button.primary {
+      color: var(--ink);
+      background: var(--mint);
+      box-shadow: 0 18px 45px rgba(37, 187, 166, .22);
+    }
+
+    .button.primary:hover {
+      background: #e2fff8;
+      box-shadow: 0 22px 54px rgba(37, 187, 166, .28);
+    }
+
+    .button.secondary {
+      color: var(--cloud);
+      background: rgba(244, 255, 252, .06);
+    }
+
+    .button.secondary:hover {
+      background: rgba(244, 255, 252, .11);
+    }
+
+    .hint-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(86px, 1fr));
+      gap: 10px;
+      width: min(820px, calc(100vw - 40px));
+      margin-top: 36px;
+      color: rgba(244, 255, 252, .7);
+      font-size: 13px;
+    }
+
+    .hint-row span {
+      padding: 9px 10px;
+      border-top: 1px solid rgba(244, 255, 252, .16);
+      text-align: center;
+    }
+
+    .section {
+      padding: clamp(62px, 9vw, 110px) clamp(20px, 5vw, 72px);
+    }
+
+    .section.light {
+      color: var(--text);
+      background: var(--paper);
+    }
+
+    .section-head {
+      max-width: 760px;
+      margin-bottom: 34px;
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--reef);
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(31px, 5.2vw, 62px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .section-copy {
+      margin: 16px 0 0;
+      max-width: 690px;
+      color: rgba(19, 37, 34, .7);
+      font-size: 17px;
+    }
+
+    .belt {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+
+    .tile {
+      min-height: 210px;
+      padding: 22px;
+      border-radius: 8px;
+      background: #ffffff;
+      border: 1px solid rgba(16, 32, 31, .1);
+      box-shadow: 0 18px 38px rgba(16, 32, 31, .08);
+    }
+
+    .tile,
+    .release-panel,
+    .search-panel {
+      min-width: 0;
+    }
+
+    .tile-mark {
+      width: 52px;
+      height: 52px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 28px;
+      border-radius: 16px;
+      color: var(--ink);
+      font-size: 25px;
+      font-weight: 900;
+    }
+
+    .tile:nth-child(1) .tile-mark { background: #76e4c7; }
+    .tile:nth-child(2) .tile-mark { background: #9fb8ff; }
+    .tile:nth-child(3) .tile-mark { background: #ffe39a; }
+    .tile:nth-child(4) .tile-mark { background: #ff9f7a; }
+
+    .tile h3 {
+      margin: 0 0 10px;
+      font-size: 22px;
+    }
+
+    .tile p {
+      margin: 0;
+      color: rgba(19, 37, 34, .66);
+      font-size: 15px;
+    }
+
+    .palette {
+      color: var(--cloud);
+      background: linear-gradient(135deg, #0a1514, #142723);
+    }
+
+    .command {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 460px);
+      gap: clamp(28px, 6vw, 70px);
+      align-items: center;
+    }
+
+    .command .section-copy {
+      color: var(--muted);
+    }
+
+    .search-panel {
+      padding: 18px;
+      border-radius: 8px;
+      border: 1px solid rgba(244, 255, 252, .18);
+      background: rgba(244, 255, 252, .08);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 28px 80px rgba(0, 0, 0, .28);
+      max-width: 100%;
+    }
+
+    .search-input {
+      height: 54px;
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      border-radius: 7px;
+      color: var(--cloud);
+      background: rgba(7, 19, 18, .8);
+      font-size: 18px;
+      font-weight: 700;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .result {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 10px;
+      border-bottom: 1px solid rgba(244, 255, 252, .1);
+    }
+
+    .result:last-child {
+      border-bottom: 0;
+    }
+
+    .result-icon {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      color: var(--ink);
+      background: var(--mint);
+      font-weight: 900;
+    }
+
+    .result small {
+      display: block;
+      color: rgba(244, 255, 252, .5);
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .result-text {
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .result-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .key {
+      color: var(--mint);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .download {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 24px;
+      align-items: stretch;
+    }
+
+    .release-panel {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 280px;
+      padding: 28px;
+      border-radius: 8px;
+      color: var(--cloud);
+      background: var(--pine);
+    }
+
+    .release-panel strong {
+      font-size: clamp(44px, 8vw, 86px);
+      line-height: .92;
+    }
+
+    .release-panel p {
+      color: var(--muted);
+      margin: 12px 0 0;
+    }
+
+    .download-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .download-list a {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px 0;
+      border-bottom: 1px solid rgba(19, 37, 34, .16);
+      font-weight: 750;
+      cursor: pointer;
+      transition: color 180ms ease, border-color 180ms ease;
+    }
+
+    .download-list a:hover {
+      color: #0a6f63;
+      border-color: rgba(37, 187, 166, .42);
+    }
+
+    .download-list span {
+      color: rgba(19, 37, 34, .55);
+      font-weight: 600;
+    }
+
+    .footer {
+      padding: 34px clamp(20px, 5vw, 72px);
+      border-top: 1px solid var(--line);
+      color: rgba(244, 255, 252, .56);
+      font-size: 14px;
+    }
+
+    @media (max-width: 860px) {
+      .nav {
+        align-items: flex-start;
+        height: auto;
+        padding-bottom: 14px;
+        flex-direction: column;
+      }
+
+      .hint-row,
+      .belt,
+      .command,
+      .download {
+        grid-template-columns: 1fr;
+      }
+
+      .hint-row {
+        margin-top: 34px;
+      }
+
+      .hero {
+        min-height: auto;
+        padding-bottom: 34px;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .hero {
+        padding-inline: 16px;
+      }
+
+      .nav-links {
+        width: 100%;
+        justify-content: space-between;
+        flex-wrap: wrap;
+      }
+
+      h1 {
+        font-size: clamp(42px, 18vw, 78px);
+      }
+
+      .icon-stage {
+        width: min(210px, 58vw);
+      }
+
+      .actions,
+      .button {
+        width: 100%;
+      }
+
+      .button {
+        padding-inline: 16px;
+      }
+
+      .hint-row {
+        width: 100%;
+      }
+
+      .download-list a {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+      }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .icon-stage {
+        animation: settle 900ms cubic-bezier(.2, .8, .2, 1) both;
+      }
+
+      .hero-inner h1,
+      .subtitle,
+      .actions {
+        animation: rise 760ms cubic-bezier(.2, .8, .2, 1) both;
+      }
+
+      .subtitle { animation-delay: 90ms; }
+      .actions { animation-delay: 160ms; }
+    }
+
+    @keyframes settle {
+      from { opacity: 0; transform: translateY(18px) scale(.96); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero" aria-labelledby="hero-title">
+      <nav class="nav" aria-label="页面导航">
+        <a class="brand" href="#hero-title">
+          <img src="../build/icon-256.png" alt="" />
+          <span>Tidy Desktop</span>
+        </a>
+        <div class="nav-links">
+          <a href="#organize">整理</a>
+          <a href="#search">搜索</a>
+          <a href="#download">下载</a>
+        </div>
+      </nav>
+
+      <div class="hero-inner">
+        <div class="icon-stage" aria-hidden="true">
+          <img src="../build/icon-256.png" alt="" />
+        </div>
+        <h1 id="hero-title">Tidy Desktop</h1>
+        <p class="subtitle">把散在桌面、文件夹、应用和 Steam 游戏里的入口，收进一个清爽的 Windows 启动台。</p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest">下载最新版</a>
+          <a class="button secondary" href="#search">查看搜索体验</a>
+        </div>
+        <div class="hint-row" aria-label="核心能力">
+          <span>应用分组</span>
+          <span>全局热键</span>
+          <span>拼音搜索</span>
+          <span>自动更新</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section light" id="organize">
+      <div class="section-head">
+        <p class="eyebrow">整理对象</p>
+        <h2>桌面不是仓库，是入口。</h2>
+        <p class="section-copy">Tidy Desktop 把常用内容按使用场景归档：工作、游戏、文件、临时路径。你不需要记住它在哪里，只需要知道现在要做什么。</p>
+      </div>
+      <div class="belt">
+        <article class="tile">
+          <div class="tile-mark">A</div>
+          <h3>应用</h3>
+          <p>拖入 exe 或快捷方式，自动提取图标，按分类和子分类排列。</p>
+        </article>
+        <article class="tile">
+          <div class="tile-mark">F</div>
+          <h3>文件夹</h3>
+          <p>把深层目录变成一键入口，项目、素材、下载目录都能快速打开。</p>
+        </article>
+        <article class="tile">
+          <div class="tile-mark">D</div>
+          <h3>文件</h3>
+          <p>文档和图片可以直接复制或拖到外部应用，少走几步系统菜单。</p>
+        </article>
+        <article class="tile">
+          <div class="tile-mark">S</div>
+          <h3>Steam</h3>
+          <p>拖入 Steam 链接，自动识别游戏名称和封面，游戏库也能归位。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section palette" id="search">
+      <div class="command">
+        <div>
+          <p class="eyebrow">快速搜索</p>
+          <h2>按下热键，输入一个线索。</h2>
+          <p class="section-copy">中文名、拼音、首字母、路径、搜索引擎前缀都能成为入口。没有本地结果时，回车会交给默认搜索引擎。</p>
+        </div>
+        <div class="search-panel" aria-label="搜索界面示意">
+          <div class="search-input">wx design</div>
+          <div class="result">
+            <div class="result-icon">微</div>
+            <div class="result-text"><div class="result-name">微信</div><small>工作 / 通讯</small></div>
+            <div class="key">wx</div>
+          </div>
+          <div class="result">
+            <div class="result-icon">Ps</div>
+            <div class="result-text"><div class="result-name">Photoshop</div><small>设计 / 图片</small></div>
+            <div class="key">design</div>
+          </div>
+          <div class="result">
+            <div class="result-icon">C:</div>
+            <div class="result-text"><div class="result-name">打开文件夹</div><small>C:\Users\Downloads</small></div>
+            <div class="key">path</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section light" id="download">
+      <div class="download">
+        <div class="section-head">
+          <p class="eyebrow">发布</p>
+          <h2>为 Windows 桌面准备。</h2>
+          <p class="section-copy">安装包使用 NSIS，支持自定义安装目录、桌面快捷方式、开始菜单快捷方式和应用内更新。</p>
+        </div>
+        <aside class="release-panel">
+          <div>
+            <strong>v1.10.15</strong>
+            <p>包含单实例运行、更新安装包复用、快捷方式图标优化。</p>
+          </div>
+          <a class="button primary" href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest">前往 GitHub Releases</a>
+        </aside>
+      </div>
+      <div class="download-list" aria-label="下载资源">
+        <a href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest">
+          <strong>Windows 安装包</strong>
+          <span>NSIS / x64</span>
+        </a>
+        <a href="https://github.com/Wan-Wuan/tidy-desktop">
+          <strong>源代码仓库</strong>
+          <span>Electron + React + TypeScript</span>
+        </a>
+      </div>
+    </section>
+
+    <footer class="footer">
+      Tidy Desktop - a compact launchpad for the desk you actually use.
+    </footer>
+  </main>
+</body>
+</html>
