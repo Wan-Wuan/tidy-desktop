@@ -24,7 +24,6 @@ export function useUpdate(): UseUpdateReturn {
   const [error, setError] = useState<string | undefined>()
   const [releaseNotes, setReleaseNotes] = useState<string | undefined>()
   const [currentVersion, setCurrentVersion] = useState('')
-  const [downloadUrl, setDownloadUrl] = useState<string | undefined>()
   const mountedRef = useRef(true)
 
   // Load current version on mount
@@ -49,7 +48,7 @@ export function useUpdate(): UseUpdateReturn {
 
   // startDownloadInternal must be declared before checkForUpdateInternal
   // because checkForUpdateInternal depends on it
-  const startDownloadInternal = useCallback(async (url?: string) => {
+  const startDownloadInternal = useCallback(async () => {
     if (mountedRef.current) {
       setState('downloading')
       setProgress(undefined)
@@ -57,7 +56,7 @@ export function useUpdate(): UseUpdateReturn {
     }
 
     try {
-      const result = await window.electronAPI.downloadUpdate(url)
+      const result = await window.electronAPI.downloadUpdate()
       if (!mountedRef.current) return
 
       if (result.success && result.filePath) {
@@ -85,7 +84,6 @@ export function useUpdate(): UseUpdateReturn {
 
       if (info.available) {
         setVersion(info.version)
-        setDownloadUrl(info.downloadUrl)
         setReleaseNotes(info.releaseNotes)
         setState('available')
       } else {
@@ -105,8 +103,8 @@ export function useUpdate(): UseUpdateReturn {
   }, [checkForUpdateInternal])
 
   const startDownload = useCallback(async () => {
-    await startDownloadInternal(downloadUrl)
-  }, [startDownloadInternal, downloadUrl])
+    await startDownloadInternal()
+  }, [startDownloadInternal])
 
   const confirmInstall = useCallback(async () => {
     if (mountedRef.current) setState('installing')

@@ -67,6 +67,29 @@ export function registerSystemHandlers() {
     return app.getLoginItemSettings().openAtLogin
   })
 
+  ipcMain.handle('classify-paths', async (_, filePaths: string[]) => {
+    return Promise.all((filePaths || []).map(async (filePath) => {
+      try {
+        const stat = await fs.promises.stat(filePath)
+        return {
+          path: filePath,
+          exists: true,
+          isFile: stat.isFile(),
+          isDirectory: stat.isDirectory(),
+          extension: path.extname(filePath).toLowerCase()
+        }
+      } catch {
+        return {
+          path: filePath,
+          exists: false,
+          isFile: false,
+          isDirectory: false,
+          extension: path.extname(filePath).toLowerCase()
+        }
+      }
+    }))
+  })
+
   ipcMain.handle('start-drag-file', async (event, filePath: string) => {
     const senderWin = BrowserWindow.fromWebContents(event.sender)
     if (!senderWin || senderWin.isDestroyed()) return false

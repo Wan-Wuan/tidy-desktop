@@ -14,6 +14,14 @@ export interface UpdateProgress {
   total: number
 }
 
+export interface PathInfo {
+  path: string
+  exists: boolean
+  isFile: boolean
+  isDirectory: boolean
+  extension: string
+}
+
 declare global {
   interface Window {
     electronAPI: {
@@ -38,13 +46,14 @@ declare global {
       startDragFile: (filePath: string) => Promise<boolean>
       setAutoStart: (enabled: boolean) => Promise<boolean>
       getAutoStart: () => Promise<boolean>
+      classifyPaths: (filePaths: string[]) => Promise<PathInfo[]>
       hideSearchWindow: () => Promise<void>
       resizeSearchWindow: (height: number) => Promise<void>
       onBlur: (callback: () => void) => () => void
       onResetSearch: (callback: () => void) => () => void
       getVersion: () => Promise<string>
       checkForUpdate: () => Promise<UpdateInfo>
-      downloadUpdate: (downloadUrl?: string) => Promise<{ success: boolean; filePath?: string; error?: string }>
+      downloadUpdate: () => Promise<{ success: boolean; filePath?: string; error?: string }>
       installUpdate: (filePath: string) => Promise<boolean>
       onUpdateProgress: (callback: (data: UpdateProgress) => void) => () => void
     }

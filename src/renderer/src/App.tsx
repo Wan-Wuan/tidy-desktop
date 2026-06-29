@@ -8,6 +8,8 @@ import { UpdateButton, UpdateDialog } from './components/UpdateButton'
 
 const EMOJI_LIST = ['🌐', '💻', '🎬', '📄', '🎮', '📦', '🎨', '📱', '🔧', '🎵', '📷', '🛒', '💼', '📚', '🗂️', '⚙️']
 
+type DroppedFile = File & { path?: string }
+
 function App() {
   const [config, setConfig] = useState<Config | null>(null)
   const [apps, setApps] = useState<AppItem[]>([])
@@ -582,7 +584,7 @@ function App() {
     return null
   }
 
-  const parseFilesToApps = (files: File[], categoryId: string): AppItem[] => {
+  const parseFilesToApps = async (files: File[], categoryId: string): Promise<AppItem[]> => {
     const currentApps = appsRef.current
     const newApps: AppItem[] = []
 
@@ -592,15 +594,23 @@ function App() {
     const mediaExts = ['.mp3', '.mp4', '.wav', '.avi', '.mkv', '.flv', '.wmv', '.mov', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg']
     const allFileExts = [...execExts, ...docExts, ...archiveExts, ...mediaExts]
 
+    const filePaths = files
+      .map(file => (file as DroppedFile).path)
+      .filter((filePath): filePath is string => !!filePath)
+    const pathInfoByPath = new Map(
+      (await window.electronAPI.classifyPaths(filePaths)).map(info => [info.path, info])
+    )
+
     for (const file of files) {
-      const filePath = (file as any).path
+      const filePath = (file as DroppedFile).path
       if (!filePath) continue
 
-      const ext = filePath.toLowerCase().substring(filePath.lastIndexOf('.'))
+      const info = pathInfoByPath.get(filePath)
+      const ext = info?.extension || filePath.toLowerCase().substring(filePath.lastIndexOf('.'))
       const isKnownFile = allFileExts.includes(ext)
-      const isDirectory = (file as any).type === '' && !filePath.includes('.')
+      const isDirectory = !!info?.isDirectory
 
-      if (isKnownFile) {
+      if (info?.isFile && isKnownFile) {
         const name = getFileNameFromPath(filePath)
         if (!currentApps.find(app => app.name === name)) {
           newApps.push({
@@ -863,7 +873,7 @@ function App() {
     }
 
     const targetCategory = activeCategoryRef.current || (categoriesRef.current.length > 0 ? categoriesRef.current[0].id : '')
-    const newApps = parseFilesToApps(files, targetCategory)
+    const newApps = await parseFilesToApps(files, targetCategory)
 
     if (newApps.length > 0) {
       const updatedApps = [...appsRef.current, ...newApps]
@@ -981,7 +991,7 @@ function App() {
 
               const files = Array.from(e.dataTransfer.files)
               if (files.length > 0) {
-                const newApps = parseFilesToApps(files, cat.id)
+                const newApps = await parseFilesToApps(files, cat.id)
                 if (newApps.length > 0) {
                   const updatedApps = [...appsRef.current, ...newApps]
                   setApps(updatedApps)

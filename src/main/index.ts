@@ -11,6 +11,11 @@ const isDev = !app.isPackaged
 
 const mainWindowRef: { current: BrowserWindow | null } = { current: null }
 const searchWindowRef: { current: BrowserWindow | null } = { current: null }
+let trayRef: Tray | null = null
+
+function getAppIcon() {
+  return nativeImage.createFromPath(path.join(__dirname, '../../../build/icon-256.png'))
+}
 
 function createWindow() {
   const config = readJsonFile(CONFIG_FILE, getDefaultConfig())
@@ -24,6 +29,7 @@ function createWindow() {
     frame: true,
     resizable: true,
     title: 'tidy_desktop',
+    icon: getAppIcon(),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -101,6 +107,7 @@ function createSearchWindow() {
     skipTaskbar: true,
     transparent: true,
     hasShadow: false,
+    icon: getAppIcon(),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -142,10 +149,8 @@ function createSearchWindow() {
 }
 
 function createTray() {
-  // Tray icon: embedded 16x16 PNG (blue rounded rectangle with white grid)
-  const trayIconBase64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAACoklEQVR4nD2Sy4scVRSHz617b1dVT0/XONMOMS8MDDOoiCYQFFwIrnQjZB0IJCS4UMSN2+BSsvF/yCZk4SILH7gYUHCRxziZwCQ6icFopjvd1enuetyquq9zpBPN4XA2vw8O5/Ax+L+ElEvLPSQgAkSaNwHNJ2o1I3TPMRYEASKe/+LLU2fO8XC5qGBa4iQzs1yXpS7KRqlqOh7+eePbv25eZYwJRDz9yWdff3NpfwppAQyArLbSGKG10EY0VoSdlztvf3zR2ebx7WuMMXZl89Ybx98qs4ZZAKxKH1lNjfaNQWusc+6X28OsYaOH279eviDCKBJRN1PBWLXfXco7UUNRByAmIk66thCHIptmw4Kp8QrnLQEAjZG1YVWxmy5u/LDX3ej0T4Tfp/L9gT26JOtuLMaT4vp9HwsJjAmAlqr7gyfXh2n95oEjzcyX6POwNgvVOPfhSxi2A291qZyM5hcKAlKN2BtuAyVP8hu43rMq2b3/6dJadeToQI6CVvW0JrHansWsRgoCQpfOwtcPf7Qq1hf5CZ4bpw3B0JlKW0HEjHVrh7one4/GT2cEbL6hFeDZ905u/fzj1r39JF4dqLwvqup3p7dM7RoDrc8/7O0vr313d18EKBBp586DC/+M66xeWMkQsgDmPzXWWNPUSgGwr/qP0klRZSNEL4ho+26/d4An7ZirwSSv+2mxdjiRnCYz1W3zrKi2dwuPkI3+RkQB3qDJex167ZVA8tBRtHmrOLgiO23RSziXolvKjfVVg/yna38Y9AKJ8oebe8mrd+6NyNtQsiRZ2HmQam2cadLRlDHiPGAi0qMdAGLwTJ/FYx+0D72DTDjrGfg4loSoVIUeibw3lU13XPobAGMv9J6LKxcYANKcmWf8v5RcDYTPsX8BjqupiIu8dEkAAAAASUVORK5CYII='
-  const icon = nativeImage.createFromDataURL('data:image/png;base64,' + trayIconBase64)
-  const tray = new Tray(icon)
+  const tray = new Tray(getAppIcon())
+  trayRef = tray
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -247,4 +252,6 @@ app.on('activate', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
+  trayRef?.destroy()
+  trayRef = null
 })

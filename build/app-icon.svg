@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Tidy Desktop app icon">
+  <defs>
+    <linearGradient id="bg" x1="78" y1="54" x2="440" y2="464" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#173532"/>
+      <stop offset=".58" stop-color="#10201F"/>
+      <stop offset="1" stop-color="#071312"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="128" y1="126" x2="380" y2="374" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4FFFC"/>
+      <stop offset="1" stop-color="#D9EEE8"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="142" y1="164" x2="222" y2="244" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#78F1D8"/>
+      <stop offset="1" stop-color="#25BBA6"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="268" y1="164" x2="348" y2="244" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9FB8FF"/>
+      <stop offset="1" stop-color="#4E7FFF"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="142" y1="274" x2="222" y2="354" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE39A"/>
+      <stop offset="1" stop-color="#FFB545"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="268" y1="274" x2="348" y2="354" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C7FFF2"/>
+      <stop offset="1" stop-color="#76E4C7"/>
+    </linearGradient>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="135%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity=".32"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <path d="M104 379c86 36 224 37 304 2" fill="none" stroke="#C8FFF2" stroke-width="30" stroke-linecap="round" opacity=".16"/>
+  <rect x="102" y="96" width="308" height="292" rx="58" fill="url(#panel)" filter="url(#shadow)"/>
+  <rect x="128" y="131" width="256" height="222" rx="38" fill="#ECFAF6" stroke="#123B36" stroke-opacity=".16" stroke-width="4"/>
+  <circle cx="158" cy="120" r="9" fill="#FF6B5F"/>
+  <circle cx="188" cy="120" r="9" fill="#FFCA58"/>
+  <circle cx="218" cy="120" r="9" fill="#65D36E"/>
+  <rect x="150" y="164" width="88" height="72" rx="20" fill="url(#teal)"/>
+  <rect x="274" y="164" width="88" height="72" rx="20" fill="url(#blue)"/>
+  <rect x="150" y="274" width="88" height="72" rx="20" fill="url(#amber)"/>
+  <rect x="274" y="274" width="88" height="72" rx="20" fill="url(#mint)"/>
+  <path d="M150 252h212" fill="none" stroke="#143D39" stroke-width="13" stroke-linecap="round" opacity=".18"/>
+  <path d="M158 388c54 45 143 50 207 12" fill="none" stroke="#6EF1D4" stroke-width="24" stroke-linecap="round"/>
+  <path d="M335 384l40 14-30 34" fill="none" stroke="#F4FFFC" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

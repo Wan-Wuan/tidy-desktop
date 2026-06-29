@@ -1,6 +1,6 @@
 {
   "name": "tidy-desktop",
-  "version": "1.10.13",
+  "version": "1.10.14",
   "description": "桌面整理应用",
   "main": "dist/main/main/index.js",
   "scripts": {
@@ -8,7 +8,7 @@
     "build": "vite build",
     "build:main": "tsc -p tsconfig.main.json",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"vite\" \"tsc -p tsconfig.main.json && electron .\"",
+    "electron:dev": "concurrently \"vite\" \"tsc -p tsconfig.main.json && node scripts/wait-for-vite-electron.mjs\"",
     "electron:build": "vite build && tsc -p tsconfig.main.json && electron-builder",
     "typecheck": "tsc --noEmit"
   },

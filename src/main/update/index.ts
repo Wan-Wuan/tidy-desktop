@@ -7,6 +7,34 @@ const GITHUB_API = 'https://api.github.com/repos/Wan-Wuan/tidy-desktop/releases/
 
 let downloading = false
 
+interface GitHubReleaseAsset {
+  name?: string
+  browser_download_url?: string
+}
+
+function isTrustedReleaseAssetUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl)
+    return url.protocol === 'https:' &&
+      url.hostname === 'github.com' &&
+      url.pathname.startsWith('/Wan-Wuan/tidy-desktop/releases/download/')
+  } catch {
+    return false
+  }
+}
+
+function getInstallerDownloadUrl(release: { assets?: GitHubReleaseAsset[] }): string | null {
+  const assets = release.assets || []
+  const exeAsset = assets.find((asset) =>
+    asset.name &&
+    asset.name.endsWith('.exe') &&
+    !asset.name.includes('blockmap') &&
+    asset.browser_download_url &&
+    isTrustedReleaseAssetUrl(asset.browser_download_url)
+  )
+  return exeAsset?.browser_download_url || null
+}
+
 export function registerUpdateHandlers() {
   ipcMain.handle('check-for-update', async (): Promise<UpdateInfo> => {
     try {
@@ -18,19 +46,16 @@ export function registerUpdateHandlers() {
         return { available: false }
       }
 
-      const assets = release.assets || []
-      const exeAsset = assets.find((a: any) =>
-        a.name && a.name.endsWith('.exe') && !a.name.includes('blockmap')
-      )
+      const downloadUrl = getInstallerDownloadUrl(release)
 
-      if (!exeAsset) {
+      if (!downloadUrl) {
         return { available: false }
       }
 
       return {
         available: true,
         version: latestVersion,
-        downloadUrl: exeAsset.browser_download_url,
+        downloadUrl,
         releaseNotes: release.body || ''
       }
     } catch (err: any) {
@@ -38,31 +63,23 @@ export function registerUpdateHandlers() {
     }
   })
 
-  ipcMain.handle('download-update', async (event, downloadUrl?: string) => {
+  ipcMain.handle('download-update', async (event) => {
     if (downloading) {
       return { success: false, error: 'Download already in progress' }
     }
     downloading = true
 
     try {
-      let url = downloadUrl
-
+      const release = await fetchJson<any>(GITHUB_API)
+      const url = getInstallerDownloadUrl(release)
       if (!url) {
-        const release = await fetchJson<any>(GITHUB_API)
-        const assets = release.assets || []
-        const exeAsset = assets.find((a: any) =>
-          a.name && a.name.endsWith('.exe') && !a.name.includes('blockmap')
-        )
-        if (!exeAsset) {
-          return { success: false, error: 'No installer found' }
-        }
-        url = exeAsset.browser_download_url
+        return { success: false, error: 'No installer found' }
       }
 
       const sender = event.sender
       const updateFile = getUpdateFilePath()
 
-      await downloadWithRetry(url!, updateFile, (progress) => {
+      await downloadWithRetry(url, updateFile, (progress) => {
         if (!sender.isDestroyed()) {
           sender.send('update-progress', progress)
         }

@@ -6,6 +6,19 @@ function encodePsCommand(script: string): string {
   return Buffer.from(script, 'utf16le').toString('base64')
 }
 
+function isSafeWebUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function isSafeSteamUrl(steamUrl: string): boolean {
+  return /^steam:\/\/(?:launch\/\d+(?:\/\d+)?|rungameid\/\d+)$/i.test(steamUrl)
+}
+
 export function registerAppHandlers() {
   ipcMain.handle('open-app', async (_, appPath: string) => {
     const error = await shell.openPath(appPath)
@@ -27,6 +40,10 @@ export function registerAppHandlers() {
 
   ipcMain.handle('open-url', async (_, url: string) => {
     try {
+      if (!isSafeWebUrl(url)) {
+        console.warn('Rejected unsafe URL:', url)
+        return false
+      }
       await shell.openExternal(url)
       return true
     } catch (error) {
@@ -37,6 +54,10 @@ export function registerAppHandlers() {
 
   ipcMain.handle('open-steam', async (_, steamUrl: string) => {
     try {
+      if (!isSafeSteamUrl(steamUrl)) {
+        console.warn('Rejected unsafe Steam URL:', steamUrl)
+        return false
+      }
       await shell.openExternal(steamUrl)
       return true
     } catch (error) {

@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resizeSearchWindow: (height: number) => ipcRenderer.invoke('resize-search-window', height),
   setAutoStart: (enabled: boolean) => ipcRenderer.invoke('set-auto-start', enabled),
   getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
+  classifyPaths: (filePaths: string[]) => ipcRenderer.invoke('classify-paths', filePaths),
   onBlur: (callback: () => void) => {
     const handler = () => callback()
     ipcRenderer.on('blur-event', handler)
@@ -36,7 +37,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getVersion: () => ipcRenderer.invoke('get-version'),
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
-  downloadUpdate: (downloadUrl?: string) => ipcRenderer.invoke('download-update', downloadUrl),
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: (filePath: string) => ipcRenderer.invoke('install-update', filePath),
   onUpdateProgress: (callback: (data: { percent: number; transferred: number; total: number }) => void) => {
     const handler = (_event: any, data: any) => callback(data)

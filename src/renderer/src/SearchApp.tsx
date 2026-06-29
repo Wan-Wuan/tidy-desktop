@@ -151,6 +151,12 @@ function SearchApp() {
     return matched
   }, [apps])
 
+  const getDefaultSearchEngine = useCallback((): SearchEngineInfo | null => {
+    const key = config?.defaultEngine || 'b'
+    const engine = config?.searchEngines?.[key] || config?.searchEngines?.b
+    return engine ? { key, name: engine.name, url: engine.url } : null
+  }, [config])
+
   const resetAll = useCallback(() => {
     if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
     setQuery('')
@@ -202,6 +208,15 @@ function SearchApp() {
       } else {
         await window.electronAPI.openApp(app.path)
       }
+      setTimeout(() => { isActiveRef.current = false }, 200)
+    } else if (queryRef.current.trim()) {
+      const engine = getDefaultSearchEngine()
+      if (!engine) return
+      isActiveRef.current = true
+      window.electronAPI.hideSearchWindow()
+      const url = engine.url + encodeURIComponent(queryRef.current.trim())
+      resetAll()
+      await window.electronAPI.openUrl(url)
       setTimeout(() => { isActiveRef.current = false }, 200)
     }
   }

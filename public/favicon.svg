@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Tidy Desktop app icon">
+  <defs>
+    <linearGradient id="bg" x1="78" y1="54" x2="440" y2="464" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#173532"/>
+      <stop offset=".58" stop-color="#10201F"/>
+      <stop offset="1" stop-color="#071312"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="128" y1="126" x2="380" y2="374" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4FFFC"/>
+      <stop offset="1" stop-color="#D9EEE8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="102" y="96" width="308" height="292" rx="58" fill="url(#panel)"/>
+  <rect x="128" y="131" width="256" height="222" rx="38" fill="#ECFAF6"/>
+  <circle cx="158" cy="120" r="9" fill="#FF6B5F"/>
+  <circle cx="188" cy="120" r="9" fill="#FFCA58"/>
+  <circle cx="218" cy="120" r="9" fill="#65D36E"/>
+  <rect x="150" y="164" width="88" height="72" rx="20" fill="#25BBA6"/>
+  <rect x="274" y="164" width="88" height="72" rx="20" fill="#4E7FFF"/>
+  <rect x="150" y="274" width="88" height="72" rx="20" fill="#FFB545"/>
+  <rect x="274" y="274" width="88" height="72" rx="20" fill="#76E4C7"/>
+  <path d="M150 252h212" fill="none" stroke="#143D39" stroke-width="13" stroke-linecap="round" opacity=".18"/>
+  <path d="M158 388c54 45 143 50 207 12" fill="none" stroke="#6EF1D4" stroke-width="24" stroke-linecap="round"/>
+  <path d="M335 384l40 14-30 34" fill="none" stroke="#F4FFFC" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

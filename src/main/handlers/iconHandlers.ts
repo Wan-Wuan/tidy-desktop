@@ -4,6 +4,16 @@ import path from 'path'
 import fs from 'fs'
 import { ICONS_DIR } from '../config'
 
+async function fetchWithTimeout(url: string, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { signal: controller.signal })
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 export function registerIconHandlers() {
   ipcMain.handle('extract-icon', async (_, filePath: string) => {
     try {
@@ -128,7 +138,7 @@ export function registerIconHandlers() {
       // Fallback: download icon from Steam CDN
       try {
         const iconUrl = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`
-        const response = await fetch(iconUrl)
+        const response = await fetchWithTimeout(iconUrl)
         if (response.ok) {
           const buffer = Buffer.from(await response.arrayBuffer())
           if (buffer.length > 1000) {
@@ -152,7 +162,7 @@ export function registerIconHandlers() {
       if (!match) return null
       const appId = match[1]
 
-      const response = await fetch(`https://store.steampowered.com/api/appdetails?appids=${appId}`)
+      const response = await fetchWithTimeout(`https://store.steampowered.com/api/appdetails?appids=${appId}`, 5000)
       if (!response.ok) return null
 
       const data = await response.json() as Record<string, any>
