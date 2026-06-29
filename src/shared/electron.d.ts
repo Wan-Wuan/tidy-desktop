@@ -2,6 +2,7 @@ import type { AppItem, Category, Subcategory, Config } from './types'
 
 export interface UpdateInfo {
   available: boolean
+  downloaded?: boolean
   version?: string
   downloadUrl?: string
   releaseNotes?: string

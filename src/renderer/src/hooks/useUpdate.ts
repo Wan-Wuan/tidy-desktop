@@ -85,7 +85,7 @@ export function useUpdate(): UseUpdateReturn {
       if (info.available) {
         setVersion(info.version)
         setReleaseNotes(info.releaseNotes)
-        setState('available')
+        setState(info.downloaded ? 'downloaded' : 'available')
       } else {
         setState('idle')
         if (info.error) setError(info.error)
@@ -109,7 +109,11 @@ export function useUpdate(): UseUpdateReturn {
   const confirmInstall = useCallback(async () => {
     if (mountedRef.current) setState('installing')
     try {
-      await window.electronAPI.installUpdate('')
+      const success = await window.electronAPI.installUpdate('')
+      if (!success && mountedRef.current) {
+        setState('downloaded')
+        setError('Installation failed')
+      }
     } catch (err: any) {
       if (mountedRef.current) {
         setState('downloaded')

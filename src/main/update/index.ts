@@ -1,4 +1,6 @@
 import { ipcMain, app } from 'electron'
+import fs from 'fs'
+import path from 'path'
 import { compareVersions, fetchJson, downloadWithRetry, cleanupFile } from './network'
 import { runInstaller, getUpdateFilePath } from './installer'
 import { UpdateInfo } from './types'
@@ -10,7 +12,21 @@ let downloading = false
 interface GitHubReleaseAsset {
   name?: string
   browser_download_url?: string
+  size?: number
 }
+
+interface InstallerAsset {
+  downloadUrl: string
+  size: number
+}
+
+interface DownloadCacheMeta {
+  version: string
+  downloadUrl: string
+  size: number
+}
+
+const UPDATE_META_FILE = path.join(app.getPath('temp'), 'tidy-desktop-update.json')
 
 function isTrustedReleaseAssetUrl(rawUrl: string): boolean {
   try {
@@ -23,7 +39,7 @@ function isTrustedReleaseAssetUrl(rawUrl: string): boolean {
   }
 }
 
-function getInstallerDownloadUrl(release: { assets?: GitHubReleaseAsset[] }): string | null {
+function getInstallerAsset(release: { assets?: GitHubReleaseAsset[] }): InstallerAsset | null {
   const assets = release.assets || []
   const exeAsset = assets.find((asset) =>
     asset.name &&
@@ -32,7 +48,47 @@ function getInstallerDownloadUrl(release: { assets?: GitHubReleaseAsset[] }): st
     asset.browser_download_url &&
     isTrustedReleaseAssetUrl(asset.browser_download_url)
   )
-  return exeAsset?.browser_download_url || null
+  if (!exeAsset?.browser_download_url) return null
+  return {
+    downloadUrl: exeAsset.browser_download_url,
+    size: exeAsset.size || 0
+  }
+}
+
+function readDownloadCacheMeta(): DownloadCacheMeta | null {
+  try {
+    if (!fs.existsSync(UPDATE_META_FILE)) return null
+    return JSON.parse(fs.readFileSync(UPDATE_META_FILE, 'utf-8')) as DownloadCacheMeta
+  } catch {
+    return null
+  }
+}
+
+function writeDownloadCacheMeta(meta: DownloadCacheMeta): void {
+  try {
+    fs.writeFileSync(UPDATE_META_FILE, JSON.stringify(meta, null, 2), 'utf-8')
+  } catch {
+    // The installer is still valid even if metadata persistence fails.
+  }
+}
+
+function cleanupDownloadCache(): void {
+  cleanupFile(getUpdateFilePath())
+  try { fs.unlinkSync(UPDATE_META_FILE) } catch { /* ignore */ }
+}
+
+function hasCachedInstaller(version: string, asset: InstallerAsset): boolean {
+  try {
+    const meta = readDownloadCacheMeta()
+    if (!meta) return false
+    if (meta.version !== version || meta.downloadUrl !== asset.downloadUrl) return false
+    if (asset.size > 0 && meta.size !== asset.size) return false
+
+    const stat = fs.statSync(getUpdateFilePath())
+    return stat.isFile() && (asset.size <= 0 || stat.size === asset.size)
+  } catch {
+    return false
+  }
 }
 
 export function registerUpdateHandlers() {
@@ -46,16 +102,17 @@ export function registerUpdateHandlers() {
         return { available: false }
       }
 
-      const downloadUrl = getInstallerDownloadUrl(release)
+      const installerAsset = getInstallerAsset(release)
 
-      if (!downloadUrl) {
+      if (!installerAsset) {
         return { available: false }
       }
 
       return {
         available: true,
+        downloaded: hasCachedInstaller(latestVersion, installerAsset),
         version: latestVersion,
-        downloadUrl,
+        downloadUrl: installerAsset.downloadUrl,
         releaseNotes: release.body || ''
       }
     } catch (err: any) {
@@ -71,23 +128,40 @@ export function registerUpdateHandlers() {
 
     try {
       const release = await fetchJson<any>(GITHUB_API)
-      const url = getInstallerDownloadUrl(release)
-      if (!url) {
+      const version = (release.tag_name || '').replace(/^v/i, '')
+      const installerAsset = getInstallerAsset(release)
+      if (!version || !installerAsset) {
         return { success: false, error: 'No installer found' }
       }
 
       const sender = event.sender
       const updateFile = getUpdateFilePath()
 
-      await downloadWithRetry(url, updateFile, (progress) => {
+      if (hasCachedInstaller(version, installerAsset)) {
+        if (!sender.isDestroyed()) {
+          sender.send('update-progress', {
+            percent: 100,
+            transferred: installerAsset.size,
+            total: installerAsset.size
+          })
+        }
+        return { success: true, filePath: updateFile }
+      }
+
+      await downloadWithRetry(installerAsset.downloadUrl, updateFile, (progress) => {
         if (!sender.isDestroyed()) {
           sender.send('update-progress', progress)
         }
       })
+      writeDownloadCacheMeta({
+        version,
+        downloadUrl: installerAsset.downloadUrl,
+        size: installerAsset.size
+      })
 
       return { success: true, filePath: updateFile }
     } catch (err: any) {
-      cleanupFile(getUpdateFilePath())
+      cleanupDownloadCache()
       return { success: false, error: err.message || 'Download failed' }
     } finally {
       downloading = false

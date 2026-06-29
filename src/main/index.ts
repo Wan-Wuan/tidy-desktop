@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen } from 'electron'
+import { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen, dialog } from 'electron'
 import path from 'path'
 import { ensureDataDir, readJsonFile, getDefaultConfig, CONFIG_FILE } from './config'
 import { registerAppHandlers } from './handlers/appHandlers'
@@ -12,6 +12,8 @@ const isDev = !app.isPackaged
 const mainWindowRef: { current: BrowserWindow | null } = { current: null }
 const searchWindowRef: { current: BrowserWindow | null } = { current: null }
 let trayRef: Tray | null = null
+let singleInstancePromptOpen = false
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
 function getAppIcon() {
   return nativeImage.createFromPath(path.join(__dirname, '../../../build/icon-256.png'))
@@ -71,6 +73,33 @@ function createWindow() {
   })
 
   mainWindowRef.current = win
+}
+
+function showMainWindow(showRunningPrompt = false) {
+  const w = mainWindowRef.current
+  if (!w || w.isDestroyed()) {
+    createWindow()
+    return
+  }
+
+  if (w.isMinimized()) {
+    w.restore()
+  }
+  w.show()
+  w.focus()
+
+  if (showRunningPrompt && !singleInstancePromptOpen) {
+    singleInstancePromptOpen = true
+    dialog.showMessageBox(w, {
+      type: 'info',
+      buttons: ['知道了'],
+      defaultId: 0,
+      message: 'Tidy Desktop 已经在运行',
+      detail: '不能同时打开多个实例，已为你切换到正在运行的窗口。'
+    }).finally(() => {
+      singleInstancePromptOpen = false
+    })
+  }
 }
 
 function toggleSearchWindow() {
@@ -156,8 +185,7 @@ function createTray() {
     {
       label: '显示主窗口',
       click: () => {
-        const w = mainWindowRef.current
-        if (w) { w.show(); w.focus() }
+        showMainWindow()
       }
     },
     {
@@ -178,8 +206,7 @@ function createTray() {
   tray.setContextMenu(contextMenu)
 
   tray.on('double-click', () => {
-    const w = mainWindowRef.current
-    if (w) { w.show(); w.focus() }
+    showMainWindow()
   })
 }
 
@@ -199,8 +226,7 @@ function registerGlobalShortcut() {
       if (w.isVisible()) {
         w.hide()
       } else {
-        w.show()
-        w.focus()
+        showMainWindow()
       }
     }
   })
@@ -216,7 +242,17 @@ function registerGlobalShortcut() {
   }
 }
 
+if (!hasSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    showMainWindow(true)
+  })
+}
+
 app.on('ready', () => {
+  if (!hasSingleInstanceLock) return
+
   Menu.setApplicationMenu(null)
   ensureDataDir()
 
@@ -245,8 +281,7 @@ app.on('activate', () => {
   if (mainWindowRef.current === null) {
     createWindow()
   } else {
-    const w = mainWindowRef.current
-    w.show()
+    showMainWindow()
   }
 })
 

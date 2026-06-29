@@ -1,5 +1,6 @@
 export interface UpdateInfo {
   available: boolean
+  downloaded?: boolean
   version?: string
   downloadUrl?: string
   releaseNotes?: string
