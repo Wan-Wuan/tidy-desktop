@@ -41,10 +41,10 @@ try {
 
   $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
   "[$ts] App exited, starting installer..." | Out-File -FilePath $logFile -Append -Encoding UTF8
-  Start-Process -FilePath '${escapedInstallerPath}' -ArgumentList '/S' -Wait
+  Start-Process -FilePath '${escapedInstallerPath}' -ArgumentList '/S', '--force-run' -Wait
 
   $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-  "[$ts] Installation completed." | Out-File -FilePath $logFile -Append -Encoding UTF8
+  "[$ts] Installation completed, app start requested." | Out-File -FilePath $logFile -Append -Encoding UTF8
 } catch {
   $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
   $errMsg = $_.Exception.Message

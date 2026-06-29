@@ -4,6 +4,12 @@ import path from 'path'
 import fs from 'fs'
 import { ICONS_DIR } from '../config'
 
+interface ShortcutInfo {
+  targetPath: string
+  iconPath: string
+  iconIndex: number
+}
+
 async function fetchWithTimeout(url: string, timeoutMs = 8000): Promise<Response> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
@@ -12,6 +18,130 @@ async function fetchWithTimeout(url: string, timeoutMs = 8000): Promise<Response
   } finally {
     clearTimeout(timeout)
   }
+}
+
+function escapePsString(value: string): string {
+  return value.replace(/'/g, "''")
+}
+
+function parseIconLocation(iconLocation: string): { iconPath: string; iconIndex: number } {
+  const trimmed = (iconLocation || '').trim()
+  if (!trimmed) return { iconPath: '', iconIndex: 0 }
+  const match = trimmed.match(/^(.*?)(?:,(-?\d+))?$/)
+  const iconPath = (match?.[1] || trimmed).replace(/^"|"$/g, '')
+  const iconIndex = Number.parseInt(match?.[2] || '0', 10)
+  return { iconPath, iconIndex: Number.isFinite(iconIndex) ? iconIndex : 0 }
+}
+
+function expandWindowsEnvPath(value: string): string {
+  return value.replace(/%([^%]+)%/g, (_, name: string) => {
+    return process.env[name] || process.env[name.toUpperCase()] || process.env[name.toLowerCase()] || `%${name}%`
+  })
+}
+
+function resolveShortcut(filePath: string): ShortcutInfo {
+  try {
+    const escapedPath = escapePsString(filePath)
+    const result = execFileSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        `$sh = New-Object -ComObject WScript.Shell; $s = $sh.CreateShortcut('${escapedPath}'); [Console]::OutputEncoding=[Text.Encoding]::UTF8; [string]::Join([char]31, @($s.TargetPath, $s.IconLocation))`
+      ],
+      { encoding: 'utf8', windowsHide: true, timeout: 3000 }
+    ).trim()
+    const [targetPath = '', iconLocation = ''] = result.split(String.fromCharCode(31))
+    const parsedIcon = parseIconLocation(iconLocation)
+    return {
+      targetPath: expandWindowsEnvPath(targetPath),
+      iconPath: expandWindowsEnvPath(parsedIcon.iconPath),
+      iconIndex: parsedIcon.iconIndex
+    }
+  } catch {
+    return { targetPath: '', iconPath: '', iconIndex: 0 }
+  }
+}
+
+function extractIconByPowerShell(sourcePath: string, iconIndex = 0): Buffer | null {
+  try {
+    if (!fs.existsSync(sourcePath)) return null
+    const escapedSourcePath = escapePsString(sourcePath)
+    const psResult = execFileSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        `
+Add-Type -AssemblyName System.Drawing
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class IconExtractor {
+  [DllImport("Shell32.dll", CharSet = CharSet.Auto)]
+  public static extern int ExtractIconEx(string lpszFile, int nIconIndex, IntPtr[] phiconLarge, IntPtr[] phiconSmall, int nIcons);
+  [DllImport("user32.dll", SetLastError = true)]
+  public static extern bool DestroyIcon(IntPtr hIcon);
+}
+"@
+$path = '${escapedSourcePath}'
+$index = ${iconIndex}
+$large = New-Object IntPtr[] 1
+$small = New-Object IntPtr[] 1
+$count = [IconExtractor]::ExtractIconEx($path, $index, $large, $small, 1)
+$handle = [IntPtr]::Zero
+if ($count -gt 0 -and $large[0] -ne [IntPtr]::Zero) { $handle = $large[0] }
+elseif ($count -gt 0 -and $small[0] -ne [IntPtr]::Zero) { $handle = $small[0] }
+if ($handle -ne [IntPtr]::Zero) {
+  $icon = [System.Drawing.Icon]::FromHandle($handle)
+  $bmp = $icon.ToBitmap()
+  $ms = New-Object System.IO.MemoryStream
+  $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+  [Convert]::ToBase64String($ms.ToArray())
+  $bmp.Dispose()
+  $icon.Dispose()
+  [IconExtractor]::DestroyIcon($handle) | Out-Null
+} else {
+  $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($path)
+  if ($icon) {
+    $bmp = $icon.ToBitmap()
+    $ms = New-Object System.IO.MemoryStream
+    $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+    [Convert]::ToBase64String($ms.ToArray())
+    $bmp.Dispose()
+    $icon.Dispose()
+  }
+}
+`.trim()
+      ],
+      { encoding: 'utf8', windowsHide: true, timeout: 4000 }
+    ).trim()
+    if (!psResult || psResult.length <= 100) return null
+    return Buffer.from(psResult, 'base64')
+  } catch {
+    return null
+  }
+}
+
+async function getIconPng(sourcePath: string, iconIndex = 0): Promise<Buffer | null> {
+  if (!sourcePath || !fs.existsSync(sourcePath)) return null
+
+  const ext = path.extname(sourcePath).toLowerCase()
+  if (ext === '.ico' || ext === '.png') {
+    const data = fs.readFileSync(sourcePath)
+    return data.length > 100 ? data : null
+  }
+
+  try {
+    const icon = await app.getFileIcon(sourcePath, { size: 'large' })
+    const pngData = icon.toPNG()
+    if (pngData.length > 1200) return pngData
+  } catch { /* ignore */ }
+
+  const extracted = extractIconByPowerShell(sourcePath, iconIndex)
+  if (extracted && extracted.length > 500) return extracted
+
+  return extracted && extracted.length > 0 ? extracted : null
 }
 
 export function registerIconHandlers() {
@@ -25,46 +155,24 @@ export function registerIconHandlers() {
         return `data:image/png;base64,${data.toString('base64')}`
       }
 
-      let targetPath = filePath
+      const candidates: Array<{ sourcePath: string; iconIndex: number }> = []
       if (filePath.toLowerCase().endsWith('.lnk')) {
-        try {
-          const escapedPath = filePath.replace(/'/g, "''")
-          const result = execFileSync(
-            'powershell',
-            ['-NoProfile', '-Command', `$sh = New-Object -ComObject WScript.Shell; $s = $sh.CreateShortcut('${escapedPath}'); $s.TargetPath`],
-            { encoding: 'utf8', windowsHide: true, timeout: 3000 }
-          ).trim()
-          if (result && fs.existsSync(result)) {
-            targetPath = result
-          }
-        } catch { /* .lnk resolve failed, use original path */ }
-      }
-
-      const icon = await app.getFileIcon(targetPath, { size: 'large' })
-      const pngData = icon.toPNG()
-      if (pngData.length > 500) {
-        fs.writeFileSync(iconPath, pngData)
-        return `data:image/png;base64,${pngData.toString('base64')}`
-      }
-
-      // Fallback: use PowerShell to extract associated icon
-      try {
-        const escapedTargetPath = targetPath.replace(/'/g, "''")
-        const psResult = execFileSync(
-          'powershell',
-          ['-NoProfile', '-Command', `Add-Type -AssemblyName System.Drawing; $icon = [System.Drawing.Icon]::ExtractAssociatedIcon('${escapedTargetPath}'); if($icon){$bmp=$icon.ToBitmap(); $ms=New-Object System.IO.MemoryStream; $bmp.Save($ms,[System.Drawing.Imaging.ImageFormat]::Png); [Convert]::ToBase64String($ms.ToArray())}`],
-          { encoding: 'utf8', windowsHide: true, timeout: 5000 }
-        ).trim()
-        if (psResult && psResult.length > 100) {
-          const buf = Buffer.from(psResult, 'base64')
-          fs.writeFileSync(iconPath, buf)
-          return `data:image/png;base64,${psResult}`
+        const shortcut = resolveShortcut(filePath)
+        if (shortcut.iconPath) {
+          candidates.push({ sourcePath: shortcut.iconPath, iconIndex: shortcut.iconIndex })
         }
-      } catch { /* PowerShell extraction failed */ }
+        if (shortcut.targetPath) {
+          candidates.push({ sourcePath: shortcut.targetPath, iconIndex: 0 })
+        }
+      }
+      candidates.push({ sourcePath: filePath, iconIndex: 0 })
 
-      if (pngData.length > 0) {
-        fs.writeFileSync(iconPath, pngData)
-        return `data:image/png;base64,${pngData.toString('base64')}`
+      for (const candidate of candidates) {
+        const pngData = await getIconPng(candidate.sourcePath, candidate.iconIndex)
+        if (pngData && pngData.length > 0) {
+          fs.writeFileSync(iconPath, pngData)
+          return `data:image/png;base64,${pngData.toString('base64')}`
+        }
       }
 
       return null

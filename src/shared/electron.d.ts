@@ -33,9 +33,13 @@ declare global {
       getCategories: () => Promise<{ categories: Category[]; subcategories: Subcategory[] }>
       saveCategories: (data: { categories: Category[]; subcategories: Subcategory[] }) => Promise<boolean>
       openApp: (appPath: string) => Promise<boolean>
+      openAppAsAdmin: (appPath: string) => Promise<boolean>
       openFolder: (folderPath: string) => Promise<boolean>
+      openContainingFolder: (appPath: string) => Promise<boolean>
+      showItemInFolder: (appPath: string) => Promise<boolean>
       openUrl: (url: string) => Promise<boolean>
       openSteam: (steamUrl: string) => Promise<boolean>
+      runQuickAction: (command: string) => Promise<boolean>
       selectFolder: () => Promise<string | null>
       hideMainWindow: () => Promise<void>
       confirm: (message: string) => Promise<boolean>
@@ -48,8 +52,14 @@ declare global {
       setAutoStart: (enabled: boolean) => Promise<boolean>
       getAutoStart: () => Promise<boolean>
       classifyPaths: (filePaths: string[]) => Promise<PathInfo[]>
+      validateApps: (apps: { id: string; path: string; type?: string }[]) => Promise<{ id: string; path: string; exists: boolean }[]>
+      exportBackup: () => Promise<{ success: boolean; filePath?: string }>
+      importBackup: () => Promise<{ success: boolean; filePath?: string }>
+      clearIconCache: () => Promise<{ success: boolean; count: number }>
+      openUpdateLog: () => Promise<boolean>
       hideSearchWindow: () => Promise<void>
       resizeSearchWindow: (height: number) => Promise<void>
+      moveSearchWindowToCursorDisplay: () => Promise<boolean>
       onBlur: (callback: () => void) => () => void
       onResetSearch: (callback: () => void) => () => void
       getVersion: () => Promise<string>

@@ -8,9 +8,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCategories: () => ipcRenderer.invoke('get-categories'),
   saveCategories: (data: any) => ipcRenderer.invoke('save-categories', data),
   openApp: (appPath: string) => ipcRenderer.invoke('open-app', appPath),
+  openAppAsAdmin: (appPath: string) => ipcRenderer.invoke('open-app-as-admin', appPath),
   openFolder: (folderPath: string) => ipcRenderer.invoke('open-folder', folderPath),
+  openContainingFolder: (appPath: string) => ipcRenderer.invoke('open-containing-folder', appPath),
+  showItemInFolder: (appPath: string) => ipcRenderer.invoke('show-item-in-folder', appPath),
   openUrl: (url: string) => ipcRenderer.invoke('open-url', url),
   openSteam: (steamUrl: string) => ipcRenderer.invoke('open-steam', steamUrl),
+  runQuickAction: (command: string) => ipcRenderer.invoke('run-quick-action', command),
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   hideSearchWindow: () => ipcRenderer.invoke('hide-search-window'),
   hideMainWindow: () => ipcRenderer.invoke('hide-main-window'),
@@ -25,6 +29,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAutoStart: (enabled: boolean) => ipcRenderer.invoke('set-auto-start', enabled),
   getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
   classifyPaths: (filePaths: string[]) => ipcRenderer.invoke('classify-paths', filePaths),
+  validateApps: (apps: any[]) => ipcRenderer.invoke('validate-apps', apps),
+  exportBackup: () => ipcRenderer.invoke('export-backup'),
+  importBackup: () => ipcRenderer.invoke('import-backup'),
+  clearIconCache: () => ipcRenderer.invoke('clear-icon-cache'),
+  openUpdateLog: () => ipcRenderer.invoke('open-update-log'),
+  moveSearchWindowToCursorDisplay: () => ipcRenderer.invoke('move-search-window-to-cursor-display'),
   onBlur: (callback: () => void) => {
     const handler = () => callback()
     ipcRenderer.on('blur-event', handler)

@@ -21,8 +21,11 @@ export function registerFileHandlers() {
     if (!config.hotkey) config.hotkey = defaults.hotkey
     if (!config.searchHotkey) config.searchHotkey = defaults.searchHotkey
     if (!config.ui) config.ui = defaults.ui
+    config.ui = { ...defaults.ui, ...config.ui }
     if (config.autoStart === undefined) config.autoStart = defaults.autoStart
     if (!config.defaultEngine) config.defaultEngine = defaults.defaultEngine
+    if (!config.autoCategoryRules) config.autoCategoryRules = defaults.autoCategoryRules
+    if (!config.quickActions) config.quickActions = defaults.quickActions
     return config
   })
 
@@ -43,7 +46,11 @@ export function registerFileHandlers() {
       subcategoryId: app.subcategoryId || null,
       pinyin: app.pinyin || '',
       firstLetter: app.firstLetter || '',
-      type: app.type || 'app'
+      type: app.type || 'app',
+      aliases: Array.isArray(app.aliases) ? app.aliases : [],
+      launchCount: Number.isFinite(app.launchCount) ? app.launchCount : 0,
+      lastOpenedAt: Number.isFinite(app.lastOpenedAt) ? app.lastOpenedAt : 0,
+      hidden: !!app.hidden
     }))
     return data
   })

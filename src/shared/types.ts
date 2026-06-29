@@ -8,6 +8,10 @@
   pinyin: string
   firstLetter: string
   type?: 'app' | 'folder' | 'steam'
+  aliases?: string[]
+  launchCount?: number
+  lastOpenedAt?: number
+  hidden?: boolean
 }
 
 export interface Category {
@@ -35,6 +39,21 @@ export interface UISettings {
   showIcon: boolean
   showName: boolean
   borderRadius: number
+  theme?: 'aurora' | 'light' | 'dark' | 'system'
+}
+
+export interface AutoCategoryRule {
+  id: string
+  name: string
+  categoryId: string
+  match: string
+}
+
+export interface QuickAction {
+  key: string
+  name: string
+  command: 'shutdown' | 'restart' | 'lock' | 'settings' | 'calculator' | 'notepad' | 'clipboard'
+  enabled: boolean
 }
 
 export interface Config {
@@ -50,6 +69,8 @@ export interface Config {
   autoStart?: boolean
   ui?: UISettings
   defaultEngine?: string
+  autoCategoryRules?: AutoCategoryRule[]
+  quickActions?: QuickAction[]
 }
 
 export interface AppsData {

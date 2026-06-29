@@ -68,6 +68,9 @@ export function getDefaultConfig() {
       yh: { name: 'Yahoo', url: 'https://search.yahoo.com/search?p=' },
       ddg: { name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' },
       gh: { name: 'GitHub', url: 'https://github.com/search?q=' },
+      yt: { name: 'YouTube', url: 'https://www.youtube.com/results?search_query=' },
+      npm: { name: 'npm', url: 'https://www.npmjs.com/search?q=' },
+      mdn: { name: 'MDN', url: 'https://developer.mozilla.org/search?q=' },
       so: { name: 'StackOverflow', url: 'https://stackoverflow.com/search?q=' },
       zhihu: { name: '知乎', url: 'https://www.zhihu.com/search?q=' },
       bilibili: { name: 'B站', url: 'https://search.bilibili.com/all?keyword=' }
@@ -78,8 +81,19 @@ export function getDefaultConfig() {
       cardSize: 'medium' as const,
       showIcon: true,
       showName: true,
-      borderRadius: 8
+      borderRadius: 8,
+      theme: 'aurora' as const
     },
-    defaultEngine: 'b'
+    defaultEngine: 'b',
+    autoCategoryRules: [],
+    quickActions: [
+      { key: '>shutdown', name: '关机', command: 'shutdown' as const, enabled: true },
+      { key: '>restart', name: '重启', command: 'restart' as const, enabled: true },
+      { key: '>lock', name: '锁定电脑', command: 'lock' as const, enabled: true },
+      { key: '>settings', name: '系统设置', command: 'settings' as const, enabled: true },
+      { key: '>calc', name: '计算器', command: 'calculator' as const, enabled: true },
+      { key: '>notepad', name: '记事本', command: 'notepad' as const, enabled: true },
+      { key: '>clipboard', name: '剪贴板历史', command: 'clipboard' as const, enabled: true }
+    ]
   }
 }

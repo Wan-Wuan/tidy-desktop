@@ -52,6 +52,198 @@ body {
   overflow: hidden;
 }
 
+.theme-light {
+  background: linear-gradient(160deg, #FFFFFF 0%, #F8FAFC 48%, #EEF2FF 100%);
+}
+
+.theme-light .aurora-bg {
+  opacity: 0.45;
+}
+
+.theme-dark {
+  background: linear-gradient(160deg, #111827 0%, #1E1B4B 48%, #0F172A 100%);
+  color: #E5E7EB;
+}
+
+.theme-dark .glass {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(99, 102, 241, 0.28);
+}
+
+.theme-dark .glass-card,
+.theme-dark .glass-subtle {
+  background: rgba(30, 41, 59, 0.68);
+  border-color: rgba(129, 140, 248, 0.24);
+}
+
+.theme-dark .text-slate-700,
+.theme-dark .text-slate-800 {
+  color: #E5E7EB;
+}
+
+.theme-dark .text-slate-600,
+.theme-dark .text-slate-500 {
+  color: #CBD5E1;
+}
+
+.theme-dark .text-slate-400 {
+  color: #94A3B8;
+}
+
+.theme-dark .text-slate-300 {
+  color: #CBD5E1;
+}
+
+.theme-dark .text-brand-600,
+.theme-dark .text-brand-700,
+.theme-dark .text-brand-800 {
+  color: #C7D2FE;
+}
+
+.theme-dark .bg-white\/60,
+.theme-dark .bg-white\/70,
+.theme-dark .bg-white\/80 {
+  background-color: rgba(30, 41, 59, 0.74);
+}
+
+.theme-dark .bg-white,
+.theme-dark .bg-slate-100,
+.theme-dark .bg-brand-50\/50,
+.theme-dark .bg-brand-50,
+.theme-dark .bg-brand-100 {
+  background-color: rgba(30, 41, 59, 0.78);
+}
+
+.theme-dark .border-slate-200,
+.theme-dark .border-brand-100,
+.theme-dark .border-brand-100\/40,
+.theme-dark .border-brand-100\/50,
+.theme-dark .border-brand-200\/50 {
+  border-color: rgba(129, 140, 248, 0.3);
+}
+
+.theme-dark input,
+.theme-dark select,
+.theme-dark textarea {
+  background-color: rgba(15, 23, 42, 0.9);
+  border-color: rgba(129, 140, 248, 0.35);
+  color: #E5E7EB;
+}
+
+.theme-dark input::placeholder,
+.theme-dark textarea::placeholder {
+  color: #94A3B8;
+}
+
+.theme-dark option {
+  background-color: #111827;
+  color: #E5E7EB;
+}
+
+.theme-dark button.bg-white,
+.theme-dark button.bg-white\/60,
+.theme-dark button.bg-white\/70,
+.theme-dark button.bg-white\/80,
+.theme-dark button.bg-slate-100 {
+  color: #E5E7EB;
+  background-color: rgba(30, 41, 59, 0.86);
+}
+
+.theme-dark button.bg-white:hover,
+.theme-dark button.bg-white\/60:hover,
+.theme-dark button.bg-white\/70:hover,
+.theme-dark button.bg-white\/80:hover,
+.theme-dark button.bg-slate-100:hover {
+  background-color: rgba(51, 65, 85, 0.95);
+}
+
+.theme-dark .shadow-brand-500\/5,
+.theme-dark .shadow-brand-500\/20,
+.theme-dark .shadow-brand-500\/25,
+.theme-dark .shadow-brand-500\/30 {
+  --tw-shadow-color: rgba(99, 102, 241, 0.28);
+}
+
+.theme-system {
+  background: linear-gradient(160deg, #F0F4FF 0%, #E8EEFF 30%, #F5F3FF 60%, #EFF6FF 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+  .theme-system {
+    background: linear-gradient(160deg, #111827 0%, #1E1B4B 48%, #0F172A 100%);
+    color: #E5E7EB;
+  }
+
+  .theme-system .glass {
+    background: rgba(15, 23, 42, 0.72);
+    border-color: rgba(99, 102, 241, 0.28);
+  }
+
+  .theme-system .glass-card,
+  .theme-system .glass-subtle {
+    background: rgba(30, 41, 59, 0.68);
+    border-color: rgba(129, 140, 248, 0.24);
+  }
+
+  .theme-system .text-slate-700,
+  .theme-system .text-slate-800 {
+    color: #E5E7EB;
+  }
+
+  .theme-system .text-slate-600,
+  .theme-system .text-slate-500,
+  .theme-system .text-slate-300 {
+    color: #CBD5E1;
+  }
+
+  .theme-system .text-slate-400 {
+    color: #94A3B8;
+  }
+
+  .theme-system .text-brand-600,
+  .theme-system .text-brand-700,
+  .theme-system .text-brand-800 {
+    color: #C7D2FE;
+  }
+
+  .theme-system .bg-white,
+  .theme-system .bg-white\/60,
+  .theme-system .bg-white\/70,
+  .theme-system .bg-white\/80,
+  .theme-system .bg-slate-100,
+  .theme-system .bg-brand-50\/50,
+  .theme-system .bg-brand-50,
+  .theme-system .bg-brand-100 {
+    background-color: rgba(30, 41, 59, 0.78);
+  }
+
+  .theme-system .border-slate-200,
+  .theme-system .border-brand-100,
+  .theme-system .border-brand-100\/40,
+  .theme-system .border-brand-100\/50,
+  .theme-system .border-brand-200\/50 {
+    border-color: rgba(129, 140, 248, 0.3);
+  }
+
+  .theme-system input,
+  .theme-system select,
+  .theme-system textarea {
+    background-color: rgba(15, 23, 42, 0.9);
+    border-color: rgba(129, 140, 248, 0.35);
+    color: #E5E7EB;
+  }
+
+  .theme-system input::placeholder,
+  .theme-system textarea::placeholder {
+    color: #94A3B8;
+  }
+
+  .theme-system option {
+    background-color: #111827;
+    color: #E5E7EB;
+  }
+}
+
 /* Aurora background orbs — the signature element */
 .aurora-bg {
   position: fixed;

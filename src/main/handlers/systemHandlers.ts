@@ -1,6 +1,8 @@
-import { ipcMain, BrowserWindow, dialog, screen, app, nativeImage } from 'electron'
+import { ipcMain, BrowserWindow, dialog, screen, app, nativeImage, shell } from 'electron'
 import fs from 'fs'
 import path from 'path'
+import { APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, ICONS_DIR, readJsonFile, writeJsonFile } from '../config'
+import type { AppsData, CategoriesData, Config } from '../../shared/types'
 
 let mainWindowRef: { current: BrowserWindow | null } = { current: null }
 let searchWindowRef: { current: BrowserWindow | null } = { current: null }
@@ -40,6 +42,21 @@ export function registerSystemHandlers() {
         height: finalHeight
       })
     }
+  })
+
+  ipcMain.handle('move-search-window-to-cursor-display', () => {
+    const w = searchWindowRef.current
+    if (!w || w.isDestroyed()) return false
+    const point = screen.getCursorScreenPoint()
+    const display = screen.getDisplayNearestPoint(point)
+    const bounds = w.getBounds()
+    w.setBounds({
+      x: Math.round(display.workArea.x + (display.workArea.width - bounds.width) / 2),
+      y: Math.round(display.workArea.y + display.workArea.height * 0.3),
+      width: bounds.width,
+      height: bounds.height
+    })
+    return true
   })
 
   ipcMain.handle('confirm', async (_, message: string) => {
@@ -88,6 +105,82 @@ export function registerSystemHandlers() {
         }
       }
     }))
+  })
+
+  ipcMain.handle('validate-apps', async (_, apps: { id: string; path: string; type?: string }[]) => {
+    return (apps || []).map((item) => {
+      const exists = item.type === 'steam'
+        ? /^steam:\/\//i.test(item.path)
+        : fs.existsSync(item.path)
+      return { id: item.id, path: item.path, exists }
+    })
+  })
+
+  ipcMain.handle('export-backup', async () => {
+    const options = {
+      title: 'Export backup',
+      defaultPath: `tidy-desktop-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    }
+    const owner = mainWindowRef.current
+    const result = owner && !owner.isDestroyed()
+      ? await dialog.showSaveDialog(owner, options)
+      : await dialog.showSaveDialog(options)
+    if (result.canceled || !result.filePath) return { success: false }
+
+    const payload = {
+      version: app.getVersion(),
+      exportedAt: new Date().toISOString(),
+      config: readJsonFile<Config>(CONFIG_FILE, {} as Config),
+      apps: readJsonFile<AppsData>(APPS_FILE, { apps: [] }),
+      categories: readJsonFile<CategoriesData>(CATEGORIES_FILE, { categories: [], subcategories: [] })
+    }
+    fs.writeFileSync(result.filePath, JSON.stringify(payload, null, 2), 'utf-8')
+    return { success: true, filePath: result.filePath }
+  })
+
+  ipcMain.handle('import-backup', async () => {
+    const options = {
+      title: 'Import backup',
+      properties: ['openFile'],
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    } as Electron.OpenDialogOptions
+    const owner = mainWindowRef.current
+    const result = owner && !owner.isDestroyed()
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options)
+    if (result.canceled || result.filePaths.length === 0) return { success: false }
+
+    const raw = fs.readFileSync(result.filePaths[0], 'utf-8')
+    const payload = JSON.parse(raw)
+    if (payload.config) writeJsonFile(CONFIG_FILE, payload.config)
+    if (payload.apps) writeJsonFile(APPS_FILE, payload.apps)
+    if (payload.categories) writeJsonFile(CATEGORIES_FILE, payload.categories)
+    return { success: true, filePath: result.filePaths[0] }
+  })
+
+  ipcMain.handle('clear-icon-cache', async () => {
+    let count = 0
+    if (fs.existsSync(ICONS_DIR)) {
+      for (const file of fs.readdirSync(ICONS_DIR)) {
+        const filePath = path.join(ICONS_DIR, file)
+        try {
+          const ext = path.extname(file).toLowerCase()
+          if (fs.statSync(filePath).isFile() && ['.png', '.ico'].includes(ext)) {
+            fs.unlinkSync(filePath)
+            count++
+          }
+        } catch { /* ignore */ }
+      }
+    }
+    return { success: true, count }
+  })
+
+  ipcMain.handle('open-update-log', async () => {
+    const logPath = path.join(app.getPath('temp'), 'tidy-desktop-install.log')
+    if (!fs.existsSync(logPath)) return false
+    const error = await shell.openPath(logPath)
+    return !error
   })
 
   ipcMain.handle('start-drag-file', async (event, filePath: string) => {

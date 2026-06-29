@@ -8,6 +8,11 @@ interface SearchEngineInfo {
   url: string
 }
 
+type SearchResult = Omit<AppItem, 'type'> & {
+  type?: AppItem['type'] | 'action'
+  actionCommand?: string
+}
+
 const MAX_DISPLAY = 6
 const INPUT_HEIGHT = 56
 const RESULT_ITEM_HEIGHT = 51
@@ -22,11 +27,11 @@ function SearchApp() {
   const [categories, setCategories] = useState<Category[]>([])
   const [config, setConfig] = useState<Config | null>(null)
   const [activeEngine, setActiveEngine] = useState<SearchEngineInfo | null>(null)
-  const [results, setResults] = useState<AppItem[]>([])
+  const [results, setResults] = useState<SearchResult[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const queryRef = useRef('')
-  const resultsRef = useRef<AppItem[]>([])
+  const resultsRef = useRef<SearchResult[]>([])
   const resultsContainerRef = useRef<HTMLDivElement>(null)
   const isActiveRef = useRef(false)
   const resizeTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -129,18 +134,77 @@ function SearchApp() {
     return cat ? cat.name : ''
   }
 
-  const filterApps = useCallback((searchQuery: string): AppItem[] => {
+  const isSubsequence = (needle: string, haystack: string): boolean => {
+    if (!needle) return true
+    let index = 0
+    for (const char of haystack) {
+      if (char === needle[index]) index++
+      if (index === needle.length) return true
+    }
+    return false
+  }
+
+  const getSearchScore = (app: AppItem, terms: string[]): number => {
+    const name = app.name.toLowerCase()
+    const pinyin = (app.pinyin || '').toLowerCase()
+    const firstLetter = (app.firstLetter || '').toLowerCase()
+    const aliases = (app.aliases || []).map(alias => alias.toLowerCase())
+    const haystacks = [name, pinyin, firstLetter, ...aliases]
+
+    let score = (app.launchCount || 0) * 8 + Math.min(20, Math.floor((app.lastOpenedAt || 0) / 86400000))
+    for (const term of terms) {
+      if (aliases.some(alias => alias === term)) score += 120
+      if (name === term) score += 100
+      if (name.startsWith(term)) score += 70
+      if (firstLetter.startsWith(term)) score += 55
+      if (pinyin.startsWith(term)) score += 45
+      if (haystacks.some(value => value.includes(term))) score += 25
+      if (haystacks.some(value => isSubsequence(term, value))) score += 10
+    }
+    return score
+  }
+
+  const getQuickActionResults = useCallback((searchQuery: string): SearchResult[] => {
+    const normalized = searchQuery.trim().toLowerCase()
+    if (!normalized.startsWith('>')) return []
+    return (config?.quickActions || [])
+      .filter(action => action.enabled && (
+        action.key.toLowerCase().includes(normalized) ||
+        action.name.toLowerCase().includes(normalized.slice(1))
+      ))
+      .map(action => ({
+        id: `__action_${action.command}`,
+        name: action.name,
+        path: action.key,
+        icon: '',
+        categoryId: null,
+        subcategoryId: null,
+        pinyin: '',
+        firstLetter: '',
+        type: 'action',
+        actionCommand: action.command
+      }))
+  }, [config])
+
+  const filterApps = useCallback((searchQuery: string): SearchResult[] => {
+    const actionResults = getQuickActionResults(searchQuery)
+    if (actionResults.length > 0) return actionResults
+
     const terms = searchQuery.toLowerCase().trim().split(/\s+/)
     const matched = apps.filter(app => {
+      if (app.hidden) return false
       const name = app.name.toLowerCase()
       const pinyin = (app.pinyin || '').toLowerCase()
       const firstLetter = (app.firstLetter || '').toLowerCase()
+      const aliases = (app.aliases || []).map(alias => alias.toLowerCase())
       const nameWords = name.split(/[\s\-_.,/\\|]+/)
 
       return terms.every(term => {
+        if (aliases.some(alias => alias.includes(term))) return true
         if (name.includes(term)) return true
         if (pinyin.includes(term)) return true
         if (firstLetter.startsWith(term)) return true
+        if (isSubsequence(term, name) || isSubsequence(term, pinyin) || isSubsequence(term, firstLetter)) return true
         for (let i = 0; i < nameWords.length; i++) {
           if (nameWords[i].startsWith(term)) return true
         }
@@ -162,7 +226,7 @@ function SearchApp() {
         }
         return pti === term.length
       })
-    })
+    }).sort((a, b) => getSearchScore(b, terms) - getSearchScore(a, terms))
 
     const suggestion = getFolderSuggestion(searchQuery)
     if (suggestion && matched.length === 0) {
@@ -173,7 +237,7 @@ function SearchApp() {
     }
 
     return matched
-  }, [apps])
+  }, [apps, getQuickActionResults])
 
   const getDefaultSearchEngine = useCallback((): SearchEngineInfo | null => {
     const key = config?.defaultEngine || 'b'
@@ -193,18 +257,88 @@ function SearchApp() {
     window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
   }, [])
 
-  const handleOpenItem = async (app: AppItem) => {
+  const persistApps = async (nextApps: AppItem[]) => {
+    setApps(nextApps)
+    await window.electronAPI.saveApps({ apps: nextApps })
+  }
+
+  const recordLaunch = async (app: SearchResult) => {
+    if (app.id.startsWith('__')) return
+    const nextApps = apps.map(item => item.id === app.id
+      ? { ...item, launchCount: (item.launchCount || 0) + 1, lastOpenedAt: Date.now() }
+      : item
+    )
+    await persistApps(nextApps)
+  }
+
+  const handleOpenItem = async (app: SearchResult) => {
     isActiveRef.current = true
     window.electronAPI.hideSearchWindow()
     resetAll()
-    if (app.type === 'folder') {
+    if (app.type === 'action' && app.actionCommand) {
+      await window.electronAPI.runQuickAction(app.actionCommand)
+    } else if (app.type === 'folder') {
       await window.electronAPI.openFolder(app.path)
     } else if (app.type === 'steam') {
       await window.electronAPI.openSteam(app.path)
     } else {
       await window.electronAPI.openApp(app.path)
     }
+    await recordLaunch(app)
     setTimeout(() => { isActiveRef.current = false }, 200)
+  }
+
+  const getCurrentResult = (): SearchResult | null => {
+    return resultsRef.current[activeIndex] || resultsRef.current[0] || null
+  }
+
+  const hideCurrentResult = async () => {
+    const app = getCurrentResult()
+    if (!app || app.id.startsWith('__')) return
+    const nextApps = apps.map(item => item.id === app.id ? { ...item, hidden: true } : item)
+    await persistApps(nextApps)
+    const nextResults = resultsRef.current.filter(item => item.id !== app.id)
+    resultsRef.current = nextResults
+    setResults(nextResults)
+    setActiveIndex(index => Math.max(0, Math.min(index, nextResults.length - 1)))
+    resizeWindow(nextResults.length, !!queryRef.current.trim())
+  }
+
+  const openCurrentContainingFolder = async () => {
+    const app = getCurrentResult()
+    if (!app || app.type === 'action') return
+    isActiveRef.current = true
+    window.electronAPI.hideSearchWindow()
+    resetAll()
+    await window.electronAPI.openContainingFolder(app.path)
+    setTimeout(() => { isActiveRef.current = false }, 200)
+  }
+
+  const openCurrentAsAdmin = async () => {
+    const app = getCurrentResult()
+    if (!app || app.type !== 'app') return
+    isActiveRef.current = true
+    window.electronAPI.hideSearchWindow()
+    resetAll()
+    await window.electronAPI.openAppAsAdmin(app.path)
+    await recordLaunch(app)
+    setTimeout(() => { isActiveRef.current = false }, 200)
+  }
+
+  const tryOpenPrefixedSearch = async (): Promise<boolean> => {
+    const value = queryRef.current.trim()
+    const [prefix, ...rest] = value.split(/\s+/)
+    const term = rest.join(' ')
+    if (!prefix || !term || !config?.searchEngines) return false
+    const engineCheck = checkSearchEngine(`${prefix} `, config.searchEngines)
+    if (!engineCheck.isEngine || !engineCheck.engine) return false
+    isActiveRef.current = true
+    window.electronAPI.hideSearchWindow()
+    const url = engineCheck.engine.url + encodeURIComponent(term)
+    resetAll()
+    await window.electronAPI.openUrl(url)
+    setTimeout(() => { isActiveRef.current = false }, 200)
+    return true
   }
 
   const handleSearchRef = useRef<() => void>(() => {})
@@ -222,18 +356,9 @@ function SearchApp() {
     }
     if (resultsRef.current.length > 0) {
       const app = resultsRef.current[activeIndex] || resultsRef.current[0]
-      isActiveRef.current = true
-      window.electronAPI.hideSearchWindow()
-      resetAll()
-      if (app.type === 'folder') {
-        await window.electronAPI.openFolder(app.path)
-      } else if (app.type === 'steam') {
-        await window.electronAPI.openSteam(app.path)
-      } else {
-        await window.electronAPI.openApp(app.path)
-      }
-      setTimeout(() => { isActiveRef.current = false }, 200)
+      await handleOpenItem(app)
     } else if (queryRef.current.trim()) {
+      if (await tryOpenPrefixedSearch()) return
       const engine = getDefaultSearchEngine()
       if (!engine) return
       isActiveRef.current = true
@@ -308,7 +433,16 @@ function SearchApp() {
       }
     } else if (e.key === 'Enter') {
       e.preventDefault()
-      handleSearch()
+      if (e.ctrlKey) {
+        openCurrentContainingFolder()
+      } else if (e.shiftKey) {
+        openCurrentAsAdmin()
+      } else {
+        handleSearch()
+      }
+    } else if (e.key === 'Delete') {
+      e.preventDefault()
+      hideCurrentResult()
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
       const len = resultsRef.current.length
@@ -337,7 +471,7 @@ function SearchApp() {
   const hasResults = results.length > 0
 
   return (
-    <div className="search-container">
+    <div className={`search-container theme-${config?.ui?.theme || 'aurora'}`}>
       <div className="search-input-wrapper">
         <svg className="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="11" cy="11" r="8" />

@@ -38,6 +38,7 @@ function App() {
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [dragOverAppId, setDragOverAppId] = useState<string | null>(null)
+  const [iconRefreshProgress, setIconRefreshProgress] = useState<{ done: number; total: number } | null>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const categoryBarRef = useRef<HTMLDivElement>(null)
   const dragCounterRef = useRef(0)
@@ -113,6 +114,16 @@ function App() {
   useEffect(() => {
     loadData()
   }, [])
+
+  useEffect(() => {
+    if (!currentVersion) return
+    const key = 'tidy-desktop:last-version'
+    const lastVersion = localStorage.getItem(key)
+    if (lastVersion && lastVersion !== currentVersion) {
+      setTimeout(() => alert(`已更新到 v${currentVersion}`), 400)
+    }
+    localStorage.setItem(key, currentVersion)
+  }, [currentVersion])
 
   useEffect(() => {
     appsRef.current = apps
@@ -406,7 +417,7 @@ function App() {
   }
 
 
-  const handleAddApp = async (name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam' = 'app') => {
+  const handleAddApp = async (name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam' = 'app', aliases: string[] = []) => {
     if (categories.length === 0) {
       alert('请先创建一个分类，然后再添加应用。')
       return
@@ -428,7 +439,8 @@ function App() {
       subcategoryId: null,
       pinyin: getPinyin(name),
       firstLetter: getFirstLetter(name),
-      type
+      type,
+      aliases
     }
 
     const updatedApps = [...currentApps, newApp]
@@ -453,7 +465,7 @@ function App() {
     }
   }
 
-  const handleUpdateApp = async (id: string, name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam') => {
+  const handleUpdateApp = async (id: string, name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam', aliases: string[] = []) => {
     const currentApps = appsRef.current
     const existing = currentApps.find(a => a.id === id)
     if (!existing) return
@@ -472,6 +484,7 @@ function App() {
       type,
       pinyin: getPinyin(name),
       firstLetter: getFirstLetter(name),
+      aliases,
       // Clear old icon if path/type changed
       icon: (existing.path !== path || existing.type !== type) ? '' : existing.icon
     }
@@ -657,7 +670,7 @@ function App() {
       if (!iconPath) {
         iconPath = await window.electronAPI.extractIcon(app.path)
       }
-      appsWithIcons.push({ ...app, icon: iconPath || '' })
+      appsWithIcons.push(iconPath ? { ...app, icon: iconPath } : app)
     }
 
     if (appsWithIcons.length > 0) {
@@ -896,8 +909,113 @@ function App() {
     await window.electronAPI.saveApps({ apps: updated })
   }
 
+  const handleRefreshAllIcons = async () => {
+    const cleared = await window.electronAPI.clearIconCache()
+    const sourceApps = [...appsRef.current]
+    const refreshed: AppItem[] = [...sourceApps]
+    const indexById = new Map(sourceApps.map((app, index) => [app.id, index]))
+    let successCount = 0
+    let failedCount = 0
+    let doneCount = 0
+    const CONCURRENCY = 4
+    const isBetterIcon = (nextIcon: string, previousIcon: string) => {
+      if (!nextIcon) return false
+      if (!previousIcon) return true
+      return nextIcon.length >= 1000 || nextIcon.length > previousIcon.length
+    }
+    const refreshOne = async (app: AppItem) => {
+      let iconPath: string | null = null
+      try {
+        if (app.type === 'steam') {
+          iconPath = await window.electronAPI.extractSteamIcon(app.path)
+        }
+        if (!iconPath) {
+          iconPath = await window.electronAPI.extractIcon(app.path)
+        }
+      } catch { /* ignore */ }
+      if (iconPath && isBetterIcon(iconPath, app.icon || '')) {
+        const index = indexById.get(app.id)
+        if (index !== undefined) refreshed[index] = { ...app, icon: iconPath }
+        successCount++
+      } else {
+        failedCount++
+      }
+      doneCount++
+      setIconRefreshProgress({ done: doneCount, total: sourceApps.length })
+    }
+
+    setIconRefreshProgress({ done: 0, total: sourceApps.length })
+    for (let i = 0; i < sourceApps.length; i += CONCURRENCY) {
+      const batch = sourceApps.slice(i, i + CONCURRENCY)
+      await Promise.all(batch.map(refreshOne))
+      setApps([...refreshed])
+      await window.electronAPI.saveApps({ apps: refreshed })
+    }
+    setApps(refreshed)
+    await window.electronAPI.saveApps({ apps: refreshed })
+    setIconRefreshProgress(null)
+    alert(`已清理 ${cleared.count} 个图标缓存，成功刷新 ${successCount} 个图标。${failedCount > 0 ? `有 ${failedCount} 个图标提取失败，已保留原图标。` : ''}`)
+  }
+
+  const handleAutoCategorize = async () => {
+    const rules = config?.autoCategoryRules || []
+    const updatedApps = appsRef.current.map(app => {
+      const haystack = `${app.name} ${app.path} ${(app.aliases || []).join(' ')}`.toLowerCase()
+      const rule = rules.find(item => item.categoryId && haystack.includes(item.match.toLowerCase()))
+      if (rule) return { ...app, categoryId: rule.categoryId, subcategoryId: null }
+
+      const category = categories.find(cat => haystack.includes(cat.name.toLowerCase()))
+      if (category) return { ...app, categoryId: category.id, subcategoryId: null }
+
+      return app
+    })
+    setApps(updatedApps)
+    await window.electronAPI.saveApps({ apps: updatedApps })
+    alert('自动分类已完成。')
+  }
+
+  const handleCleanupInvalidApps = async () => {
+    const checks = await window.electronAPI.validateApps(appsRef.current.map(app => ({
+      id: app.id,
+      path: app.path,
+      type: app.type
+    })))
+    const invalidIds = new Set(checks.filter(item => !item.exists).map(item => item.id))
+    if (invalidIds.size === 0) {
+      alert('没有发现失效的应用路径。')
+      return
+    }
+    const confirmed = await window.electronAPI.confirm(`确定移除 ${invalidIds.size} 个失效项目吗？`)
+    if (!confirmed) return
+    const updatedApps = appsRef.current.filter(app => !invalidIds.has(app.id))
+    setApps(updatedApps)
+    await window.electronAPI.saveApps({ apps: updatedApps })
+  }
+
+  const handleRestoreHiddenApps = async () => {
+    const updatedApps = appsRef.current.map(app => ({ ...app, hidden: false }))
+    setApps(updatedApps)
+    await window.electronAPI.saveApps({ apps: updatedApps })
+    alert('已恢复搜索中隐藏的项目。')
+  }
+
+  const handleExportBackup = async () => {
+    const result = await window.electronAPI.exportBackup()
+    if (result.success) alert(`备份已导出：\n${result.filePath}`)
+  }
+
+  const handleImportBackup = async () => {
+    const confirmed = await window.electronAPI.confirm('确定导入备份并替换当前配置、应用和分类吗？')
+    if (!confirmed) return
+    const result = await window.electronAPI.importBackup()
+    if (result.success) {
+      await loadData()
+      alert('备份已导入。')
+    }
+  }
+
   return (
-    <div className="flex flex-col h-screen relative">
+    <div className={`flex flex-col h-screen relative theme-${config?.ui?.theme || 'aurora'}`}>
       {/* Aurora background orbs */}
       <div className="aurora-bg">
         <div className="aurora-orb aurora-orb--indigo" />
@@ -1330,6 +1448,14 @@ function App() {
           updateVersion={updateVersion}
           updateError={updateError}
           onCheckUpdate={manualCheckForUpdate}
+          onRefreshIcons={handleRefreshAllIcons}
+          iconRefreshProgress={iconRefreshProgress}
+          onAutoCategorize={handleAutoCategorize}
+          onCleanupInvalid={handleCleanupInvalidApps}
+          onRestoreHidden={handleRestoreHiddenApps}
+          onExportBackup={handleExportBackup}
+          onImportBackup={handleImportBackup}
+          onOpenUpdateLog={() => window.electronAPI.openUpdateLog()}
         />
       )}
 
@@ -1420,7 +1546,24 @@ function App() {
   )
 }
 
-const SettingsModal = React.memo(function SettingsModal({ config, currentVersion, onClose, onSave, updateState, updateVersion, updateError, onCheckUpdate }: {
+const SettingsModal = React.memo(function SettingsModal({
+  config,
+  currentVersion,
+  onClose,
+  onSave,
+  updateState,
+  updateVersion,
+  updateError,
+  onCheckUpdate,
+  onRefreshIcons,
+  iconRefreshProgress,
+  onAutoCategorize,
+  onCleanupInvalid,
+  onRestoreHidden,
+  onExportBackup,
+  onImportBackup,
+  onOpenUpdateLog
+}: {
   config: Config
   currentVersion: string
   onClose: () => void
@@ -1429,13 +1572,21 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
   updateVersion?: string
   updateError?: string
   onCheckUpdate?: () => Promise<void>
+  onRefreshIcons: () => Promise<void>
+  iconRefreshProgress: { done: number; total: number } | null
+  onAutoCategorize: () => Promise<void>
+  onCleanupInvalid: () => Promise<void>
+  onRestoreHidden: () => Promise<void>
+  onExportBackup: () => Promise<void>
+  onImportBackup: () => Promise<void>
+  onOpenUpdateLog: () => Promise<boolean>
 }) {
   const [hotkey, setHotkey] = useState(config.hotkey)
   const [searchHotkey, setSearchHotkey] = useState(config.searchHotkey || 'Ctrl+K')
   const [autoStart, setAutoStart] = useState(false)
   const [defaultEngine, setDefaultEngine] = useState(config.defaultEngine || 'b')
   const [ui, setUi] = useState<UISettings>(config.ui || {
-    gridColumns: 6, cardSize: 'medium', showIcon: true, showName: true, borderRadius: 8
+    gridColumns: 6, cardSize: 'medium', showIcon: true, showName: true, borderRadius: 8, theme: 'aurora'
   })
   const [recording, setRecording] = useState<'main' | 'search' | null>(null)
   const engines = config.searchEngines
@@ -1652,6 +1803,40 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
                 <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${ui.showName ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
             </div>
+            <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
+              <span className="text-sm text-slate-700">主题</span>
+              <div className="flex gap-1">
+                {(['aurora', 'light', 'dark', 'system'] as const).map(theme => (
+                  <button
+                    key={theme}
+                    onClick={() => { const next = { ...ui, theme }; setUi(next); saveConfig({ ui: next }) }}
+                    className={`px-2.5 py-1 rounded-lg text-xs ${ui.theme === theme ? 'bg-brand-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-brand-400'}`}
+                  >
+                    {{ aurora: '极光', light: '浅色', dark: '深色', system: '跟随系统' }[theme]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-5">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+            <span>工具</span>
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={onRefreshIcons}
+              disabled={!!iconRefreshProgress}
+              className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300 disabled:opacity-60"
+            >
+              {iconRefreshProgress ? `刷新中 ${iconRefreshProgress.done}/${iconRefreshProgress.total}` : '刷新图标'}
+            </button>
+            <button onClick={onAutoCategorize} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">自动分类</button>
+            <button onClick={onCleanupInvalid} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">清理失效项</button>
+            <button onClick={onRestoreHidden} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">恢复隐藏项</button>
+            <button onClick={onExportBackup} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">导出备份</button>
+            <button onClick={onImportBackup} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">导入备份</button>
           </div>
         </div>
 
@@ -1672,6 +1857,15 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
                 className="px-3 py-1 bg-brand-500 text-white rounded-lg hover:bg-brand-600 text-xs font-medium transition-colors disabled:opacity-50"
               >
                 {updateState === 'checking' ? '检查中...' : '检查更新'}
+              </button>
+            </div>
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-brand-100/50">
+              <span className="text-sm text-slate-600">更新安装日志</span>
+              <button
+                onClick={onOpenUpdateLog}
+                className="px-3 py-1 bg-white text-slate-600 border border-slate-200 rounded-lg hover:border-brand-300 text-xs font-medium transition-colors"
+              >
+                打开日志
               </button>
             </div>
             {updateState === 'checking' && (
@@ -1714,7 +1908,7 @@ const SettingsModal = React.memo(function SettingsModal({ config, currentVersion
 const AddAppModal = React.memo(function AddAppModal({ categories, onClose, onAdd, defaultCategory }: {
   categories: Category[]
   onClose: () => void
-  onAdd: (name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam') => void
+  onAdd: (name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam', aliases?: string[]) => void
   defaultCategory?: string | null
 }) {
   const getInitialCategory = () => {
@@ -1731,6 +1925,11 @@ const AddAppModal = React.memo(function AddAppModal({ categories, onClose, onAdd
   const [path, setPath] = useState('')
   const [categoryId, setCategoryId] = useState(getInitialCategory())
   const [type, setType] = useState<'app' | 'folder' | 'steam'>('app')
+  const [aliasText, setAliasText] = useState('')
+
+  const parseAliases = (value: string) => {
+    return value.split(/[,，\s]+/).map(item => item.trim()).filter(Boolean)
+  }
 
   useEffect(() => {
     const valid = getInitialCategory()
@@ -1778,12 +1977,12 @@ const AddAppModal = React.memo(function AddAppModal({ categories, onClose, onAdd
     if (type === 'steam') {
       const parsed = parseSteamUrl(path.trim())
       if (parsed) {
-        onAdd(name.trim() || 'Steam Game', parsed.steamUrl, categoryId, 'steam')
+        onAdd(name.trim() || 'Steam 游戏', parsed.steamUrl, categoryId, 'steam', parseAliases(aliasText))
         return
       }
     }
     if (name.trim() && path.trim()) {
-      onAdd(name.trim(), path.trim(), categoryId, type)
+      onAdd(name.trim(), path.trim(), categoryId, type, parseAliases(aliasText))
     }
   }
 
@@ -1894,6 +2093,19 @@ const AddAppModal = React.memo(function AddAppModal({ categories, onClose, onAdd
             </select>
           </div>
 
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              搜索别名
+            </label>
+            <input
+              type="text"
+              value={aliasText}
+              onChange={(e) => setAliasText(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-400 text-sm"
+              placeholder="ps, vx, work"
+            />
+          </div>
+
           <div className="flex justify-end gap-2">
             <button
               type="button"
@@ -1919,12 +2131,17 @@ const EditAppModal = React.memo(function EditAppModal({ app, categories, onClose
   app: AppItem
   categories: Category[]
   onClose: () => void
-  onUpdate: (id: string, name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam') => void
+  onUpdate: (id: string, name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam', aliases?: string[]) => void
 }) {
   const [name, setName] = useState(app.name)
   const [path, setPath] = useState(app.path)
   const [categoryId, setCategoryId] = useState(app.categoryId || (categories.length > 0 ? categories[0].id : ''))
   const [type, setType] = useState<'app' | 'folder' | 'steam'>(app.type || 'app')
+  const [aliasText, setAliasText] = useState((app.aliases || []).join(', '))
+
+  const parseAliases = (value: string) => {
+    return value.split(/[,，\s]+/).map(item => item.trim()).filter(Boolean)
+  }
 
   const parseSteamUrl = (url: string): { name: string; steamUrl: string } | null => {
     const launchMatch = url.match(/steam:\/\/launch\/(\d+)/)
@@ -1947,12 +2164,12 @@ const EditAppModal = React.memo(function EditAppModal({ app, categories, onClose
     if (type === 'steam') {
       const parsed = parseSteamUrl(path.trim())
       if (parsed) {
-        onUpdate(app.id, name.trim() || 'Steam Game', parsed.steamUrl, categoryId, 'steam')
+        onUpdate(app.id, name.trim() || 'Steam 游戏', parsed.steamUrl, categoryId, 'steam', parseAliases(aliasText))
         return
       }
     }
     if (name.trim() && path.trim()) {
-      onUpdate(app.id, name.trim(), path.trim(), categoryId, type)
+      onUpdate(app.id, name.trim(), path.trim(), categoryId, type, parseAliases(aliasText))
     }
   }
 
@@ -2055,6 +2272,19 @@ const EditAppModal = React.memo(function EditAppModal({ app, categories, onClose
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              搜索别名
+            </label>
+            <input
+              type="text"
+              value={aliasText}
+              onChange={(e) => setAliasText(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-400 text-sm"
+              placeholder="ps, vx, work"
+            />
           </div>
 
           <div className="flex justify-end gap-2">

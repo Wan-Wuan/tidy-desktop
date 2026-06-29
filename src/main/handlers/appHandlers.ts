@@ -1,5 +1,7 @@
 import { ipcMain, shell, dialog } from 'electron'
-import { execFileSync } from 'child_process'
+import { execFile, execFileSync, spawn } from 'child_process'
+import fs from 'fs'
+import path from 'path'
 
 /** 安全地将 PowerShell 命令编码为 Base64，避免注入 */
 function encodePsCommand(script: string): string {
@@ -27,6 +29,52 @@ export function registerAppHandlers() {
       return false
     }
     return true
+  })
+
+  ipcMain.handle('show-item-in-folder', async (_, appPath: string) => {
+    try {
+      if (!fs.existsSync(appPath)) return false
+      shell.showItemInFolder(appPath)
+      return true
+    } catch (error) {
+      console.error('Failed to show item in folder:', error)
+      return false
+    }
+  })
+
+  ipcMain.handle('open-containing-folder', async (_, appPath: string) => {
+    try {
+      if (!appPath) return false
+      if (fs.existsSync(appPath)) {
+        const stat = fs.statSync(appPath)
+        const folderPath = stat.isDirectory() ? appPath : path.dirname(appPath)
+        const error = await shell.openPath(folderPath)
+        return !error
+      }
+      const folderPath = path.dirname(appPath)
+      const error = await shell.openPath(folderPath)
+      return !error
+    } catch (error) {
+      console.error('Failed to open containing folder:', error)
+      return false
+    }
+  })
+
+  ipcMain.handle('open-app-as-admin', async (_, appPath: string) => {
+    try {
+      if (!fs.existsSync(appPath)) return false
+      const escapedPath = appPath.replace(/'/g, "''")
+      execFile('powershell', [
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-Command',
+        `Start-Process -FilePath '${escapedPath}' -Verb RunAs`
+      ], { windowsHide: true })
+      return true
+    } catch (error) {
+      console.error('Failed to open app as admin:', error)
+      return false
+    }
   })
 
   ipcMain.handle('open-folder', async (_, folderPath: string) => {
@@ -78,6 +126,39 @@ export function registerAppHandlers() {
     } catch (error) {
       console.error('Failed to select folder:', error)
       return null
+    }
+  })
+
+  ipcMain.handle('run-quick-action', async (_, command: string) => {
+    try {
+      switch (command) {
+        case 'shutdown':
+          spawn('shutdown.exe', ['/s', '/t', '0'], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+          return true
+        case 'restart':
+          spawn('shutdown.exe', ['/r', '/t', '0'], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+          return true
+        case 'lock':
+          execFile('rundll32.exe', ['user32.dll,LockWorkStation'], { windowsHide: true })
+          return true
+        case 'settings':
+          await shell.openExternal('ms-settings:')
+          return true
+        case 'calculator':
+          spawn('calc.exe', [], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+          return true
+        case 'notepad':
+          spawn('notepad.exe', [], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+          return true
+        case 'clipboard':
+          execFile('explorer.exe', ['ms-clipboard:'], { windowsHide: true })
+          return true
+        default:
+          return false
+      }
+    } catch (error) {
+      console.error('Failed to run quick action:', error)
+      return false
     }
   })
 

@@ -108,6 +108,7 @@ function toggleSearchWindow() {
     if (sw.isVisible()) {
       sw.hide()
     } else {
+      moveSearchWindowToCursorDisplay(sw)
       sw.show()
       sw.focus()
       sw.webContents.send('reset-search')
@@ -118,11 +119,11 @@ function toggleSearchWindow() {
 }
 
 function createSearchWindow() {
-  const display = screen.getPrimaryDisplay()
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
   const width = 600
   const height = 60
-  const x = Math.round((display.workAreaSize.width - width) / 2)
-  const y = Math.round(display.workAreaSize.height * 0.3)
+  const x = Math.round(display.workArea.x + (display.workArea.width - width) / 2)
+  const y = Math.round(display.workArea.y + display.workArea.height * 0.3)
 
   const win = new BrowserWindow({
     width,
@@ -175,6 +176,18 @@ function createSearchWindow() {
   })
 
   searchWindowRef.current = win
+}
+
+function moveSearchWindowToCursorDisplay(win: BrowserWindow) {
+  if (win.isDestroyed()) return
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+  const bounds = win.getBounds()
+  win.setBounds({
+    x: Math.round(display.workArea.x + (display.workArea.width - bounds.width) / 2),
+    y: Math.round(display.workArea.y + display.workArea.height * 0.3),
+    width: bounds.width,
+    height: bounds.height
+  })
 }
 
 function createTray() {
