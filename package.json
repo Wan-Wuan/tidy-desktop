@@ -1,6 +1,6 @@
 {
   "name": "tidy-desktop",
-  "version": "1.10.17",
+  "version": "1.10.18",
   "description": "桌面整理应用",
   "main": "dist/main/main/index.js",
   "scripts": {
@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"tsc -p tsconfig.main.json && node scripts/wait-for-vite-electron.mjs\"",
     "electron:build": "vite build && tsc -p tsconfig.main.json && electron-builder",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "release": "node scripts/release.mjs"
   },
   "dependencies": {
     "pinyin-pro": "^3.18.0",

@@ -15,7 +15,6 @@ export function ensureDataDir() {
   if (!fs.existsSync(ICONS_DIR)) {
     fs.mkdirSync(ICONS_DIR, { recursive: true })
   }
-  // 只清理空文件（0 字节），避免误删有效图标
   try {
     const files = fs.readdirSync(ICONS_DIR)
     for (const file of files) {
@@ -43,14 +42,12 @@ export function readJsonFile<T>(filePath: string, defaultValue: T): T {
 export function writeJsonFile(filePath: string, data: unknown): boolean {
   try {
     ensureDataDir()
-    // Atomic write: write to temp file first, then rename (rename is atomic on most filesystems)
     const tmpPath = filePath + '.tmp'
     fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8')
     fs.renameSync(tmpPath, filePath)
     return true
   } catch (error) {
     console.error(`Error writing ${filePath}:`, error)
-    // Clean up temp file if it exists
     try { fs.unlinkSync(filePath + '.tmp') } catch { /* ignore */ }
     return false
   }
@@ -85,6 +82,7 @@ export function getDefaultConfig() {
       theme: 'aurora' as const
     },
     defaultEngine: 'b',
+    onboardingCompleted: false,
     autoCategoryRules: [],
     quickActions: [
       { key: '>shutdown', name: '关机', command: 'shutdown' as const, enabled: true },

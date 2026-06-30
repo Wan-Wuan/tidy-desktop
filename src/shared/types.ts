@@ -71,6 +71,7 @@ export interface Config {
   defaultEngine?: string
   autoCategoryRules?: AutoCategoryRule[]
   quickActions?: QuickAction[]
+  onboardingCompleted?: boolean
 }
 
 export interface AppsData {
@@ -80,4 +81,19 @@ export interface AppsData {
 export interface CategoriesData {
   categories: Category[]
   subcategories?: Subcategory[]
+}
+
+export interface ShortcutImportItem {
+  name: string
+  path: string
+  targetPath: string
+  icon: string
+  type: 'app' | 'folder'
+  source: 'desktop' | 'startMenu' | 'other'
+}
+
+export interface DiagnosticExportResult {
+  success: boolean
+  filePath?: string
+  error?: string
 }

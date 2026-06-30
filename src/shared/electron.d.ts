@@ -1,4 +1,4 @@
-import type { AppItem, Category, Subcategory, Config } from './types'
+import type { AppItem, Category, Subcategory, Config, ShortcutImportItem, DiagnosticExportResult } from './types'
 
 export interface UpdateInfo {
   available: boolean
@@ -55,6 +55,9 @@ declare global {
       validateApps: (apps: { id: string; path: string; type?: string }[]) => Promise<{ id: string; path: string; exists: boolean }[]>
       exportBackup: () => Promise<{ success: boolean; filePath?: string }>
       importBackup: () => Promise<{ success: boolean; filePath?: string }>
+      exportDiagnostics: () => Promise<DiagnosticExportResult>
+      scanShortcuts: () => Promise<ShortcutImportItem[]>
+      openDataDirectory: () => Promise<boolean>
       clearIconCache: () => Promise<{ success: boolean; count: number }>
       openUpdateLog: () => Promise<boolean>
       hideSearchWindow: () => Promise<void>

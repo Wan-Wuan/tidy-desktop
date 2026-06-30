@@ -19,6 +19,7 @@ const RESULT_ITEM_HEIGHT = 51
 const RESULT_ITEM_GAP = 4
 const RESULTS_PADDING_Y = 8
 const NO_RESULTS_HEIGHT = 44
+const EMPTY_HINT_HEIGHT = 44
 const RESIZE_DEBOUNCE_MS = 80
 
 function SearchApp() {
@@ -35,7 +36,7 @@ function SearchApp() {
   const resultsContainerRef = useRef<HTMLDivElement>(null)
   const isActiveRef = useRef(false)
   const resizeTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const currentHeightRef = useRef(INPUT_HEIGHT)
+  const currentHeightRef = useRef(INPUT_HEIGHT + EMPTY_HINT_HEIGHT)
 
   useEffect(() => {
     loadData()
@@ -53,9 +54,9 @@ function SearchApp() {
       resultsRef.current = []
       setActiveEngine(null)
       setActiveIndex(0)
-      currentHeightRef.current = INPUT_HEIGHT
+      currentHeightRef.current = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
       loadData()
-      window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
+      window.electronAPI.resizeSearchWindow(INPUT_HEIGHT + EMPTY_HINT_HEIGHT)
       setTimeout(() => inputRef.current?.focus(), 50)
     })
 
@@ -104,7 +105,7 @@ function SearchApp() {
       } else if (hasQuery) {
         targetHeight = INPUT_HEIGHT + NO_RESULTS_HEIGHT
       } else {
-        targetHeight = INPUT_HEIGHT
+        targetHeight = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
       }
       if (targetHeight !== currentHeightRef.current) {
         currentHeightRef.current = targetHeight
@@ -253,8 +254,8 @@ function SearchApp() {
     resultsRef.current = []
     setActiveEngine(null)
     setActiveIndex(0)
-    currentHeightRef.current = INPUT_HEIGHT
-    window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
+    currentHeightRef.current = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
+    window.electronAPI.resizeSearchWindow(INPUT_HEIGHT + EMPTY_HINT_HEIGHT)
   }, [])
 
   const persistApps = async (nextApps: AppItem[]) => {
@@ -387,8 +388,8 @@ function SearchApp() {
         setResults([])
         resultsRef.current = []
         setActiveIndex(0)
-        currentHeightRef.current = INPUT_HEIGHT
-        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
+        currentHeightRef.current = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
+        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT + EMPTY_HINT_HEIGHT)
         return
       }
     }
@@ -402,8 +403,8 @@ function SearchApp() {
       setResults([])
       resultsRef.current = []
       setActiveIndex(0)
-      currentHeightRef.current = INPUT_HEIGHT
-      window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
+      currentHeightRef.current = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
+      window.electronAPI.resizeSearchWindow(INPUT_HEIGHT + EMPTY_HINT_HEIGHT)
       return
     }
 
@@ -426,8 +427,8 @@ function SearchApp() {
         setQuery('')
         queryRef.current = ''
         if (activeEngine) setActiveEngine(null)
-        currentHeightRef.current = INPUT_HEIGHT
-        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
+        currentHeightRef.current = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
+        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT + EMPTY_HINT_HEIGHT)
       } else {
         window.electronAPI.hideSearchWindow()
       }
@@ -537,6 +538,14 @@ function SearchApp() {
       {!hasResults && query.trim() && (
         <div className="search-no-results">
           <span>没有找到匹配的应用或文件夹</span>
+        </div>
+      )}
+      {!hasResults && !query.trim() && !activeEngine && (
+        <div className="search-command-hints">
+          <span>输入 <kbd>&gt;</kbd> 查看快捷命令</span>
+          <span><kbd>Enter</kbd> 打开</span>
+          <span><kbd>Ctrl</kbd> + <kbd>Enter</kbd> 打开所在文件夹</span>
+          <span><kbd>Delete</kbd> 隐藏结果</span>
         </div>
       )}
     </div>

@@ -3,21 +3,27 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tidy Desktop - 桌面整理启动台</title>
+  <meta name="description" content="Tidy Desktop 是一款用于整理桌面应用、文件夹和 Steam 游戏的 Windows 工具，支持快速搜索、分类管理、图标刷新、备份和自动更新。" />
+  <title>Tidy Desktop - 桌面整理与快速启动工具</title>
   <link rel="icon" type="image/svg+xml" href="../public/favicon.svg" />
   <style>
     :root {
-      --ink: #071312;
-      --pine: #10201f;
-      --reef: #25bba6;
-      --mint: #c8fff2;
-      --cloud: #f4fffc;
-      --blue: #4e7fff;
-      --amber: #ffb545;
-      --line: rgba(244, 255, 252, .18);
-      --muted: rgba(244, 255, 252, .68);
-      --paper: #eef8f4;
-      --text: #132522;
+      --bg: #f5fbff;
+      --paper: #ffffff;
+      --paper-soft: #eef8ff;
+      --ink: #082f49;
+      --text: #12384f;
+      --muted: #547083;
+      --line: #cfe5f4;
+      --sky: #0ea5e9;
+      --sky-dark: #0369a1;
+      --mint: #14b8a6;
+      --orange: #f97316;
+      --green: #0f766e;
+      --shadow: 0 18px 60px rgba(8, 47, 73, .12);
+      --glass: rgba(255, 255, 255, .66);
+      --glass-line: rgba(255, 255, 255, .72);
+      --radius: 8px;
     }
 
     * {
@@ -28,18 +34,32 @@
       scroll-behavior: smooth;
     }
 
-    html,
-    body {
-      width: 100%;
-      overflow-x: hidden;
-    }
-
     body {
       margin: 0;
-      color: var(--cloud);
-      background: var(--ink);
-      font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
-      line-height: 1.55;
+      min-width: 320px;
+      overflow-x: hidden;
+      color: var(--text);
+      background:
+        linear-gradient(135deg, rgba(224, 243, 255, .92) 0%, rgba(245, 251, 255, .72) 34%, rgba(236, 253, 245, .70) 68%, rgba(255, 247, 237, .82) 100%),
+        linear-gradient(180deg, rgba(238, 248, 255, .78), rgba(245, 251, 255, 0) 540px),
+        var(--bg);
+      font-family: "Noto Sans SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+      line-height: 1.65;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -20% -10% auto;
+      height: 720px;
+      z-index: -3;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse at 18% 24%, rgba(20, 184, 166, .20), transparent 34%),
+        radial-gradient(ellipse at 78% 8%, rgba(99, 102, 241, .16), transparent 35%),
+        radial-gradient(ellipse at 58% 64%, rgba(249, 115, 22, .13), transparent 34%);
+      filter: blur(10px);
+      animation: auroraDrift 14s ease-in-out infinite alternate;
     }
 
     a {
@@ -48,670 +68,1573 @@
     }
 
     a:focus-visible,
-    .button:focus-visible {
-      outline: 3px solid var(--amber);
+    button:focus-visible {
+      outline: 3px solid rgba(249, 115, 22, .5);
       outline-offset: 4px;
     }
 
-    .page {
-      overflow: hidden;
-      background:
-        linear-gradient(180deg, rgba(7, 19, 18, .2), var(--ink) 720px),
-        radial-gradient(circle at 50% 18%, rgba(37, 187, 166, .2), transparent 32%),
-        var(--ink);
+    svg {
+      flex: 0 0 auto;
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid rgba(255, 255, 255, .58);
+      background: rgba(245, 251, 255, .68);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 18px 54px rgba(8, 47, 73, .08);
+    }
+
+    .nav {
+      min-height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 800;
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    .brand img {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      box-shadow: 0 10px 24px rgba(14, 165, 233, .22);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: clamp(14px, 3vw, 28px);
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .nav-links a {
+      cursor: pointer;
+      transition: color 180ms ease;
+    }
+
+    .nav-links a:hover {
+      color: var(--sky-dark);
     }
 
     .hero {
       position: relative;
-      min-height: 92vh;
-      padding: 28px clamp(20px, 5vw, 72px) 64px;
-      display: grid;
-      grid-template-rows: auto 1fr;
+      padding: 76px 0 58px;
+      overflow: hidden;
       isolation: isolate;
     }
 
     .hero::before {
       content: "";
       position: absolute;
-      inset: 0;
-      z-index: -2;
+      inset: 0 0 auto 50%;
+      width: min(720px, 64vw);
+      height: 520px;
+      transform: translateX(-8%);
+      z-index: -1;
       background:
-        linear-gradient(90deg, rgba(244, 255, 252, .09) 1px, transparent 1px),
-        linear-gradient(180deg, rgba(244, 255, 252, .07) 1px, transparent 1px);
-      background-size: 72px 72px;
-      mask-image: linear-gradient(to bottom, black, transparent 82%);
+        radial-gradient(circle at 34% 34%, rgba(20, 184, 166, .20), transparent 34%),
+        radial-gradient(circle at 68% 58%, rgba(14, 165, 233, .18), transparent 38%);
+      filter: blur(2px);
+      animation: glowBreath 8s ease-in-out infinite alternate;
     }
 
     .hero::after {
       content: "";
       position: absolute;
-      left: 50%;
-      bottom: 26px;
-      width: min(960px, calc(100vw - 40px));
-      height: 72px;
-      transform: translateX(-50%);
-      z-index: -1;
-      border: 1px solid rgba(200, 255, 242, .22);
-      border-radius: 999px;
-      background: linear-gradient(90deg, transparent, rgba(200, 255, 242, .13), transparent);
+      inset: 24px 0 auto;
+      height: 560px;
+      z-index: -2;
+      pointer-events: none;
+      background-image:
+        linear-gradient(115deg, transparent 0 32%, rgba(255, 255, 255, .42) 33%, transparent 35% 100%),
+        linear-gradient(70deg, transparent 0 54%, rgba(14, 165, 233, .20) 55%, transparent 58% 100%);
+      background-size: 420px 420px, 580px 580px;
+      opacity: .44;
+      mask-image: linear-gradient(to bottom, transparent, #000 18%, transparent 84%);
+      animation: shimmerSweep 16s linear infinite;
     }
 
-    .nav {
-      height: 56px;
-      display: flex;
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.02fr) minmax(360px, .98fr);
+      gap: clamp(34px, 7vw, 80px);
       align-items: center;
-      justify-content: space-between;
-      gap: 18px;
-      border-bottom: 1px solid var(--line);
     }
 
-    .brand {
+    .eyebrow {
       display: inline-flex;
       align-items: center;
-      gap: 12px;
-      font-weight: 700;
-      letter-spacing: .02em;
-    }
-
-    .brand img {
-      width: 34px;
-      height: 34px;
-      border-radius: 9px;
-    }
-
-    .nav-links {
-      display: flex;
-      align-items: center;
-      gap: clamp(12px, 3vw, 28px);
-      color: var(--muted);
+      gap: 8px;
+      margin: 0 0 18px;
+      color: var(--green);
+      font-weight: 800;
       font-size: 14px;
     }
 
-    .nav-links a,
-    .brand {
-      cursor: pointer;
-      transition: color 180ms ease;
-    }
-
-    .nav-links a:hover,
-    .brand:hover {
-      color: var(--cloud);
-    }
-
-    .hero-inner {
-      position: relative;
-      display: grid;
-      align-content: center;
-      justify-items: center;
-      text-align: center;
-      padding: 42px 0 0;
-    }
-
-    .icon-stage {
-      position: relative;
-      width: min(270px, 48vw);
-      margin-bottom: 26px;
-      aspect-ratio: 1;
-    }
-
-    .icon-stage img {
-      width: 100%;
-      height: 100%;
-      display: block;
-      border-radius: 28%;
-      box-shadow: 0 34px 90px rgba(0, 0, 0, .42);
-    }
-
-    .icon-stage::before,
-    .icon-stage::after {
+    .eyebrow::before {
       content: "";
-      position: absolute;
-      left: 50%;
-      width: min(150%, calc(100vw - 40px));
-      height: 18px;
-      transform: translateX(-50%);
+      width: 10px;
+      height: 10px;
       border-radius: 999px;
-      background: rgba(200, 255, 242, .12);
+      background: var(--mint);
+      box-shadow: 0 0 0 6px rgba(20, 184, 166, .13);
     }
 
-    .icon-stage::before {
-      top: 28%;
-      z-index: -1;
-    }
-
-    .icon-stage::after {
-      bottom: 16%;
-      z-index: -1;
-      background: rgba(255, 181, 69, .14);
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
     }
 
     h1 {
-      margin: 0;
-      max-width: 920px;
-      font-size: clamp(48px, 11vw, 126px);
-      line-height: .86;
+      max-width: 760px;
+      margin-bottom: 22px;
+      color: var(--ink);
+      font-size: clamp(42px, 8vw, 86px);
+      line-height: .98;
       letter-spacing: 0;
-      font-weight: 850;
     }
 
-    .subtitle {
-      max-width: 720px;
-      margin: 26px auto 0;
-      color: var(--muted);
-      font-size: clamp(17px, 2.4vw, 24px);
+    .lead {
+      max-width: 680px;
+      margin-bottom: 30px;
+      color: #315a70;
+      font-size: clamp(17px, 2vw, 21px);
     }
 
-    .actions {
+    .hero-actions {
       display: flex;
-      justify-content: center;
       flex-wrap: wrap;
       gap: 12px;
-      margin-top: 34px;
+      margin-bottom: 28px;
     }
 
     .button {
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      gap: 10px;
       min-height: 48px;
-      padding: 0 22px;
-      border-radius: 999px;
-      font-weight: 700;
-      border: 1px solid rgba(244, 255, 252, .22);
+      padding: 0 20px;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      font-weight: 800;
+      line-height: 1;
       cursor: pointer;
-      transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+      transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease;
     }
 
     .button:hover {
-      border-color: rgba(244, 255, 252, .42);
+      transform: translateY(-1px);
     }
 
     .button.primary {
-      color: var(--ink);
-      background: var(--mint);
-      box-shadow: 0 18px 45px rgba(37, 187, 166, .22);
+      color: #fff;
+      background: var(--orange);
+      box-shadow: 0 14px 32px rgba(249, 115, 22, .25);
     }
 
     .button.primary:hover {
-      background: #e2fff8;
-      box-shadow: 0 22px 54px rgba(37, 187, 166, .28);
+      background: #ea580c;
+      box-shadow: 0 18px 42px rgba(249, 115, 22, .31);
     }
 
     .button.secondary {
-      color: var(--cloud);
-      background: rgba(244, 255, 252, .06);
+      color: var(--sky-dark);
+      border-color: rgba(3, 105, 161, .2);
+      background: rgba(255, 255, 255, .72);
     }
 
     .button.secondary:hover {
-      background: rgba(244, 255, 252, .11);
+      border-color: rgba(3, 105, 161, .36);
+      background: #fff;
     }
 
-    .hint-row {
+    .trust-row {
       display: grid;
-      grid-template-columns: repeat(4, minmax(86px, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 10px;
-      width: min(820px, calc(100vw - 40px));
-      margin-top: 36px;
-      color: rgba(244, 255, 252, .7);
-      font-size: 13px;
+      max-width: 680px;
     }
 
-    .hint-row span {
-      padding: 9px 10px;
-      border-top: 1px solid rgba(244, 255, 252, .16);
+    .trust-row span {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      color: var(--muted);
+      background: rgba(255, 255, 255, .62);
+      font-size: 13px;
+      font-weight: 700;
       text-align: center;
     }
 
-    .section {
-      padding: clamp(62px, 9vw, 110px) clamp(20px, 5vw, 72px);
+    .product-card {
+      position: relative;
+      border: 1px solid var(--glass-line);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, .82), rgba(255, 255, 255, .48)),
+        rgba(255, 255, 255, .62);
+      backdrop-filter: blur(22px) saturate(145%);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      transform: translateZ(0);
+      animation: previewFloat 6s ease-in-out infinite;
     }
 
-    .section.light {
-      color: var(--text);
-      background: var(--paper);
+    .product-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 5px;
+      background: linear-gradient(90deg, var(--sky), var(--mint), var(--orange), #8b5cf6, var(--sky));
+      background-size: 240% 100%;
+      animation: colorRiver 7s linear infinite;
+    }
+
+    .product-card::after {
+      content: "";
+      position: absolute;
+      inset: 1px;
+      z-index: -1;
+      border-radius: inherit;
+      background: linear-gradient(135deg, rgba(255, 255, 255, .7), rgba(255, 255, 255, 0) 42%, rgba(14, 165, 233, .12));
+    }
+
+    .app-preview {
+      padding: 22px;
+    }
+
+    .preview-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .preview-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .preview-brand img {
+      width: 52px;
+      height: 52px;
+      border-radius: 8px;
+    }
+
+    .preview-brand strong {
+      display: block;
+      color: var(--ink);
+      font-size: 17px;
+    }
+
+    .preview-brand span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 7px;
+    }
+
+    .window-controls i {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: #b6d3e5;
+    }
+
+    .searchbar {
+      min-height: 54px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 20px 0;
+      padding: 0 16px;
+      border: 1px solid #badced;
+      border-radius: 999px;
+      color: #426276;
+      background: rgba(247, 252, 255, .72);
+      backdrop-filter: blur(14px);
+      font-weight: 700;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 12px 28px rgba(14, 165, 233, .08);
+    }
+
+    .preview-layout {
+      display: grid;
+      grid-template-columns: 116px 1fr;
+      gap: 14px;
+    }
+
+    .preview-tabs {
+      display: grid;
+      gap: 9px;
+    }
+
+    .preview-tabs span,
+    .app-tile {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      border-radius: var(--radius);
+      background: var(--paper-soft);
+    }
+
+    .preview-tabs span {
+      padding: 0 12px;
+      color: var(--sky-dark);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .preview-tabs span:first-child {
+      color: #fff;
+      background: var(--sky);
+    }
+
+    .app-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .app-tile {
+      min-height: 86px;
+      flex-direction: column;
+      justify-content: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      border: 1px solid rgba(255, 255, 255, .58);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .68);
+    }
+
+    .tile-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--sky), var(--mint));
+    }
+
+    .app-tile:nth-child(2) .tile-icon,
+    .app-tile:nth-child(5) .tile-icon {
+      background: linear-gradient(135deg, var(--orange), #facc15);
+    }
+
+    .app-tile:nth-child(3) .tile-icon,
+    .app-tile:nth-child(4) .tile-icon {
+      background: linear-gradient(135deg, #6366f1, var(--sky));
+    }
+
+    section {
+      padding: 64px 0;
     }
 
     .section-head {
       max-width: 760px;
-      margin-bottom: 34px;
+      margin-bottom: 26px;
     }
 
-    .eyebrow {
-      margin: 0 0 10px;
-      color: var(--reef);
+    .kicker {
+      margin-bottom: 10px;
+      color: var(--sky-dark);
       font-size: 13px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: .12em;
-    }
-
-    h2 {
-      margin: 0;
-      font-size: clamp(31px, 5.2vw, 62px);
-      line-height: 1;
+      font-weight: 900;
       letter-spacing: 0;
     }
 
-    .section-copy {
-      margin: 16px 0 0;
-      max-width: 690px;
-      color: rgba(19, 37, 34, .7);
+    h2 {
+      margin-bottom: 14px;
+      color: var(--ink);
+      font-size: clamp(30px, 4.6vw, 48px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .section-head p {
+      color: var(--muted);
       font-size: 17px;
     }
 
-    .belt {
+    .feature-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 14px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
     }
 
-    .tile {
-      min-height: 210px;
+    .feature-card,
+    .step,
+    .note,
+    .faq-item,
+    .shortcut-table {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(150deg, rgba(255, 255, 255, .80), rgba(255, 255, 255, .48)),
+        var(--glass);
+      backdrop-filter: blur(18px) saturate(138%);
+      box-shadow: 0 12px 34px rgba(8, 47, 73, .07);
+    }
+
+    .feature-card {
+      position: relative;
       padding: 22px;
-      border-radius: 8px;
-      background: #ffffff;
-      border: 1px solid rgba(16, 32, 31, .1);
-      box-shadow: 0 18px 38px rgba(16, 32, 31, .08);
+      overflow: hidden;
+      transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
     }
 
-    .tile,
-    .release-panel,
-    .search-panel {
-      min-width: 0;
+    .feature-card::after,
+    .faq-item::after,
+    .step::after {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      pointer-events: none;
+      border-radius: inherit;
+      background: linear-gradient(115deg, transparent 0 36%, rgba(255, 255, 255, .62) 44%, transparent 52% 100%);
+      transform: translateX(-120%);
+      opacity: .68;
+      transition: transform 650ms ease;
     }
 
-    .tile-mark {
-      width: 52px;
-      height: 52px;
-      display: grid;
-      place-items: center;
-      margin-bottom: 28px;
-      border-radius: 16px;
-      color: var(--ink);
-      font-size: 25px;
-      font-weight: 900;
+    .feature-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(14, 165, 233, .34);
+      box-shadow: 0 20px 52px rgba(8, 47, 73, .11);
     }
 
-    .tile:nth-child(1) .tile-mark { background: #76e4c7; }
-    .tile:nth-child(2) .tile-mark { background: #9fb8ff; }
-    .tile:nth-child(3) .tile-mark { background: #ffe39a; }
-    .tile:nth-child(4) .tile-mark { background: #ff9f7a; }
-
-    .tile h3 {
-      margin: 0 0 10px;
-      font-size: 22px;
+    .feature-card:hover::after,
+    .faq-item:hover::after,
+    .step:hover::after {
+      transform: translateX(120%);
     }
 
-    .tile p {
-      margin: 0;
-      color: rgba(19, 37, 34, .66);
-      font-size: 15px;
-    }
-
-    .palette {
-      color: var(--cloud);
-      background: linear-gradient(135deg, #0a1514, #142723);
-    }
-
-    .command {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(280px, 460px);
-      gap: clamp(28px, 6vw, 70px);
+    .feature-card .icon,
+    .note-icon {
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
       align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      border-radius: var(--radius);
+      color: var(--sky-dark);
+      background:
+        radial-gradient(circle at 30% 24%, rgba(255, 255, 255, .86), transparent 30%),
+        linear-gradient(135deg, #dff5ff, #d8fff4);
+      box-shadow: 0 12px 24px rgba(14, 165, 233, .12);
     }
 
-    .command .section-copy {
+    .feature-card h3,
+    .step h3,
+    .faq-item h3 {
+      margin-bottom: 8px;
+      color: var(--ink);
+      font-size: 18px;
+    }
+
+    .feature-card p,
+    .step p,
+    .faq-item p,
+    .note p {
+      margin-bottom: 0;
       color: var(--muted);
     }
 
-    .search-panel {
-      padding: 18px;
-      border-radius: 8px;
-      border: 1px solid rgba(244, 255, 252, .18);
-      background: rgba(244, 255, 252, .08);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 28px 80px rgba(0, 0, 0, .28);
-      max-width: 100%;
-    }
-
-    .search-input {
-      height: 54px;
-      display: flex;
-      align-items: center;
-      padding: 0 18px;
-      border-radius: 7px;
-      color: var(--cloud);
-      background: rgba(7, 19, 18, .8);
-      font-size: 18px;
-      font-weight: 700;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .result {
+    .steps {
       display: grid;
-      grid-template-columns: 42px minmax(0, 1fr) auto;
-      gap: 12px;
-      align-items: center;
-      padding: 14px 10px;
-      border-bottom: 1px solid rgba(244, 255, 252, .1);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      counter-reset: step;
     }
 
-    .result:last-child {
-      border-bottom: 0;
+    .step {
+      position: relative;
+      padding: 22px 22px 22px 72px;
+      counter-increment: step;
+      overflow: hidden;
     }
 
-    .result-icon {
-      width: 42px;
-      height: 42px;
+    .step::before {
+      content: counter(step, decimal-leading-zero);
+      position: absolute;
+      left: 22px;
+      top: 22px;
+      width: 36px;
+      height: 36px;
       display: grid;
       place-items: center;
-      border-radius: 12px;
-      color: var(--ink);
-      background: var(--mint);
+      border-radius: var(--radius);
+      color: #fff;
+      background: var(--sky);
+      font-size: 13px;
       font-weight: 900;
     }
 
-    .result small {
-      display: block;
-      color: rgba(244, 255, 252, .5);
+    .shortcut-wrap {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .shortcut-table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+    }
+
+    .shortcut-table th,
+    .shortcut-table td {
+      padding: 15px 16px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .shortcut-table th {
+      color: var(--ink);
+      background: #eaf6fd;
+      font-size: 14px;
+    }
+
+    .shortcut-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    kbd {
+      display: inline-block;
+      min-width: 28px;
+      margin: 0 2px 4px 0;
+      padding: 3px 8px;
+      border: 1px solid #adcddd;
+      border-bottom-width: 2px;
+      border-radius: 6px;
+      color: var(--ink);
+      background: #fff;
+      font: 700 12px "Segoe UI", system-ui, sans-serif;
+      white-space: nowrap;
+    }
+
+    .note {
+      position: relative;
+      padding: 22px;
+      overflow: hidden;
+    }
+
+    .note h3 {
+      margin-bottom: 10px;
+      color: var(--ink);
+      font-size: 20px;
+    }
+
+    .note ul {
+      display: grid;
+      gap: 10px;
+      margin: 16px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    .faq-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .faq-item {
+      position: relative;
+      padding: 22px;
+      overflow: hidden;
+    }
+
+    .download-band {
+      position: relative;
+      padding: 44px;
+      border: 1px solid rgba(3, 105, 161, .16);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(135deg, rgba(14, 165, 233, .12), rgba(20, 184, 166, .10)),
+        #fff;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .download-band::before {
+      content: "";
+      position: absolute;
+      inset: auto -12% -68% 28%;
+      height: 280px;
+      pointer-events: none;
+      background: conic-gradient(from 180deg, rgba(14, 165, 233, .24), rgba(20, 184, 166, .18), rgba(249, 115, 22, .16), rgba(14, 165, 233, .24));
+      filter: blur(34px);
+      animation: slowSpin 18s linear infinite;
+    }
+
+    .download-grid {
+      position: relative;
+      z-index: 1;
+    }
+
+    .download-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: center;
+    }
+
+    .download-band h2 {
+      margin-bottom: 10px;
+    }
+
+    .download-band p {
+      max-width: 760px;
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .download-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .scroll-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 60;
+      width: 100%;
+      height: 3px;
+      pointer-events: none;
+      background: linear-gradient(90deg, var(--sky), var(--mint), var(--orange));
+      transform: scaleX(0);
+      transform-origin: left center;
+      box-shadow: 0 0 22px rgba(14, 165, 233, .38);
+    }
+
+    .showcase-grid {
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .theme-stack {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .theme-window,
+    .persona-card,
+    .timeline-card {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--glass-line);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(150deg, rgba(255, 255, 255, .80), rgba(255, 255, 255, .48)),
+        var(--glass);
+      backdrop-filter: blur(20px) saturate(142%);
+      box-shadow: 0 18px 52px rgba(8, 47, 73, .11), inset 0 1px 0 rgba(255, 255, 255, .78);
+      transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+    }
+
+    .theme-window:hover,
+    .persona-card:hover,
+    .timeline-card:hover {
+      transform: translateY(-5px);
+      border-color: rgba(14, 165, 233, .34);
+      box-shadow: 0 26px 68px rgba(8, 47, 73, .15), inset 0 1px 0 rgba(255, 255, 255, .86);
+    }
+
+    .theme-window.dark {
+      color: #d9f8ff;
+      border-color: rgba(186, 220, 237, .22);
+      background:
+        linear-gradient(150deg, rgba(8, 47, 73, .90), rgba(15, 23, 42, .82)),
+        #0f172a;
+      box-shadow: 0 22px 72px rgba(15, 23, 42, .22), inset 0 1px 0 rgba(255, 255, 255, .12);
+    }
+
+    .theme-window::before,
+    .persona-card::before,
+    .timeline-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 3px;
+      background: linear-gradient(90deg, var(--sky), var(--mint), var(--orange), #8b5cf6);
+      background-size: 240% 100%;
+      animation: colorRiver 9s linear infinite;
+    }
+
+    .theme-window-inner {
+      padding: 18px;
+    }
+
+    .theme-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 16px;
+      font-weight: 900;
+      color: var(--ink);
+    }
+
+    .theme-window.dark .theme-title {
+      color: #f8fdff;
+    }
+
+    .theme-chip {
+      padding: 5px 9px;
+      border: 1px solid rgba(14, 165, 233, .18);
+      border-radius: 999px;
+      color: var(--sky-dark);
+      background: rgba(224, 243, 255, .72);
       font-size: 12px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      font-weight: 900;
     }
 
-    .result-text {
-      min-width: 0;
-      overflow: hidden;
+    .theme-window.dark .theme-chip {
+      color: #99f6e4;
+      border-color: rgba(153, 246, 228, .22);
+      background: rgba(20, 184, 166, .12);
     }
 
-    .result-name {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    .mini-search {
+      height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding: 0 12px;
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, .72);
+      border: 1px solid rgba(173, 205, 221, .7);
+      font-size: 13px;
+      font-weight: 800;
     }
 
-    .key {
-      color: var(--mint);
+    .theme-window.dark .mini-search {
+      color: #b7d9e7;
+      background: rgba(15, 23, 42, .66);
+      border-color: rgba(186, 220, 237, .18);
+    }
+
+    .mini-apps {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .mini-app {
+      min-height: 74px;
+      display: grid;
+      align-content: center;
+      gap: 9px;
+      padding: 12px;
+      border-radius: var(--radius);
+      color: var(--muted);
+      background: rgba(238, 248, 255, .82);
+      border: 1px solid rgba(255, 255, 255, .66);
       font-size: 12px;
       font-weight: 800;
     }
 
-    .download {
-      display: grid;
-      grid-template-columns: 1.1fr .9fr;
-      gap: 24px;
-      align-items: stretch;
+    .theme-window.dark .mini-app {
+      color: #c7e4ef;
+      background: rgba(255, 255, 255, .06);
+      border-color: rgba(255, 255, 255, .10);
     }
 
-    .release-panel {
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      min-height: 280px;
-      padding: 28px;
-      border-radius: 8px;
-      color: var(--cloud);
-      background: var(--pine);
+    .mini-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      background: linear-gradient(135deg, var(--sky), var(--mint));
+      box-shadow: 0 10px 18px rgba(14, 165, 233, .16);
     }
 
-    .release-panel strong {
-      font-size: clamp(44px, 8vw, 86px);
-      line-height: .92;
-    }
-
-    .release-panel p {
-      color: var(--muted);
-      margin: 12px 0 0;
-    }
-
-    .download-list {
+    .persona-grid {
       display: grid;
       gap: 12px;
     }
 
-    .download-list a {
-      display: flex;
-      justify-content: space-between;
-      gap: 18px;
-      padding: 18px 0;
-      border-bottom: 1px solid rgba(19, 37, 34, .16);
-      font-weight: 750;
-      cursor: pointer;
-      transition: color 180ms ease, border-color 180ms ease;
+    .persona-card {
+      padding: 20px;
     }
 
-    .download-list a:hover {
-      color: #0a6f63;
-      border-color: rgba(37, 187, 166, .42);
+    .persona-card h3 {
+      margin-bottom: 8px;
+      color: var(--ink);
+      font-size: 17px;
     }
 
-    .download-list span {
-      color: rgba(19, 37, 34, .55);
-      font-weight: 600;
+    .persona-card p {
+      margin-bottom: 0;
+      color: var(--muted);
     }
 
-    .footer {
-      padding: 34px clamp(20px, 5vw, 72px);
-      border-top: 1px solid var(--line);
-      color: rgba(244, 255, 252, .56);
+    .timeline {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 20px;
+    }
+
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 8%;
+      right: 8%;
+      top: 36px;
+      height: 2px;
+      z-index: -1;
+      background: linear-gradient(90deg, rgba(14, 165, 233, .16), rgba(20, 184, 166, .52), rgba(249, 115, 22, .20));
+    }
+
+    .timeline-card {
+      min-height: 168px;
+      padding: 20px;
+    }
+
+    .timeline-dot {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 18px;
+      border-radius: 999px;
+      color: #fff;
+      background: var(--sky);
+      font-size: 13px;
+      font-weight: 900;
+      box-shadow: 0 0 0 8px rgba(14, 165, 233, .10), 0 14px 28px rgba(14, 165, 233, .20);
+    }
+
+    .timeline-card:nth-child(2) .timeline-dot,
+    .timeline-card:nth-child(4) .timeline-dot {
+      background: var(--mint);
+    }
+
+    .timeline-card:nth-child(5) .timeline-dot {
+      background: var(--orange);
+    }
+
+    .timeline-card h3 {
+      margin-bottom: 8px;
+      color: var(--ink);
+      font-size: 17px;
+    }
+
+    .timeline-card p {
+      margin-bottom: 0;
+      color: var(--muted);
       font-size: 14px;
     }
 
-    @media (max-width: 860px) {
-      .nav {
-        align-items: flex-start;
-        height: auto;
-        padding-bottom: 14px;
-        flex-direction: column;
-      }
-
-      .hint-row,
-      .belt,
-      .command,
-      .download {
-        grid-template-columns: 1fr;
-      }
-
-      .hint-row {
-        margin-top: 34px;
-      }
-
-      .hero {
-        min-height: auto;
-        padding-bottom: 34px;
-      }
+    details.faq-item {
+      padding: 0;
     }
 
-    @media (max-width: 520px) {
-      .hero {
-        padding-inline: 16px;
+    details.faq-item summary {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      min-height: 68px;
+      padding: 20px 22px;
+      color: var(--ink);
+      font-size: 18px;
+      font-weight: 900;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    details.faq-item summary::-webkit-details-marker {
+      display: none;
+    }
+
+    details.faq-item summary::after {
+      content: "";
+      width: 11px;
+      height: 11px;
+      border-right: 2px solid var(--sky-dark);
+      border-bottom: 2px solid var(--sky-dark);
+      transform: rotate(45deg);
+      transition: transform 180ms ease;
+    }
+
+    details.faq-item[open] summary::after {
+      transform: rotate(225deg);
+    }
+
+    details.faq-item p {
+      padding: 0 22px 22px;
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      filter: blur(8px);
+      transition: opacity 700ms ease, transform 700ms ease, filter 700ms ease;
+    }
+
+    .reveal.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+      filter: blur(0);
+    }
+
+    footer {
+      padding: 34px 0 44px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .footer-grid {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 18px;
+      font-weight: 700;
+    }
+
+    .magic-field {
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .magic-field span {
+      position: absolute;
+      width: 2px;
+      height: 2px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .86);
+      box-shadow: 0 0 18px rgba(14, 165, 233, .72);
+      animation: starRise 8s linear infinite;
+    }
+
+    .magic-field span:nth-child(1) { left: 8%; bottom: 10%; animation-delay: 0s; }
+    .magic-field span:nth-child(2) { left: 18%; bottom: 34%; animation-delay: -3s; }
+    .magic-field span:nth-child(3) { left: 43%; bottom: 12%; animation-delay: -6s; }
+    .magic-field span:nth-child(4) { left: 66%; bottom: 26%; animation-delay: -2s; }
+    .magic-field span:nth-child(5) { left: 82%; bottom: 16%; animation-delay: -5s; }
+
+    @keyframes auroraDrift {
+      from { transform: translate3d(-2%, -1%, 0) scale(1); }
+      to { transform: translate3d(3%, 2%, 0) scale(1.06); }
+    }
+
+    @keyframes glowBreath {
+      from { opacity: .72; transform: translateX(-8%) scale(.98); }
+      to { opacity: 1; transform: translateX(-4%) scale(1.04); }
+    }
+
+    @keyframes shimmerSweep {
+      from { background-position: 0 0, 0 0; }
+      to { background-position: 840px 0, -580px 0; }
+    }
+
+    @keyframes previewFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    @keyframes colorRiver {
+      from { background-position: 0 50%; }
+      to { background-position: 240% 50%; }
+    }
+
+    @keyframes slowSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes starRise {
+      0% { opacity: 0; transform: translate3d(0, 40px, 0) scale(.8); }
+      16% { opacity: .8; }
+      100% { opacity: 0; transform: translate3d(28px, -220px, 0) scale(1.7); }
+    }
+
+    .footer-links a {
+      cursor: pointer;
+    }
+
+    .footer-links a:hover {
+      color: var(--sky-dark);
+    }
+
+    @media (max-width: 920px) {
+      .nav {
+        align-items: flex-start;
+        flex-direction: column;
+        justify-content: center;
+        padding: 14px 0;
       }
 
       .nav-links {
         width: 100%;
-        justify-content: space-between;
-        flex-wrap: wrap;
+        overflow-x: auto;
+        padding-bottom: 2px;
       }
 
-      h1 {
-        font-size: clamp(42px, 18vw, 78px);
+      .hero-grid,
+      .showcase-grid,
+      .shortcut-wrap,
+      .download-grid {
+        grid-template-columns: 1fr;
       }
 
-      .icon-stage {
-        width: min(210px, 58vw);
+      .product-card {
+        max-width: 620px;
       }
 
-      .actions,
+      .feature-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .timeline {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .timeline::before {
+        display: none;
+      }
+
+      .download-actions {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell {
+        width: min(100% - 28px, 1180px);
+      }
+
+      .hero {
+        padding-top: 44px;
+      }
+
+      .nav-links {
+        gap: 18px;
+        font-size: 13px;
+      }
+
+      .trust-row,
+      .feature-grid,
+      .steps,
+      .faq-grid,
+      .theme-stack,
+      .timeline {
+        grid-template-columns: 1fr;
+      }
+
+      .preview-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .app-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .shortcut-table {
+        display: block;
+        overflow-x: auto;
+      }
+
+      .download-band {
+        padding: 26px;
+      }
+
       .button {
         width: 100%;
       }
-
-      .button {
-        padding-inline: 16px;
-      }
-
-      .hint-row {
-        width: 100%;
-      }
-
-      .download-list a {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: 4px;
-      }
     }
 
-    @media (prefers-reduced-motion: no-preference) {
-      .icon-stage {
-        animation: settle 900ms cubic-bezier(.2, .8, .2, 1) both;
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
       }
 
-      .hero-inner h1,
-      .subtitle,
-      .actions {
-        animation: rise 760ms cubic-bezier(.2, .8, .2, 1) both;
+      .reveal {
+        opacity: 1 !important;
+        transform: none !important;
+        filter: none !important;
       }
-
-      .subtitle { animation-delay: 90ms; }
-      .actions { animation-delay: 160ms; }
-    }
-
-    @keyframes settle {
-      from { opacity: 0; transform: translateY(18px) scale(.96); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
-    @keyframes rise {
-      from { opacity: 0; transform: translateY(16px); }
-      to { opacity: 1; transform: translateY(0); }
     }
   </style>
 </head>
 <body>
-  <main class="page">
-    <section class="hero" aria-labelledby="hero-title">
-      <nav class="nav" aria-label="页面导航">
-        <a class="brand" href="#hero-title">
-          <img src="../build/icon-256.png" alt="" />
-          <span>Tidy Desktop</span>
-        </a>
-        <div class="nav-links">
-          <a href="#organize">整理</a>
-          <a href="#search">搜索</a>
-          <a href="#download">下载</a>
-        </div>
-      </nav>
-
-      <div class="hero-inner">
-        <div class="icon-stage" aria-hidden="true">
-          <img src="../build/icon-256.png" alt="" />
-        </div>
-        <h1 id="hero-title">Tidy Desktop</h1>
-        <p class="subtitle">把散在桌面、文件夹、应用和 Steam 游戏里的入口，收进一个清爽的 Windows 启动台。</p>
-        <div class="actions">
-          <a class="button primary" href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest">下载最新版</a>
-          <a class="button secondary" href="#search">查看搜索体验</a>
-        </div>
-        <div class="hint-row" aria-label="核心能力">
-          <span>应用分组</span>
-          <span>全局热键</span>
-          <span>拼音搜索</span>
-          <span>自动更新</span>
-        </div>
+  <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
+  <header class="topbar">
+    <nav class="shell nav" aria-label="主导航">
+      <a class="brand" href="#top" aria-label="返回顶部">
+        <img src="../public/icon-256.png" alt="" />
+        <span>Tidy Desktop</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">功能</a>
+        <a href="#showcase">展示</a>
+        <a href="#usage">使用方法</a>
+        <a href="#shortcuts">快捷键</a>
+        <a href="#download">下载</a>
+        <a href="https://github.com/Wan-Wuan/tidy-desktop" target="_blank" rel="noreferrer">GitHub</a>
       </div>
-    </section>
+    </nav>
+  </header>
 
-    <section class="section light" id="organize">
-      <div class="section-head">
-        <p class="eyebrow">整理对象</p>
-        <h2>桌面不是仓库，是入口。</h2>
-        <p class="section-copy">Tidy Desktop 把常用内容按使用场景归档：工作、游戏、文件、临时路径。你不需要记住它在哪里，只需要知道现在要做什么。</p>
+  <main id="top">
+    <section class="hero">
+      <div class="magic-field" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
       </div>
-      <div class="belt">
-        <article class="tile">
-          <div class="tile-mark">A</div>
-          <h3>应用</h3>
-          <p>拖入 exe 或快捷方式，自动提取图标，按分类和子分类排列。</p>
-        </article>
-        <article class="tile">
-          <div class="tile-mark">F</div>
-          <h3>文件夹</h3>
-          <p>把深层目录变成一键入口，项目、素材、下载目录都能快速打开。</p>
-        </article>
-        <article class="tile">
-          <div class="tile-mark">D</div>
-          <h3>文件</h3>
-          <p>文档和图片可以直接复制或拖到外部应用，少走几步系统菜单。</p>
-        </article>
-        <article class="tile">
-          <div class="tile-mark">S</div>
-          <h3>Steam</h3>
-          <p>拖入 Steam 链接，自动识别游戏名称和封面，游戏库也能归位。</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="section palette" id="search">
-      <div class="command">
+      <div class="shell hero-grid">
         <div>
-          <p class="eyebrow">快速搜索</p>
-          <h2>按下热键，输入一个线索。</h2>
-          <p class="section-copy">中文名、拼音、首字母、路径、搜索引擎前缀都能成为入口。没有本地结果时，回车会交给默认搜索引擎。</p>
+          <p class="eyebrow">Windows 桌面整理与启动效率工具</p>
+          <h1>把杂乱桌面整理成顺手的启动中心</h1>
+          <p class="lead">Tidy Desktop 用分类、搜索、图标修复和更新管理，把应用、文件夹、图片和 Steam 游戏放进一个清晰的桌面入口。常用内容可以更快找到，不常用内容也不会丢。</p>
+          <div class="hero-actions">
+            <a id="downloadHero" class="button primary" href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest" target="_blank" rel="noreferrer">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              下载最新版
+            </a>
+            <a class="button secondary" href="#usage">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              查看使用方法
+            </a>
+          </div>
+          <div class="trust-row" aria-label="产品特点">
+            <span>本地数据保存</span>
+            <span>支持自动更新</span>
+            <span>适配亮色与黑色主题</span>
+          </div>
         </div>
-        <div class="search-panel" aria-label="搜索界面示意">
-          <div class="search-input">wx design</div>
-          <div class="result">
-            <div class="result-icon">微</div>
-            <div class="result-text"><div class="result-name">微信</div><small>工作 / 通讯</small></div>
-            <div class="key">wx</div>
-          </div>
-          <div class="result">
-            <div class="result-icon">Ps</div>
-            <div class="result-text"><div class="result-name">Photoshop</div><small>设计 / 图片</small></div>
-            <div class="key">design</div>
-          </div>
-          <div class="result">
-            <div class="result-icon">C:</div>
-            <div class="result-text"><div class="result-name">打开文件夹</div><small>C:\Users\Downloads</small></div>
-            <div class="key">path</div>
+
+        <div class="product-card" aria-label="Tidy Desktop 应用界面示意">
+          <div class="app-preview">
+            <div class="preview-head">
+              <div class="preview-brand">
+                <img src="../public/icon-256.png" alt="" />
+                <div>
+                  <strong>Tidy Desktop</strong>
+                  <span>快速搜索、分类、启动</span>
+                </div>
+              </div>
+              <div class="window-controls" aria-hidden="true"><i></i><i></i><i></i></div>
+            </div>
+            <div class="searchbar">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m21 21-4.35-4.35m1.35-5.15a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              搜索应用、文件夹或快捷动作
+            </div>
+            <div class="preview-layout">
+              <div class="preview-tabs" aria-hidden="true">
+                <span>常用</span>
+                <span>工具</span>
+                <span>游戏</span>
+                <span>资料</span>
+              </div>
+              <div class="app-grid" aria-hidden="true">
+                <div class="app-tile"><i class="tile-icon"></i><span>浏览器</span></div>
+                <div class="app-tile"><i class="tile-icon"></i><span>设计工具</span></div>
+                <div class="app-tile"><i class="tile-icon"></i><span>Steam</span></div>
+                <div class="app-tile"><i class="tile-icon"></i><span>文档</span></div>
+                <div class="app-tile"><i class="tile-icon"></i><span>图片</span></div>
+                <div class="app-tile"><i class="tile-icon"></i><span>设置</span></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="section light" id="download">
-      <div class="download">
+    <section id="features">
+      <div class="shell">
         <div class="section-head">
-          <p class="eyebrow">发布</p>
-          <h2>为 Windows 桌面准备。</h2>
-          <p class="section-copy">安装包使用 NSIS，支持自定义安装目录、桌面快捷方式、开始菜单快捷方式和应用内更新。</p>
+          <p class="kicker">核心功能</p>
+          <h2>为每天都会打开的东西，做一个稳定入口</h2>
+          <p>它不是简单把桌面图标搬到另一个地方，而是让应用、文件和游戏拥有可维护的分类、搜索和恢复能力。</p>
         </div>
-        <aside class="release-panel">
-          <div>
-            <strong>v1.10.15</strong>
-            <p>包含单实例运行、更新安装包复用、快捷方式图标优化。</p>
-          </div>
-          <a class="button primary" href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest">前往 GitHub Releases</a>
-        </aside>
-      </div>
-      <div class="download-list" aria-label="下载资源">
-        <a href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest">
-          <strong>Windows 安装包</strong>
-          <span>NSIS / x64</span>
-        </a>
-        <a href="https://github.com/Wan-Wuan/tidy-desktop">
-          <strong>源代码仓库</strong>
-          <span>Electron + React + TypeScript</span>
-        </a>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h7v7H4V5Zm9 0h7v7h-7V5ZM4 14h7v5H4v-5Zm9 0h7v5h-7v-5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></div>
+            <h3>分类整理</h3>
+            <p>把应用、文件夹、图片和快捷方式按常用、工具、游戏、资料等分类管理，减少桌面堆叠。</p>
+          </article>
+          <article class="feature-card">
+            <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m21 21-4.3-4.3M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+            <h3>快速搜索</h3>
+            <p>通过名称、别名和关键词快速定位项目，支持常用优先与搜索框快捷动作。</p>
+          </article>
+          <article class="feature-card">
+            <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v18M3 12h18M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+            <h3>图标修复</h3>
+            <p>自动提取应用与快捷方式图标，刷新时保留可用缓存，避免图标刷新后变空。</p>
+          </article>
+          <article class="feature-card">
+            <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 4h12v16H6V4Zm3 4h6M9 12h6M9 16h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <h3>文件与图片入口</h3>
+            <p>不仅能管理应用，也能把常用文件夹、文档和图片加入启动列表，形成统一工作台。</p>
+          </article>
+          <article class="feature-card">
+            <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 6v6l4 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+            <h3>自动更新</h3>
+            <p>安装包可从 GitHub Release 获取，更新安装完成后会自动启动，减少手动操作。</p>
+          </article>
+          <article class="feature-card">
+            <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M7 7v12h10V7M9 7V5h6v2M9 11h6M9 15h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <h3>备份与维护</h3>
+            <p>提供备份、恢复、清理失效项、恢复隐藏项目等维护工具，让长期使用更放心。</p>
+          </article>
+        </div>
       </div>
     </section>
 
-    <footer class="footer">
-      Tidy Desktop - a compact launchpad for the desk you actually use.
-    </footer>
+    <section id="showcase">
+      <div class="shell">
+        <div class="section-head">
+          <p class="kicker">界面展示</p>
+          <h2>亮色清爽，暗色也保持清晰层次</h2>
+          <p>页面用更接近应用真实状态的预览，把搜索、分类、图标和主题质感放在同一个画面里，方便新用户快速理解它的使用场景。</p>
+        </div>
+        <div class="showcase-grid">
+          <div class="theme-stack">
+            <article class="theme-window">
+              <div class="theme-window-inner">
+                <div class="theme-title">
+                  <span>亮色主题</span>
+                  <span class="theme-chip">清爽桌面</span>
+                </div>
+                <div class="mini-search">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m21 21-4.3-4.3M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  搜索 Photoshop
+                </div>
+                <div class="mini-apps">
+                  <div class="mini-app"><i class="mini-icon"></i><span>设计工具</span></div>
+                  <div class="mini-app"><i class="mini-icon"></i><span>资料文件夹</span></div>
+                  <div class="mini-app"><i class="mini-icon"></i><span>常用应用</span></div>
+                  <div class="mini-app"><i class="mini-icon"></i><span>Steam 游戏</span></div>
+                </div>
+              </div>
+            </article>
+            <article class="theme-window dark">
+              <div class="theme-window-inner">
+                <div class="theme-title">
+                  <span>黑色主题</span>
+                  <span class="theme-chip">高对比显示</span>
+                </div>
+                <div class="mini-search">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m21 21-4.3-4.3M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  输入别名快速打开
+                </div>
+                <div class="mini-apps">
+                  <div class="mini-app"><i class="mini-icon"></i><span>浏览器</span></div>
+                  <div class="mini-app"><i class="mini-icon"></i><span>代码工具</span></div>
+                  <div class="mini-app"><i class="mini-icon"></i><span>图片素材</span></div>
+                  <div class="mini-app"><i class="mini-icon"></i><span>设置维护</span></div>
+                </div>
+              </div>
+            </article>
+          </div>
+          <div class="persona-grid">
+            <article class="persona-card">
+              <h3>适合桌面图标很多的人</h3>
+              <p>把散落在桌面的快捷方式收进分类里，保持桌面干净，同时不牺牲启动速度。</p>
+            </article>
+            <article class="persona-card">
+              <h3>适合经常切换软件的人</h3>
+              <p>通过搜索、别名和常用优先，减少翻找路径和开始菜单的时间。</p>
+            </article>
+            <article class="persona-card">
+              <h3>适合游戏和工作混用电脑</h3>
+              <p>应用、Steam 游戏、文件夹和图片都能放在同一个入口里，但仍然按场景分开。</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="usage">
+      <div class="shell">
+        <div class="section-head">
+          <p class="kicker">使用方法</p>
+          <h2>从安装到日常使用，只需要几个步骤</h2>
+          <p>适合把桌面图标很多、常用应用很多、Steam 游戏很多的电脑整理成一个更清爽的入口。</p>
+        </div>
+        <div class="steps">
+          <article class="step">
+            <h3>下载安装</h3>
+            <p>点击页面上的“下载最新版”，从 GitHub Release 获取 Windows 安装包。安装完成后打开 Tidy Desktop。</p>
+          </article>
+          <article class="step">
+            <h3>添加项目</h3>
+            <p>把应用、文件夹、图片或快捷方式拖入应用，也可以通过添加入口选择本地路径。Steam 游戏会尽量读取对应信息。</p>
+          </article>
+          <article class="step">
+            <h3>整理分类</h3>
+            <p>为项目设置分类、别名和常用状态。常用项目会在搜索和列表中更容易出现。</p>
+          </article>
+          <article class="step">
+            <h3>启动与定位</h3>
+            <p>在搜索框输入名称、别名或关键词，回车打开项目；也可以通过分类标签浏览并启动。</p>
+          </article>
+          <article class="step">
+            <h3>刷新图标</h3>
+            <p>当某些应用图标显示异常时，使用刷新图标功能。刷新过程会尽量复用缓存，并避免界面长时间卡住。</p>
+          </article>
+          <article class="step">
+            <h3>备份数据</h3>
+            <p>在设置中导出备份，重装系统或迁移电脑时再导入。应用数据默认保存在当前 Windows 用户目录下。</p>
+          </article>
+        </div>
+        <div class="timeline" aria-label="使用流程">
+          <article class="timeline-card">
+            <div class="timeline-dot">1</div>
+            <h3>下载</h3>
+            <p>从最新 Release 获取安装包，安装后打开应用。</p>
+          </article>
+          <article class="timeline-card">
+            <div class="timeline-dot">2</div>
+            <h3>添加</h3>
+            <p>拖入应用、文件夹、图片或 Steam 入口。</p>
+          </article>
+          <article class="timeline-card">
+            <div class="timeline-dot">3</div>
+            <h3>分类</h3>
+            <p>设置分类、别名、常用状态和图标。</p>
+          </article>
+          <article class="timeline-card">
+            <div class="timeline-dot">4</div>
+            <h3>搜索</h3>
+            <p>输入名称或别名，快速定位并打开。</p>
+          </article>
+          <article class="timeline-card">
+            <div class="timeline-dot">5</div>
+            <h3>维护</h3>
+            <p>刷新图标、清理失效项、备份和自动更新。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="shortcuts">
+      <div class="shell">
+        <div class="section-head">
+          <p class="kicker">快捷键与技巧</p>
+          <h2>熟悉这些操作后，会更像一个真正的启动中心</h2>
+          <p>快捷键以应用内实际设置为准；如果你修改过快捷键，请按自己的设置使用。</p>
+        </div>
+        <div class="shortcut-wrap">
+          <table class="shortcut-table">
+            <thead>
+              <tr>
+                <th>操作</th>
+                <th>用途</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><kbd>Ctrl</kbd><kbd>K</kbd></td>
+                <td>快速聚焦搜索框，直接输入应用或文件名称。</td>
+              </tr>
+              <tr>
+                <td><kbd>Enter</kbd></td>
+                <td>打开当前选中的搜索结果或列表项目。</td>
+              </tr>
+              <tr>
+                <td><kbd>Esc</kbd></td>
+                <td>关闭弹层、取消搜索或回到上一级操作。</td>
+              </tr>
+              <tr>
+                <td><kbd>Delete</kbd></td>
+                <td>对选中项目执行删除或移除操作，具体行为以界面提示为准。</td>
+              </tr>
+            </tbody>
+          </table>
+          <aside class="note">
+            <div class="note-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v18M5 8h14M7 16h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+            <h3>搜索建议</h3>
+            <p>给常用项目添加简短别名会明显提升搜索效率。比如给设计工具、浏览器、资料文件夹设置你最习惯输入的中文或拼音关键词。</p>
+            <ul>
+              <li>常用项目建议放在固定分类里。</li>
+              <li>移动应用位置后，记得清理失效项或重新添加。</li>
+              <li>图标异常时先刷新图标，再检查原始快捷方式是否有效。</li>
+            </ul>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="shell">
+        <div class="section-head">
+          <p class="kicker">常见问题</p>
+          <h2>安装、更新和数据说明</h2>
+          <p>这些说明适合在发布页面或项目首页里给新用户快速扫一遍。</p>
+        </div>
+        <div class="faq-grid">
+          <details class="faq-item" open>
+            <summary>页面为什么不显示版本号？</summary>
+            <p>版本号容易在静态页面里过期，所以页面不写固定版本。下载按钮会优先读取 GitHub 最新 Release 的安装包地址，读取失败时仍会跳转到最新发布页。</p>
+          </details>
+          <details class="faq-item">
+            <summary>更新后会自动打开吗？</summary>
+            <p>安装更新完成后会自动启动应用。若系统拦截安装器或权限不足，请按 Windows 提示允许安装。</p>
+          </details>
+          <details class="faq-item">
+            <summary>数据会上传到服务器吗？</summary>
+            <p>项目列表、分类、图标缓存和设置主要保存在本机用户目录。你可以通过设置里的备份功能迁移数据。</p>
+          </details>
+          <details class="faq-item">
+            <summary>为什么桌面快捷方式图标不同步？</summary>
+            <p>Windows 有自己的图标缓存。安装或更新后如果桌面快捷方式仍显示旧图标，可以重新创建快捷方式，或等待系统刷新缓存。</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section id="download">
+      <div class="shell">
+        <div class="download-band">
+          <div class="download-grid">
+            <div>
+              <p class="kicker">开始使用</p>
+              <h2>下载最新版安装包</h2>
+              <p>按钮会尝试自动定位 GitHub 最新 Release 中的 Windows 安装包。页面不会展示固定版本号，避免文档和发布记录不一致。</p>
+            </div>
+            <div class="download-actions">
+              <a id="downloadMain" class="button primary" href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest" target="_blank" rel="noreferrer">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                下载最新版
+              </a>
+              <a class="button secondary" href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest" target="_blank" rel="noreferrer">查看发布记录</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
+
+  <footer>
+    <div class="shell footer-grid">
+      <span>Tidy Desktop，面向 Windows 的桌面整理与快速启动工具。</span>
+      <div class="footer-links">
+        <a href="#features">功能</a>
+        <a href="#usage">使用方法</a>
+        <a href="https://github.com/Wan-Wuan/tidy-desktop" target="_blank" rel="noreferrer">GitHub</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const latestReleaseUrl = "https://github.com/Wan-Wuan/tidy-desktop/releases/latest";
+    const releaseApiUrl = "https://api.github.com/repos/Wan-Wuan/tidy-desktop/releases/latest";
+    const downloadLinks = [document.getElementById("downloadHero"), document.getElementById("downloadMain")].filter(Boolean);
+    const progressBar = document.getElementById("scrollProgress");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function updateScrollProgress() {
+      if (!progressBar) return;
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      const progress = maxScroll > 0 ? window.scrollY / maxScroll : 0;
+      progressBar.style.transform = `scaleX(${Math.min(Math.max(progress, 0), 1)})`;
+    }
+
+    updateScrollProgress();
+    window.addEventListener("scroll", updateScrollProgress, { passive: true });
+    window.addEventListener("resize", updateScrollProgress);
+
+    if (!reduceMotion && "IntersectionObserver" in window) {
+      const revealTargets = document.querySelectorAll("section:not(.hero), .feature-card, .step, .timeline-card, .theme-window, .persona-card, .faq-item, .download-band");
+      const revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            revealObserver.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: "0px 0px -8% 0px" });
+
+      revealTargets.forEach((target, index) => {
+        target.classList.add("reveal");
+        target.style.transitionDelay = `${Math.min(index % 6, 5) * 55}ms`;
+        revealObserver.observe(target);
+      });
+    }
+
+    fetch(releaseApiUrl, { headers: { Accept: "application/vnd.github+json" } })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("release lookup failed")))
+      .then((release) => {
+        const asset = Array.isArray(release.assets)
+          ? release.assets.find((item) => /setup.*\.exe$/i.test(item.name) || /\.exe$/i.test(item.name))
+          : null;
+        const target = asset && asset.browser_download_url ? asset.browser_download_url : release.html_url || latestReleaseUrl;
+        downloadLinks.forEach((link) => {
+          link.href = target;
+        });
+      })
+      .catch(() => {
+        downloadLinks.forEach((link) => {
+          link.href = latestReleaseUrl;
+        });
+      });
+  </script>
 </body>
 </html>

@@ -26,6 +26,7 @@ export function registerFileHandlers() {
     if (!config.defaultEngine) config.defaultEngine = defaults.defaultEngine
     if (!config.autoCategoryRules) config.autoCategoryRules = defaults.autoCategoryRules
     if (!config.quickActions) config.quickActions = defaults.quickActions
+    if (config.onboardingCompleted === undefined) config.onboardingCompleted = defaults.onboardingCompleted
     return config
   })
 

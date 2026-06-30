@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { AppItem, Category, Subcategory, Config, UISettings } from '../../shared/types'
+import { AppItem, Category, Subcategory, Config, UISettings, ShortcutImportItem } from '../../shared/types'
 import { isFolderPath, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { useUpdate } from './hooks/useUpdate'
@@ -9,6 +9,24 @@ import { UpdateButton, UpdateDialog } from './components/UpdateButton'
 const EMOJI_LIST = ['🌐', '💻', '🎬', '📄', '🎮', '📦', '🎨', '📱', '🔧', '🎵', '📷', '🛒', '💼', '📚', '🗂️', '⚙️']
 
 type DroppedFile = File & { path?: string }
+
+interface IconRefreshProgress {
+  done: number
+  total: number
+  success: number
+  failed: number
+  current?: string
+  failures: string[]
+}
+
+interface HealthReport {
+  total: number
+  invalidPaths: AppItem[]
+  missingIcons: AppItem[]
+  duplicatePaths: AppItem[]
+  emptyCategories: Category[]
+  hiddenCount: number
+}
 
 function App() {
   const [config, setConfig] = useState<Config | null>(null)
@@ -38,7 +56,9 @@ function App() {
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [dragOverAppId, setDragOverAppId] = useState<string | null>(null)
-  const [iconRefreshProgress, setIconRefreshProgress] = useState<{ done: number; total: number } | null>(null)
+  const [iconRefreshProgress, setIconRefreshProgress] = useState<IconRefreshProgress | null>(null)
+  const [healthReport, setHealthReport] = useState<HealthReport | null>(null)
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const categoryBarRef = useRef<HTMLDivElement>(null)
   const dragCounterRef = useRef(0)
@@ -301,6 +321,9 @@ function App() {
       window.electronAPI.getCategories()
     ])
     setConfig(configData)
+    if (!configData.onboardingCompleted) {
+      setShowOnboarding(true)
+    }
 
     const loadedApps = (appsData.apps || []).map(app => ({
       ...app,
@@ -917,6 +940,7 @@ function App() {
     let successCount = 0
     let failedCount = 0
     let doneCount = 0
+    const failures: string[] = []
     const CONCURRENCY = 4
     const isBetterIcon = (nextIcon: string, previousIcon: string) => {
       if (!nextIcon) return false
@@ -939,12 +963,20 @@ function App() {
         successCount++
       } else {
         failedCount++
+        failures.push(app.name)
       }
       doneCount++
-      setIconRefreshProgress({ done: doneCount, total: sourceApps.length })
+      setIconRefreshProgress({
+        done: doneCount,
+        total: sourceApps.length,
+        success: successCount,
+        failed: failedCount,
+        current: app.name,
+        failures: failures.slice(-8)
+      })
     }
 
-    setIconRefreshProgress({ done: 0, total: sourceApps.length })
+    setIconRefreshProgress({ done: 0, total: sourceApps.length, success: 0, failed: 0, failures: [] })
     for (let i = 0; i < sourceApps.length; i += CONCURRENCY) {
       const batch = sourceApps.slice(i, i + CONCURRENCY)
       await Promise.all(batch.map(refreshOne))
@@ -1012,6 +1044,198 @@ function App() {
       await loadData()
       alert('备份已导入。')
     }
+  }
+
+  const buildHealthReport = async (): Promise<HealthReport> => {
+    const currentApps = appsRef.current
+    const checks = await window.electronAPI.validateApps(currentApps.map(app => ({
+      id: app.id,
+      path: app.path,
+      type: app.type
+    })))
+    const invalidIds = new Set(checks.filter(item => !item.exists).map(item => item.id))
+    const pathCounts = new Map<string, number>()
+    for (const app of currentApps) {
+      const key = app.path.toLowerCase()
+      pathCounts.set(key, (pathCounts.get(key) || 0) + 1)
+    }
+    const usedCategoryIds = new Set(currentApps.filter(app => !app.hidden && app.categoryId).map(app => app.categoryId))
+    return {
+      total: currentApps.length,
+      invalidPaths: currentApps.filter(app => invalidIds.has(app.id)),
+      missingIcons: currentApps.filter(app => !app.icon || !app.icon.startsWith('data:') || app.icon.length < 1000),
+      duplicatePaths: currentApps.filter(app => pathCounts.get(app.path.toLowerCase())! > 1),
+      emptyCategories: categoriesRef.current.filter(cat => !usedCategoryIds.has(cat.id)),
+      hiddenCount: currentApps.filter(app => app.hidden).length
+    }
+  }
+
+  const handleRunHealthCheck = async () => {
+    setHealthReport(await buildHealthReport())
+  }
+
+  const handleFixHealthIssues = async () => {
+    const report = healthReport || await buildHealthReport()
+    let updatedApps = [...appsRef.current]
+    if (report.invalidPaths.length > 0) {
+      const confirmed = await window.electronAPI.confirm(`检测到 ${report.invalidPaths.length} 个失效路径，是否移除这些项目？`)
+      if (confirmed) {
+        const invalidIds = new Set(report.invalidPaths.map(app => app.id))
+        updatedApps = updatedApps.filter(app => !invalidIds.has(app.id))
+      }
+    }
+    if (report.duplicatePaths.length > 0) {
+      const confirmed = await window.electronAPI.confirm('检测到重复路径，是否只保留每个路径的第一个项目？')
+      if (confirmed) {
+        const seen = new Set<string>()
+        updatedApps = updatedApps.filter(app => {
+          const key = app.path.toLowerCase()
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+      }
+    }
+    setApps(updatedApps)
+    await window.electronAPI.saveApps({ apps: updatedApps })
+    setHealthReport(await buildHealthReport())
+  }
+
+  const importShortcutItems = async (items: ShortcutImportItem[]) => {
+    if (items.length === 0) {
+      alert('没有发现可导入的桌面或开始菜单快捷方式。')
+      return
+    }
+    if (categories.length === 0) {
+      alert('请先创建一个分类，然后再导入快捷方式。')
+      return
+    }
+    const existingPaths = new Set(appsRef.current.map(app => app.path.toLowerCase()))
+    const targetCategory = activeCategoryRef.current || categories[0].id
+    const newApps = items
+      .filter(item => !existingPaths.has(item.targetPath.toLowerCase()))
+      .slice(0, 120)
+      .map(item => ({
+        id: Date.now().toString() + Math.random().toString(36).slice(2),
+        name: item.name,
+        path: item.targetPath,
+        icon: item.icon,
+        categoryId: targetCategory,
+        subcategoryId: null,
+        pinyin: getPinyin(item.name),
+        firstLetter: getFirstLetter(item.name),
+        type: item.type,
+        aliases: []
+      } satisfies AppItem))
+    if (newApps.length === 0) {
+      alert('扫描到的快捷方式已经在列表中。')
+      return
+    }
+    const confirmed = await window.electronAPI.confirm(`发现 ${items.length} 个快捷方式，可新增 ${newApps.length} 个项目。是否导入到当前分类？`)
+    if (!confirmed) return
+    const updatedApps = [...appsRef.current, ...newApps]
+    setApps(updatedApps)
+    await window.electronAPI.saveApps({ apps: updatedApps })
+    await extractIconsForApps(newApps.filter(app => !app.icon))
+    alert(`已导入 ${newApps.length} 个快捷方式。`)
+  }
+
+  const importShortcutItemsWithAutoCategories = async (items: ShortcutImportItem[]) => {
+    if (items.length === 0) {
+      alert('没有发现可导入的桌面或开始菜单快捷方式。')
+      return
+    }
+
+    const existingPaths = new Set(appsRef.current.map(app => app.path.toLowerCase()))
+    const importableItems = items
+      .filter(item => item.targetPath && !existingPaths.has(item.targetPath.toLowerCase()))
+      .slice(0, 120)
+
+    if (importableItems.length === 0) {
+      alert('扫描到的快捷方式已经在列表中。')
+      return
+    }
+
+    const sourceMeta: Record<ShortcutImportItem['source'], { name: string; icon: string }> = {
+      desktop: { name: '桌面快捷方式', icon: '⌘' },
+      startMenu: { name: '开始菜单', icon: '⊞' },
+      other: { name: '快捷方式', icon: '◇' }
+    }
+    const nextCategories = [...categoriesRef.current]
+    const categoryBySource = new Map<ShortcutImportItem['source'], string>()
+
+    for (const item of importableItems) {
+      const source = item.source || 'other'
+      const meta = sourceMeta[source]
+      let category = nextCategories.find(cat => cat.name === meta.name)
+      if (!category) {
+        category = {
+          id: crypto.randomUUID(),
+          name: meta.name,
+          icon: meta.icon,
+          order: nextCategories.length + 1
+        }
+        nextCategories.push(category)
+      }
+      categoryBySource.set(source, category.id)
+    }
+
+    const createdCount = nextCategories.length - categoriesRef.current.length
+    const confirmed = await window.electronAPI.confirm(
+      `发现 ${items.length} 个快捷方式，可新增 ${importableItems.length} 个项目。` +
+      `${createdCount > 0 ? `将自动创建 ${createdCount} 个分类。` : ''}是否继续导入？`
+    )
+    if (!confirmed) return
+
+    if (createdCount > 0) {
+      setCategories(nextCategories)
+      categoriesRef.current = nextCategories
+      await window.electronAPI.saveCategories({ categories: nextCategories, subcategories })
+    }
+
+    const newApps = importableItems.map(item => ({
+      id: Date.now().toString() + Math.random().toString(36).slice(2),
+      name: item.name,
+      path: item.targetPath,
+      icon: item.icon,
+      categoryId: categoryBySource.get(item.source || 'other') || nextCategories[0]?.id || null,
+      subcategoryId: null,
+      pinyin: getPinyin(item.name),
+      firstLetter: getFirstLetter(item.name),
+      type: item.type,
+      aliases: []
+    } satisfies AppItem))
+
+    const updatedApps = [...appsRef.current, ...newApps]
+    setApps(updatedApps)
+    await window.electronAPI.saveApps({ apps: updatedApps })
+    if (!activeCategoryRef.current && nextCategories.length > 0) {
+      setActiveCategory(nextCategories[0].id)
+      activeCategoryRef.current = nextCategories[0].id
+    }
+    await extractIconsForApps(newApps.filter(app => !app.icon))
+    alert(`已导入 ${newApps.length} 个快捷方式。${createdCount > 0 ? `已自动创建 ${createdCount} 个分类。` : ''}`)
+  }
+
+  const handleImportShortcuts = async () => {
+    await importShortcutItemsWithAutoCategories(await window.electronAPI.scanShortcuts())
+  }
+
+  const handleExportDiagnostics = async () => {
+    const result = await window.electronAPI.exportDiagnostics()
+    if (result.success) {
+      alert(`诊断日志已导出：\n${result.filePath}`)
+    } else if (result.error) {
+      alert(`导出诊断日志失败：${result.error}`)
+    }
+  }
+
+  const completeOnboarding = async () => {
+    if (!config) return
+    const nextConfig = { ...config, onboardingCompleted: true }
+    setConfig(nextConfig)
+    await window.electronAPI.saveConfig(nextConfig)
+    setShowOnboarding(false)
   }
 
   return (
@@ -1455,7 +1679,23 @@ function App() {
           onRestoreHidden={handleRestoreHiddenApps}
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
+          onImportShortcuts={handleImportShortcuts}
+          onRunHealthCheck={handleRunHealthCheck}
+          onFixHealthIssues={handleFixHealthIssues}
+          onExportDiagnostics={handleExportDiagnostics}
+          onOpenDataDirectory={() => window.electronAPI.openDataDirectory()}
+          healthReport={healthReport}
           onOpenUpdateLog={() => window.electronAPI.openUpdateLog()}
+        />
+      )}
+
+      {showOnboarding && (
+        <OnboardingModal
+          onClose={completeOnboarding}
+          onImportShortcuts={async () => {
+            await handleImportShortcuts()
+            await completeOnboarding()
+          }}
         />
       )}
 
@@ -1546,6 +1786,65 @@ function App() {
   )
 }
 
+const OnboardingModal = React.memo(function OnboardingModal({
+  onClose,
+  onImportShortcuts
+}: {
+  onClose: () => void
+  onImportShortcuts: () => Promise<void>
+}) {
+  const [importing, setImporting] = useState(false)
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 modal-backdrop">
+      <div className="glass rounded-2xl p-6 w-[520px] max-w-[calc(100vw-32px)] shadow-xl shadow-brand-500/10 modal-enter">
+        <div className="w-12 h-12 rounded-2xl bg-brand-500 text-white flex items-center justify-center mb-4 shadow-lg shadow-brand-500/25">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5" />
+            <rect x="14" y="3" width="7" height="7" rx="1.5" />
+            <rect x="3" y="14" width="7" height="7" rx="1.5" />
+            <rect x="14" y="14" width="7" height="7" rx="1.5" />
+          </svg>
+        </div>
+        <h2 className="text-xl font-display font-bold text-slate-800 mb-2">欢迎使用 Tidy Desktop</h2>
+        <p className="text-sm text-slate-500 mb-5">只需要几个步骤，就能把桌面、开始菜单、常用文件夹整理成一个稳定的启动中心。</p>
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          {[
+            ['添加项目', '拖入应用、文件夹、图片或快捷方式。'],
+            ['整理分类', '按工作、工具、游戏或资料分组。'],
+            ['快速搜索', '用 Ctrl+K 打开搜索框，输入名称或别名。'],
+            ['备份维护', '定期导出备份，刷新图标和清理失效项。']
+          ].map(([title, text]) => (
+            <div key={title} className="p-3 rounded-xl bg-brand-50/50 border border-brand-100/50">
+              <div className="text-sm font-semibold text-slate-700">{title}</div>
+              <div className="text-xs text-slate-500 mt-1">{text}</div>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors">
+            稍后再说
+          </button>
+          <button
+            disabled={importing}
+            onClick={async () => {
+              setImporting(true)
+              try {
+                await onImportShortcuts()
+              } finally {
+                setImporting(false)
+              }
+            }}
+            className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-60"
+          >
+            {importing ? '正在扫描...' : '扫描并导入快捷方式'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+})
+
 const SettingsModal = React.memo(function SettingsModal({
   config,
   currentVersion,
@@ -1562,6 +1861,12 @@ const SettingsModal = React.memo(function SettingsModal({
   onRestoreHidden,
   onExportBackup,
   onImportBackup,
+  onImportShortcuts,
+  onRunHealthCheck,
+  onFixHealthIssues,
+  onExportDiagnostics,
+  onOpenDataDirectory,
+  healthReport,
   onOpenUpdateLog
 }: {
   config: Config
@@ -1573,12 +1878,18 @@ const SettingsModal = React.memo(function SettingsModal({
   updateError?: string
   onCheckUpdate?: () => Promise<void>
   onRefreshIcons: () => Promise<void>
-  iconRefreshProgress: { done: number; total: number } | null
+  iconRefreshProgress: IconRefreshProgress | null
   onAutoCategorize: () => Promise<void>
   onCleanupInvalid: () => Promise<void>
   onRestoreHidden: () => Promise<void>
   onExportBackup: () => Promise<void>
   onImportBackup: () => Promise<void>
+  onImportShortcuts: () => Promise<void>
+  onRunHealthCheck: () => Promise<void>
+  onFixHealthIssues: () => Promise<void>
+  onExportDiagnostics: () => Promise<void>
+  onOpenDataDirectory: () => Promise<boolean>
+  healthReport: HealthReport | null
   onOpenUpdateLog: () => Promise<boolean>
 }) {
   const [hotkey, setHotkey] = useState(config.hotkey)
@@ -1835,9 +2146,43 @@ const SettingsModal = React.memo(function SettingsModal({
             <button onClick={onAutoCategorize} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">自动分类</button>
             <button onClick={onCleanupInvalid} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">清理失效项</button>
             <button onClick={onRestoreHidden} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">恢复隐藏项</button>
+            <button onClick={onImportShortcuts} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">导入桌面快捷方式</button>
+            <button onClick={onRunHealthCheck} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">数据健康检查</button>
             <button onClick={onExportBackup} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">导出备份</button>
             <button onClick={onImportBackup} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">导入备份</button>
           </div>
+          {iconRefreshProgress && (
+            <div className="mt-3 p-3 bg-brand-50/50 rounded-xl text-xs text-slate-600 space-y-2">
+              <div className="h-2 bg-white/70 rounded-full overflow-hidden border border-brand-100">
+                <div
+                  className="h-full bg-brand-500 transition-all"
+                  style={{ width: `${iconRefreshProgress.total ? Math.round(iconRefreshProgress.done / iconRefreshProgress.total * 100) : 0}%` }}
+                />
+              </div>
+              <div className="flex justify-between">
+                <span>成功 {iconRefreshProgress.success}</span>
+                <span>失败 {iconRefreshProgress.failed}</span>
+              </div>
+              {iconRefreshProgress.current && <div>正在处理：{iconRefreshProgress.current}</div>}
+              {iconRefreshProgress.failures.length > 0 && <div>最近失败：{iconRefreshProgress.failures.join('、')}</div>}
+            </div>
+          )}
+          {healthReport && (
+            <div className="mt-3 p-3 bg-brand-50/50 rounded-xl text-xs text-slate-600 space-y-2">
+              <div className="font-semibold text-slate-700">健康检查结果</div>
+              <div className="grid grid-cols-2 gap-2">
+                <span>项目总数：{healthReport.total}</span>
+                <span>失效路径：{healthReport.invalidPaths.length}</span>
+                <span>缺失图标：{healthReport.missingIcons.length}</span>
+                <span>重复路径：{healthReport.duplicatePaths.length}</span>
+                <span>空分类：{healthReport.emptyCategories.length}</span>
+                <span>隐藏项：{healthReport.hiddenCount}</span>
+              </div>
+              <button onClick={onFixHealthIssues} className="w-full px-3 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 text-xs font-medium transition-colors">
+                自动修复可处理问题
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="mb-5">
@@ -1866,6 +2211,24 @@ const SettingsModal = React.memo(function SettingsModal({
                 className="px-3 py-1 bg-white text-slate-600 border border-slate-200 rounded-lg hover:border-brand-300 text-xs font-medium transition-colors"
               >
                 打开日志
+              </button>
+            </div>
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-brand-100/50">
+              <span className="text-sm text-slate-600">诊断日志</span>
+              <button
+                onClick={onExportDiagnostics}
+                className="px-3 py-1 bg-white text-slate-600 border border-slate-200 rounded-lg hover:border-brand-300 text-xs font-medium transition-colors"
+              >
+                导出诊断
+              </button>
+            </div>
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-brand-100/50">
+              <span className="text-sm text-slate-600">数据目录</span>
+              <button
+                onClick={onOpenDataDirectory}
+                className="px-3 py-1 bg-white text-slate-600 border border-slate-200 rounded-lg hover:border-brand-300 text-xs font-medium transition-colors"
+              >
+                打开目录
               </button>
             </div>
             {updateState === 'checking' && (

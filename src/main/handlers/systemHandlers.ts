@@ -1,8 +1,9 @@
 import { ipcMain, BrowserWindow, dialog, screen, app, nativeImage, shell } from 'electron'
+import { execFileSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
-import { APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, ICONS_DIR, readJsonFile, writeJsonFile } from '../config'
-import type { AppsData, CategoriesData, Config } from '../../shared/types'
+import { APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, CONFIG_DIR, ICONS_DIR, readJsonFile, writeJsonFile } from '../config'
+import type { AppsData, CategoriesData, Config, ShortcutImportItem } from '../../shared/types'
 
 let mainWindowRef: { current: BrowserWindow | null } = { current: null }
 let searchWindowRef: { current: BrowserWindow | null } = { current: null }
@@ -10,6 +11,89 @@ let searchWindowRef: { current: BrowserWindow | null } = { current: null }
 export function setWindowRefs(main: { current: BrowserWindow | null }, search: { current: BrowserWindow | null }) {
   mainWindowRef = main
   searchWindowRef = search
+}
+
+function escapePsString(value: string): string {
+  return value.replace(/'/g, "''")
+}
+
+function expandWindowsEnvPath(value: string): string {
+  return value.replace(/%([^%]+)%/g, (_, name: string) => {
+    return process.env[name] || process.env[name.toUpperCase()] || process.env[name.toLowerCase()] || `%${name}%`
+  })
+}
+
+function resolveShortcutTarget(filePath: string): string {
+  try {
+    const escapedPath = escapePsString(filePath)
+    const result = execFileSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        `$sh = New-Object -ComObject WScript.Shell; $s = $sh.CreateShortcut('${escapedPath}'); [Console]::OutputEncoding=[Text.Encoding]::UTF8; $s.TargetPath`
+      ],
+      { encoding: 'utf8', windowsHide: true, timeout: 2500 }
+    ).trim()
+    return expandWindowsEnvPath(result)
+  } catch {
+    return ''
+  }
+}
+
+async function createShortcutImportItem(filePath: string, source: ShortcutImportItem['source']): Promise<ShortcutImportItem | null> {
+  const targetPath = resolveShortcutTarget(filePath)
+  if (!targetPath || !fs.existsSync(targetPath)) return null
+  const stat = fs.statSync(targetPath)
+  const type = stat.isDirectory() ? 'folder' : 'app'
+  let icon = ''
+  try {
+    const fileIcon = await app.getFileIcon(filePath, { size: 'large' })
+    const png = fileIcon.toPNG()
+    if (png.length > 100) icon = `data:image/png;base64,${png.toString('base64')}`
+  } catch { /* ignore */ }
+  return {
+    name: path.basename(filePath, path.extname(filePath)),
+    path: filePath,
+    targetPath,
+    icon,
+    type,
+    source
+  }
+}
+
+function getShortcutRoots(): Array<{ path: string; source: ShortcutImportItem['source'] }> {
+  return [
+    { path: app.getPath('desktop'), source: 'desktop' as const },
+    { path: path.join(app.getPath('home'), 'Desktop'), source: 'desktop' as const },
+    { path: path.join(process.env.PUBLIC || 'C:\\Users\\Public', 'Desktop'), source: 'desktop' as const },
+    { path: path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs'), source: 'startMenu' as const },
+    { path: path.join(process.env.PROGRAMDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs'), source: 'startMenu' as const }
+  ].filter(item => !!item.path)
+}
+
+function collectShortcutFiles(root: string, limit = 600): string[] {
+  const output: string[] = []
+  const walk = (dir: string) => {
+    if (output.length >= limit || !fs.existsSync(dir)) return
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (output.length >= limit) break
+      const fullPath = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        walk(fullPath)
+      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.lnk')) {
+        output.push(fullPath)
+      }
+    }
+  }
+  walk(root)
+  return output
 }
 
 export function registerSystemHandlers() {
@@ -157,6 +241,80 @@ export function registerSystemHandlers() {
     if (payload.apps) writeJsonFile(APPS_FILE, payload.apps)
     if (payload.categories) writeJsonFile(CATEGORIES_FILE, payload.categories)
     return { success: true, filePath: result.filePaths[0] }
+  })
+
+  ipcMain.handle('export-diagnostics', async () => {
+    try {
+      const options = {
+        title: 'Export diagnostics',
+        defaultPath: `tidy-desktop-diagnostics-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`,
+        filters: [{ name: 'JSON', extensions: ['json'] }]
+      }
+      const owner = mainWindowRef.current
+      const result = owner && !owner.isDestroyed()
+        ? await dialog.showSaveDialog(owner, options)
+        : await dialog.showSaveDialog(options)
+      if (result.canceled || !result.filePath) return { success: false }
+
+      const iconFiles = fs.existsSync(ICONS_DIR)
+        ? fs.readdirSync(ICONS_DIR).map((file) => {
+          const filePath = path.join(ICONS_DIR, file)
+          const stat = fs.statSync(filePath)
+          return { file, size: stat.size, modifiedAt: stat.mtime.toISOString() }
+        })
+        : []
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        appVersion: app.getVersion(),
+        platform: process.platform,
+        arch: process.arch,
+        electron: process.versions.electron,
+        node: process.versions.node,
+        dataDirectory: CONFIG_DIR,
+        files: {
+          configExists: fs.existsSync(CONFIG_FILE),
+          appsExists: fs.existsSync(APPS_FILE),
+          categoriesExists: fs.existsSync(CATEGORIES_FILE),
+          iconCount: iconFiles.length,
+          iconBytes: iconFiles.reduce((sum, item) => sum + item.size, 0)
+        },
+        config: readJsonFile<Config>(CONFIG_FILE, {} as Config),
+        apps: readJsonFile<AppsData>(APPS_FILE, { apps: [] }),
+        categories: readJsonFile<CategoriesData>(CATEGORIES_FILE, { categories: [], subcategories: [] }),
+        iconFiles
+      }
+      fs.writeFileSync(result.filePath, JSON.stringify(payload, null, 2), 'utf-8')
+      return { success: true, filePath: result.filePath }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+
+  ipcMain.handle('scan-shortcuts', async () => {
+    const seen = new Set<string>()
+    const files = getShortcutRoots().flatMap(root => collectShortcutFiles(root.path).map(file => ({ file, source: root.source })))
+    const uniqueFiles = files.filter(item => {
+      const key = item.file.toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    const results = await Promise.all(uniqueFiles.map(item => createShortcutImportItem(item.file, item.source)))
+    const uniqueTargets = new Set<string>()
+    return results
+      .filter((item): item is ShortcutImportItem => !!item)
+      .filter(item => {
+        const key = item.targetPath.toLowerCase()
+        if (uniqueTargets.has(key)) return false
+        uniqueTargets.add(key)
+        return true
+      })
+      .slice(0, 300)
+  })
+
+  ipcMain.handle('open-data-directory', async () => {
+    const error = await shell.openPath(CONFIG_DIR)
+    return !error
   })
 
   ipcMain.handle('clear-icon-cache', async () => {

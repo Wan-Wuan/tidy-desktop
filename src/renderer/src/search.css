@@ -212,6 +212,47 @@ html, body {
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
+.search-command-hints {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  color: rgba(71, 85, 105, 0.72);
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.search-command-hints kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin: 0 2px;
+  border-radius: 6px;
+  color: #4338ca;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(199, 210, 254, 0.78);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.search-container.theme-dark .search-command-hints,
+.search-container.theme-system .search-command-hints {
+  color: #94A3B8;
+}
+
+.search-container.theme-dark .search-command-hints kbd,
+.search-container.theme-system .search-command-hints kbd {
+  color: #C7D2FE;
+  background: rgba(30, 41, 59, 0.72);
+  border-color: rgba(129, 140, 248, 0.32);
+}
+
 .search-container.theme-dark .search-input-wrapper {
   border-bottom-color: rgba(129, 140, 248, 0.16);
 }
