@@ -1369,7 +1369,7 @@ function App() {
       </div>
 
       <div className="px-5 pb-3 flex gap-2 overflow-x-auto">
-        {visibleSubcategories.map(sub => (
+        {displaySubcategories.map(sub => (
           <button
             key={sub.id}
             data-subcategory-id={sub.id}

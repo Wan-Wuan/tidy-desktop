@@ -77,6 +77,15 @@ function cleanupDownloadCache(): void {
   try { fs.unlinkSync(UPDATE_META_FILE) } catch { /* ignore */ }
 }
 
+export function cleanupInstalledUpdateCache(): void {
+  const meta = readDownloadCacheMeta()
+  if (!meta?.version) return
+
+  if (compareVersions(app.getVersion(), meta.version) >= 0) {
+    cleanupDownloadCache()
+  }
+}
+
 function hasCachedInstaller(version: string, asset: InstallerAsset): boolean {
   try {
     const meta = readDownloadCacheMeta()
