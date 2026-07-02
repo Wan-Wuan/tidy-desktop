@@ -391,8 +391,7 @@ function App() {
 
   const filteredApps = useMemo(() => {
     if (activeCategory) {
-      // Show apps in this category + orphaned apps (categoryId is null/empty)
-      return apps.filter(app => app.categoryId === activeCategory || !app.categoryId)
+      return apps.filter(app => app.categoryId === activeCategory)
     }
     return apps
   }, [apps, activeCategory])
@@ -727,20 +726,18 @@ function App() {
 
   const handleDeleteCategory = async (id: string) => {
     const updatedCategories = categories.filter(cat => cat.id !== id)
+    const updatedSubcategories = subcategories.filter(sub => sub.parentId !== id)
     setCategories(updatedCategories)
-    await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories })
+    setSubcategories(updatedSubcategories)
+    await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories: updatedSubcategories })
     
     if (activeCategory === id) {
-      if (updatedCategories.length > 0) {
-        setActiveCategory(updatedCategories[0].id)
-      } else {
-        setActiveCategory(null)
-      }
+      setActiveCategory(null)
     }
 
     const currentApps = appsRef.current
     const updatedApps = currentApps.map(app =>
-      app.categoryId === id ? { ...app, categoryId: null } : app
+      app.categoryId === id ? { ...app, categoryId: null, subcategoryId: null } : app
     )
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
@@ -803,6 +800,7 @@ function App() {
   }
 
   const visibleSubcategories = subcategories.filter(s => s.parentId === activeCategory)
+  const displaySubcategories = activeCategory ? visibleSubcategories : subcategories
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -1301,6 +1299,16 @@ function App() {
       </header>
 
       <div ref={categoryBarRef} className="px-5 pt-3 pb-2 flex gap-2 overflow-x-auto">
+        <button
+          onClick={() => { setActiveCategory(null) }}
+          className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${
+            activeCategory === null
+              ? 'bg-brand-600 text-white shadow-md shadow-brand-500/25'
+              : 'bg-white/60 text-slate-600 hover:bg-white/80 hover:text-brand-600 border border-brand-100/50'
+          }`}
+        >
+          全部
+        </button>
         {categories.map(cat => (
           <button
             key={cat.id}
@@ -1457,7 +1465,7 @@ function App() {
           const groups: { sub: Subcategory | null; apps: typeof filteredApps }[] = []
           const noSub = filteredApps.filter(a => !a.subcategoryId)
           if (noSub.length > 0) groups.push({ sub: null, apps: noSub })
-          for (const s of visibleSubcategories) {
+          for (const s of displaySubcategories) {
             const sApps = filteredApps.filter(a => a.subcategoryId === s.id)
             if (sApps.length > 0) groups.push({ sub: s, apps: sApps })
           }
@@ -2918,6 +2926,10 @@ const SubcategoryManagerModal = React.memo(function SubcategoryManagerModal({ ca
     setTimeout(() => nameInputRef.current?.focus(), 0)
   }
 
+  const visibleSubcategories = activeCategory
+    ? subcategories.filter(sub => sub.parentId === activeCategory)
+    : subcategories
+
   const getParentName = (parentId: string | null) => {
     if (!parentId) return '全局'
     return categories.find(c => c.id === parentId)?.name || '未知'
@@ -2990,7 +3002,7 @@ const SubcategoryManagerModal = React.memo(function SubcategoryManagerModal({ ca
         </div>
 
         <div className="space-y-2">
-          {subcategories.map(sub => (
+          {visibleSubcategories.map(sub => (
             <div key={sub.id} className="flex items-center gap-2 p-2 bg-white/60 border border-brand-100/40 rounded-xl">
               {editingId === sub.id ? (
                 <>
@@ -3064,7 +3076,7 @@ const SubcategoryManagerModal = React.memo(function SubcategoryManagerModal({ ca
           ))}
         </div>
 
-        {subcategories.length === 0 && (
+        {visibleSubcategories.length === 0 && (
           <div className="text-center text-slate-400 py-6 text-sm">暂无子分类</div>
         )}
 
