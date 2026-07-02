@@ -135,32 +135,83 @@ function SearchApp() {
     return cat ? cat.name : ''
   }
 
-  const isSubsequence = (needle: string, haystack: string): boolean => {
-    if (!needle) return true
-    let index = 0
-    for (const char of haystack) {
-      if (char === needle[index]) index++
-      if (index === needle.length) return true
-    }
-    return false
+  const splitSearchWords = (value: string): string[] => {
+    return value
+      .toLowerCase()
+      .split(/[\s\-_.,/\\|()[\]{}]+/)
+      .map(word => word.trim())
+      .filter(Boolean)
   }
 
-  const getSearchScore = (app: AppItem, terms: string[]): number => {
+  const compactSearchText = (value: string): string => {
+    return value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '')
+  }
+
+  const getSearchFields = (app: AppItem) => {
     const name = app.name.toLowerCase()
     const pinyin = (app.pinyin || '').toLowerCase()
     const firstLetter = (app.firstLetter || '').toLowerCase()
     const aliases = (app.aliases || []).map(alias => alias.toLowerCase())
-    const haystacks = [name, pinyin, firstLetter, ...aliases]
+    const nameWords = splitSearchWords(name)
+    const pinyinWords = splitSearchWords(pinyin)
+    const wordInitials = nameWords.map(word => word[0]).join('')
+    const pinyinInitials = pinyinWords.map(word => word[0]).join('')
+    const compactName = compactSearchText(name)
+    const compactPinyin = compactSearchText(pinyin)
+
+    return {
+      name,
+      pinyin,
+      firstLetter,
+      aliases,
+      nameWords,
+      pinyinWords,
+      wordInitials,
+      pinyinInitials,
+      compactName,
+      compactPinyin
+    }
+  }
+
+  const matchesTerm = (app: AppItem, term: string): boolean => {
+    const fields = getSearchFields(app)
+    const compactTerm = compactSearchText(term)
+
+    if (!compactTerm) return true
+    if (fields.aliases.some(alias => alias.includes(term))) return true
+    if (fields.name.includes(term)) return true
+    if (fields.pinyin.includes(term)) return true
+    if (fields.firstLetter.startsWith(compactTerm)) return true
+    if (fields.wordInitials.startsWith(compactTerm)) return true
+    if (fields.pinyinInitials.startsWith(compactTerm)) return true
+    if (fields.nameWords.some(word => word.startsWith(term))) return true
+    if (fields.pinyinWords.some(word => word.startsWith(term))) return true
+
+    return compactTerm.length >= 2 && (
+      fields.compactName.startsWith(compactTerm) ||
+      fields.compactPinyin.startsWith(compactTerm)
+    )
+  }
+
+  const getSearchScore = (app: AppItem, terms: string[]): number => {
+    const fields = getSearchFields(app)
 
     let score = (app.launchCount || 0) * 8 + Math.min(20, Math.floor((app.lastOpenedAt || 0) / 86400000))
     for (const term of terms) {
-      if (aliases.some(alias => alias === term)) score += 120
-      if (name === term) score += 100
-      if (name.startsWith(term)) score += 70
-      if (firstLetter.startsWith(term)) score += 55
-      if (pinyin.startsWith(term)) score += 45
-      if (haystacks.some(value => value.includes(term))) score += 25
-      if (haystacks.some(value => isSubsequence(term, value))) score += 10
+      const compactTerm = compactSearchText(term)
+      if (fields.aliases.some(alias => alias === term)) score += 120
+      if (fields.name === term) score += 100
+      if (fields.name.startsWith(term)) score += 80
+      if (fields.compactName.startsWith(compactTerm)) score += 70
+      if (fields.nameWords.some(word => word.startsWith(term))) score += 65
+      if (fields.firstLetter.startsWith(compactTerm)) score += 60
+      if (fields.wordInitials.startsWith(compactTerm)) score += 55
+      if (fields.pinyin.startsWith(term)) score += 50
+      if (fields.compactPinyin.startsWith(compactTerm)) score += 45
+      if (fields.pinyinWords.some(word => word.startsWith(term))) score += 40
+      if (fields.aliases.some(alias => alias.includes(term))) score += 35
+      if (fields.name.includes(term)) score += 30
+      if (fields.pinyin.includes(term)) score += 25
     }
     return score
   }
@@ -191,42 +242,11 @@ function SearchApp() {
     const actionResults = getQuickActionResults(searchQuery)
     if (actionResults.length > 0) return actionResults
 
-    const terms = searchQuery.toLowerCase().trim().split(/\s+/)
+    const terms = searchQuery.toLowerCase().trim().split(/\s+/).filter(term => compactSearchText(term))
+    if (terms.length === 0) return []
     const matched = apps.filter(app => {
       if (app.hidden) return false
-      const name = app.name.toLowerCase()
-      const pinyin = (app.pinyin || '').toLowerCase()
-      const firstLetter = (app.firstLetter || '').toLowerCase()
-      const aliases = (app.aliases || []).map(alias => alias.toLowerCase())
-      const nameWords = name.split(/[\s\-_.,/\\|]+/)
-
-      return terms.every(term => {
-        if (aliases.some(alias => alias.includes(term))) return true
-        if (name.includes(term)) return true
-        if (pinyin.includes(term)) return true
-        if (firstLetter.startsWith(term)) return true
-        if (isSubsequence(term, name) || isSubsequence(term, pinyin) || isSubsequence(term, firstLetter)) return true
-        for (let i = 0; i < nameWords.length; i++) {
-          if (nameWords[i].startsWith(term)) return true
-        }
-        const flMatch = (() => {
-          let ti = 0
-          for (let wi = 0; wi < nameWords.length && ti < term.length; wi++) {
-            if (nameWords[wi][0] === term[ti]) ti++
-          }
-          return ti === term.length
-        })()
-        if (flMatch) return true
-        const pinyinWords = pinyin.split(/[\s\-_.,/\\|]+/)
-        for (let i = 0; i < pinyinWords.length; i++) {
-          if (pinyinWords[i].startsWith(term)) return true
-        }
-        let pti = 0
-        for (let wi = 0; wi < pinyinWords.length && pti < term.length; wi++) {
-          if (pinyinWords[wi][0] === term[pti]) pti++
-        }
-        return pti === term.length
-      })
+      return terms.every(term => matchesTerm(app, term))
     }).sort((a, b) => getSearchScore(b, terms) - getSearchScore(a, terms))
 
     const suggestion = getFolderSuggestion(searchQuery)
