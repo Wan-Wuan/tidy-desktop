@@ -1,12 +1,14 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
+import type { AppItem, AppsData, CategoriesData, Config } from '../shared/types'
+import type { UpdateProgress } from '../shared/electron'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   getConfig: () => ipcRenderer.invoke('get-config'),
-  saveConfig: (config: any) => ipcRenderer.invoke('save-config', config),
+  saveConfig: (config: Config) => ipcRenderer.invoke('save-config', config),
   getApps: () => ipcRenderer.invoke('get-apps'),
-  saveApps: (data: any) => ipcRenderer.invoke('save-apps', data),
+  saveApps: (data: AppsData) => ipcRenderer.invoke('save-apps', data),
   getCategories: () => ipcRenderer.invoke('get-categories'),
-  saveCategories: (data: any) => ipcRenderer.invoke('save-categories', data),
+  saveCategories: (data: CategoriesData) => ipcRenderer.invoke('save-categories', data),
   openApp: (appPath: string) => ipcRenderer.invoke('open-app', appPath),
   openAppAsAdmin: (appPath: string) => ipcRenderer.invoke('open-app-as-admin', appPath),
   openFolder: (folderPath: string) => ipcRenderer.invoke('open-folder', folderPath),
@@ -29,7 +31,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAutoStart: (enabled: boolean) => ipcRenderer.invoke('set-auto-start', enabled),
   getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
   classifyPaths: (filePaths: string[]) => ipcRenderer.invoke('classify-paths', filePaths),
-  validateApps: (apps: any[]) => ipcRenderer.invoke('validate-apps', apps),
+  validateApps: (apps: Pick<AppItem, 'id' | 'path' | 'type'>[]) => ipcRenderer.invoke('validate-apps', apps),
   exportBackup: () => ipcRenderer.invoke('export-backup'),
   importBackup: () => ipcRenderer.invoke('import-backup'),
   exportDiagnostics: () => ipcRenderer.invoke('export-diagnostics'),
@@ -52,8 +54,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: (filePath: string) => ipcRenderer.invoke('install-update', filePath),
-  onUpdateProgress: (callback: (data: { percent: number; transferred: number; total: number }) => void) => {
-    const handler = (_event: any, data: any) => callback(data)
+  onUpdateProgress: (callback: (data: UpdateProgress) => void) => {
+    const handler = (_event: IpcRendererEvent, data: UpdateProgress) => callback(data)
     ipcRenderer.on('update-progress', handler)
     return () => ipcRenderer.removeListener('update-progress', handler)
   }

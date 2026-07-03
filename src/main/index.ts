@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen, dialog } from 'electron'
+import { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen, dialog, shell } from 'electron'
 import path from 'path'
 import { ensureDataDir, readJsonFile, getDefaultConfig, CONFIG_FILE } from './config'
 import { registerAppHandlers } from './handlers/appHandlers'
@@ -14,9 +14,53 @@ const searchWindowRef: { current: BrowserWindow | null } = { current: null }
 let trayRef: Tray | null = null
 let singleInstancePromptOpen = false
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
+const SEARCH_WINDOW_WIDTH = 600
+const SEARCH_WINDOW_EMPTY_HEIGHT = 100
 
 function getAppIcon() {
   return nativeImage.createFromPath(path.join(__dirname, '../../../build/icon-256.png'))
+}
+
+function isAllowedInternalUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl)
+    if (isDev) {
+      return url.origin === 'http://localhost:5173'
+    }
+    return url.protocol === 'file:'
+  } catch {
+    return false
+  }
+}
+
+function isSafeExternalUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function attachWindowSecurity(win: BrowserWindow) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isSafeExternalUrl(url)) {
+      shell.openExternal(url).catch((error) => {
+        console.error('Failed to open external URL:', error)
+      })
+    }
+    return { action: 'deny' }
+  })
+
+  win.webContents.on('will-navigate', (event, url) => {
+    if (isAllowedInternalUrl(url)) return
+    event.preventDefault()
+    if (isSafeExternalUrl(url)) {
+      shell.openExternal(url).catch((error) => {
+        console.error('Failed to open external URL:', error)
+      })
+    }
+  })
 }
 
 function createWindow() {
@@ -35,9 +79,12 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      webSecurity: true,
       preload: path.join(__dirname, 'preload.js')
     }
   })
+
+  attachWindowSecurity(win)
 
   win.setMenu(null)
   win.setMenuBarVisibility(false)
@@ -108,20 +155,34 @@ function toggleSearchWindow() {
     if (sw.isVisible()) {
       sw.hide()
     } else {
-      moveSearchWindowToCursorDisplay(sw)
-      sw.show()
-      sw.focus()
-      sw.webContents.send('reset-search')
+      showSearchWindow(sw)
     }
     return
   }
-  createSearchWindow()
+  createSearchWindow(true)
 }
 
-function createSearchWindow() {
+function showSearchWindow(win: BrowserWindow) {
+  if (win.isDestroyed()) return
+  moveSearchWindowToCursorDisplay(win)
+  win.show()
+  win.focus()
+  const resetSearch = () => {
+    if (!win.isDestroyed()) {
+      win.webContents.send('reset-search')
+    }
+  }
+  if (win.webContents.isLoading()) {
+    win.webContents.once('did-finish-load', resetSearch)
+  } else {
+    resetSearch()
+  }
+}
+
+function createSearchWindow(showOnReady = true) {
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-  const width = 600
-  const height = 60
+  const width = SEARCH_WINDOW_WIDTH
+  const height = SEARCH_WINDOW_EMPTY_HEIGHT
   const x = Math.round(display.workArea.x + (display.workArea.width - width) / 2)
   const y = Math.round(display.workArea.y + display.workArea.height * 0.3)
 
@@ -141,9 +202,12 @@ function createSearchWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      webSecurity: true,
       preload: path.join(__dirname, 'preload.js')
     }
   })
+
+  attachWindowSecurity(win)
 
   if (isDev) {
     win.loadURL('http://localhost:5173/search.html')
@@ -152,8 +216,9 @@ function createSearchWindow() {
   }
 
   win.once('ready-to-show', () => {
-    win.show()
-    win.focus()
+    if (showOnReady) {
+      showSearchWindow(win)
+    }
   })
 
   win.on('blur', () => {
@@ -176,6 +241,11 @@ function createSearchWindow() {
   })
 
   searchWindowRef.current = win
+}
+
+function prewarmSearchWindow() {
+  if (searchWindowRef.current && !searchWindowRef.current.isDestroyed()) return
+  createSearchWindow(false)
 }
 
 function moveSearchWindowToCursorDisplay(win: BrowserWindow) {
@@ -283,6 +353,7 @@ app.on('ready', () => {
   createWindow()
   createTray()
   registerGlobalShortcut()
+  setTimeout(prewarmSearchWindow, 800)
 })
 
 app.on('window-all-closed', () => {

@@ -2,8 +2,9 @@ import { ipcMain, BrowserWindow, dialog, screen, app, nativeImage, shell } from 
 import { execFileSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
-import { APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, CONFIG_DIR, ICONS_DIR, readJsonFile, writeJsonFile } from '../config'
+import { APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, CONFIG_DIR, ICONS_DIR, getDefaultConfig, readJsonFile, writeJsonFile } from '../config'
 import type { AppsData, CategoriesData, Config, ShortcutImportItem } from '../../shared/types'
+import { sanitizeAppsData, sanitizeCategoriesData, sanitizeConfig } from '../validation'
 
 let mainWindowRef: { current: BrowserWindow | null } = { current: null }
 let searchWindowRef: { current: BrowserWindow | null } = { current: null }
@@ -111,13 +112,14 @@ export function registerSystemHandlers() {
     }
   })
 
-  ipcMain.handle('resize-search-window', (_, height: number) => {
+  ipcMain.handle('resize-search-window', (_, height: unknown) => {
     const w = searchWindowRef.current
     if (w && !w.isDestroyed()) {
       // Clamp height: min 60px, max 80% of primary display height
       const { height: screenHeight } = screen.getPrimaryDisplay().workAreaSize
       const maxHeight = Math.round(screenHeight * 0.8)
-      const finalHeight = Math.min(Math.max(60, height), maxHeight)
+      const requestedHeight = typeof height === 'number' && Number.isFinite(height) ? height : 60
+      const finalHeight = Math.min(Math.max(60, requestedHeight), maxHeight)
       const bounds = w.getBounds()
       w.setBounds({
         x: bounds.x,
@@ -143,7 +145,7 @@ export function registerSystemHandlers() {
     return true
   })
 
-  ipcMain.handle('confirm', async (_, message: string) => {
+  ipcMain.handle('confirm', async (_, message: unknown) => {
     const w = mainWindowRef.current
     if (!w || w.isDestroyed()) return false
     const result = await dialog.showMessageBox(w, {
@@ -151,14 +153,14 @@ export function registerSystemHandlers() {
       buttons: ['取消', '确定'],
       defaultId: 0,
       cancelId: 0,
-      message
+      message: typeof message === 'string' ? message.slice(0, 1000) : ''
     })
     return result.response === 1
   })
 
-  ipcMain.handle('set-auto-start', (_, enabled: boolean) => {
+  ipcMain.handle('set-auto-start', (_, enabled: unknown) => {
     app.setLoginItemSettings({
-      openAtLogin: enabled,
+      openAtLogin: enabled === true,
       path: app.getPath('exe')
     })
     return true
@@ -168,8 +170,11 @@ export function registerSystemHandlers() {
     return app.getLoginItemSettings().openAtLogin
   })
 
-  ipcMain.handle('classify-paths', async (_, filePaths: string[]) => {
-    return Promise.all((filePaths || []).map(async (filePath) => {
+  ipcMain.handle('classify-paths', async (_, filePaths: unknown) => {
+    const safePaths = Array.isArray(filePaths)
+      ? filePaths.filter((filePath): filePath is string => typeof filePath === 'string').slice(0, 200)
+      : []
+    return Promise.all(safePaths.map(async (filePath) => {
       try {
         const stat = await fs.promises.stat(filePath)
         return {
@@ -191,12 +196,18 @@ export function registerSystemHandlers() {
     }))
   })
 
-  ipcMain.handle('validate-apps', async (_, apps: { id: string; path: string; type?: string }[]) => {
-    return (apps || []).map((item) => {
-      const exists = item.type === 'steam'
-        ? /^steam:\/\//i.test(item.path)
-        : fs.existsSync(item.path)
-      return { id: item.id, path: item.path, exists }
+  ipcMain.handle('validate-apps', async (_, apps: unknown) => {
+    const safeApps = Array.isArray(apps)
+      ? apps.filter((item): item is { id?: unknown; path?: unknown; type?: unknown } => typeof item === 'object' && item !== null).slice(0, 5000)
+      : []
+    return safeApps.map((item) => {
+      const id = typeof item.id === 'string' ? item.id : ''
+      const itemPath = typeof item.path === 'string' ? item.path : ''
+      const type = typeof item.type === 'string' ? item.type : ''
+      const exists = type === 'steam'
+        ? /^steam:\/\//i.test(itemPath)
+        : !!itemPath && fs.existsSync(itemPath)
+      return { id, path: itemPath, exists }
     })
   })
 
@@ -235,12 +246,26 @@ export function registerSystemHandlers() {
       : await dialog.showOpenDialog(options)
     if (result.canceled || result.filePaths.length === 0) return { success: false }
 
-    const raw = fs.readFileSync(result.filePaths[0], 'utf-8')
-    const payload = JSON.parse(raw)
-    if (payload.config) writeJsonFile(CONFIG_FILE, payload.config)
-    if (payload.apps) writeJsonFile(APPS_FILE, payload.apps)
-    if (payload.categories) writeJsonFile(CATEGORIES_FILE, payload.categories)
-    return { success: true, filePath: result.filePaths[0] }
+    try {
+      const raw = fs.readFileSync(result.filePaths[0], 'utf-8')
+      const payload: unknown = JSON.parse(raw)
+      if (!payload || typeof payload !== 'object') {
+        return { success: false, error: 'Invalid backup format' }
+      }
+      const backup = payload as { config?: unknown; apps?: unknown; categories?: unknown }
+      const nextConfig = backup.config ? sanitizeConfig(backup.config, getDefaultConfig()) : null
+      const nextApps = backup.apps ? sanitizeAppsData(backup.apps) : null
+      const nextCategories = backup.categories ? sanitizeCategoriesData(backup.categories) : null
+      if (backup.config && !nextConfig) return { success: false, error: 'Invalid config data' }
+      if (backup.apps && !nextApps) return { success: false, error: 'Invalid apps data' }
+      if (backup.categories && !nextCategories) return { success: false, error: 'Invalid categories data' }
+      if (nextConfig) writeJsonFile(CONFIG_FILE, nextConfig)
+      if (nextApps) writeJsonFile(APPS_FILE, nextApps)
+      if (nextCategories) writeJsonFile(CATEGORIES_FILE, nextCategories)
+      return { success: true, filePath: result.filePaths[0] }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
   })
 
   ipcMain.handle('export-diagnostics', async () => {
@@ -341,9 +366,10 @@ export function registerSystemHandlers() {
     return !error
   })
 
-  ipcMain.handle('start-drag-file', async (event, filePath: string) => {
+  ipcMain.handle('start-drag-file', async (event, filePath: unknown) => {
     const senderWin = BrowserWindow.fromWebContents(event.sender)
     if (!senderWin || senderWin.isDestroyed()) return false
+    if (typeof filePath !== 'string') return false
     if (!fs.existsSync(filePath)) return false
 
     let icon = nativeImage.createEmpty()

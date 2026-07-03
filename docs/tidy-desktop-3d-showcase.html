@@ -1,0 +1,1110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Tidy Desktop 的沉浸式产品展示页，展示桌面整理、快捷搜索、分类管理与文件启动体验。" />
+  <title>Tidy Desktop - 3D 产品展示</title>
+  <link rel="icon" href="../public/favicon.svg" type="image/svg+xml" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+SC:wght@400;500;700;900&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+    :root {
+      color-scheme: dark;
+      --carbon: #080A0E;
+      --panel: rgba(18, 24, 28, .66);
+      --panel-strong: rgba(18, 24, 28, .86);
+      --line: rgba(220, 245, 244, .18);
+      --text: #F6FBF9;
+      --muted: #A8B8B2;
+      --cyan: #27E1D7;
+      --coral: #FF6B45;
+      --moss: #A7F05A;
+      --amber: #FFC857;
+      --violet: #8B7DFF;
+      --focus: #27E1D7;
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--carbon);
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      overflow-x: hidden;
+      color: var(--text);
+      background:
+        linear-gradient(180deg, #080A0E 0%, #0C0F10 42%, #10100D 100%);
+      font-family: Inter, "Noto Sans SC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    body::before {
+      content: "";
+      pointer-events: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      opacity: .2;
+      background-image:
+        linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: linear-gradient(to bottom, black 0%, transparent 78%);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button,
+    a {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 4px;
+    }
+
+    .scene {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background: #080A0E;
+    }
+
+    #hero3d {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .depth-haze {
+      pointer-events: none;
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      background:
+        linear-gradient(90deg, rgba(8, 10, 14, .82) 0%, rgba(8, 10, 14, .40) 34%, rgba(8, 10, 14, .03) 72%, rgba(8, 10, 14, .28) 100%),
+        linear-gradient(180deg, rgba(8, 10, 14, .08) 0%, rgba(8, 10, 14, .18) 56%, rgba(8, 10, 14, .94) 100%);
+    }
+
+    .page {
+      position: relative;
+      z-index: 3;
+    }
+
+    .topbar {
+      position: fixed;
+      left: 18px;
+      right: 18px;
+      top: 16px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 64px;
+      padding: 10px 12px 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(8, 10, 14, .56);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, .32);
+      backdrop-filter: blur(22px) saturate(140%);
+      -webkit-backdrop-filter: blur(22px) saturate(140%);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 44px;
+      padding: 4px 8px 4px 4px;
+      border-radius: 16px;
+      font-weight: 900;
+    }
+
+    .brand img {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      box-shadow: 0 0 28px rgba(39, 225, 215, .22);
+    }
+
+    .brand span {
+      font-family: "Space Grotesk", Inter, sans-serif;
+      font-size: 1.05rem;
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: rgba(246, 251, 249, .72);
+      font-size: .88rem;
+      font-weight: 700;
+    }
+
+    .nav a {
+      min-height: 40px;
+      padding: 11px 14px;
+      border-radius: 14px;
+      transition: color .2s ease, background .2s ease;
+    }
+
+    .nav a:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, .08);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 46px;
+      padding: 0 18px;
+      border: 1px solid rgba(255, 255, 255, .12);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, .08);
+      color: var(--text);
+      font-weight: 850;
+      white-space: nowrap;
+      box-shadow: 0 16px 34px rgba(0, 0, 0, .25);
+      transition: transform .2s ease, border-color .2s ease, background .2s ease, box-shadow .2s ease;
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+      border-color: rgba(39, 225, 215, .42);
+      background: rgba(255, 255, 255, .12);
+      box-shadow: 0 20px 44px rgba(0, 0, 0, .32);
+    }
+
+    .button.primary {
+      border-color: rgba(255, 107, 69, .7);
+      background: linear-gradient(135deg, var(--coral), #FF9A3C);
+      color: #15100D;
+      box-shadow: 0 18px 44px rgba(255, 107, 69, .28);
+    }
+
+    .hero {
+      min-height: 92svh;
+      display: grid;
+      align-items: center;
+      padding: 120px clamp(20px, 5vw, 72px) 72px;
+    }
+
+    .hero-inner {
+      max-width: 920px;
+    }
+
+    .tagline {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 40px;
+      padding: 0 14px;
+      border: 1px solid rgba(39, 225, 215, .28);
+      border-radius: 999px;
+      background: rgba(8, 10, 14, .42);
+      color: rgba(246, 251, 249, .78);
+      font-size: .88rem;
+      font-weight: 800;
+      backdrop-filter: blur(14px);
+    }
+
+    .tagline::before {
+      content: "";
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--moss);
+      box-shadow: 0 0 18px var(--moss);
+    }
+
+    h1 {
+      margin: 28px 0 0;
+      max-width: 860px;
+      font-family: "Space Grotesk", "Noto Sans SC", Inter, sans-serif;
+      font-size: clamp(4.1rem, 11vw, 10.5rem);
+      line-height: .82;
+      letter-spacing: 0;
+      text-wrap: balance;
+    }
+
+    .hero-copy {
+      max-width: 680px;
+      margin: 28px 0 0;
+      color: rgba(246, 251, 249, .76);
+      font-size: clamp(1.05rem, 1.6vw, 1.32rem);
+      line-height: 1.75;
+      text-wrap: pretty;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 34px;
+    }
+
+    .hud-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      max-width: 820px;
+      margin-top: 38px;
+    }
+
+    .hud-item {
+      min-height: 88px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(8, 10, 14, .5);
+      backdrop-filter: blur(18px);
+      transform-style: preserve-3d;
+      transition: transform .25s ease, border-color .25s ease, background .25s ease;
+    }
+
+    .hud-item:hover {
+      transform: translateY(-4px) rotateX(4deg);
+      border-color: rgba(39, 225, 215, .38);
+      background: rgba(18, 24, 28, .68);
+    }
+
+    .hud-value {
+      font-family: "Space Grotesk", Inter, sans-serif;
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--cyan);
+    }
+
+    .hud-label {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: .8rem;
+      font-weight: 700;
+    }
+
+    .scroll-cue {
+      position: absolute;
+      left: clamp(20px, 5vw, 72px);
+      bottom: 22px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: rgba(246, 251, 249, .62);
+      font-size: .78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .16em;
+    }
+
+    .scroll-cue span {
+      width: 44px;
+      height: 1px;
+      background: linear-gradient(90deg, var(--cyan), transparent);
+    }
+
+    .section {
+      padding: 90px clamp(20px, 5vw, 72px);
+      background: rgba(8, 10, 14, .82);
+      border-top: 1px solid rgba(255, 255, 255, .08);
+      backdrop-filter: blur(16px);
+    }
+
+    .section.alt {
+      background:
+        linear-gradient(180deg, rgba(8, 10, 14, .86), rgba(14, 15, 13, .92));
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 520px);
+      gap: 34px;
+      align-items: end;
+      max-width: 1180px;
+      margin: 0 auto 34px;
+    }
+
+    .eyebrow {
+      margin: 0 0 14px;
+      color: var(--coral);
+      font-size: .82rem;
+      font-weight: 900;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin: 0;
+      font-family: "Space Grotesk", "Noto Sans SC", Inter, sans-serif;
+      font-size: clamp(2.4rem, 5.5vw, 5.2rem);
+      line-height: .95;
+      letter-spacing: 0;
+      text-wrap: balance;
+    }
+
+    .section-copy {
+      margin: 0;
+      color: rgba(246, 251, 249, .68);
+      font-size: 1.05rem;
+      line-height: 1.8;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .feature {
+      min-height: 262px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: var(--panel);
+      box-shadow: 0 28px 80px rgba(0, 0, 0, .22);
+      transform-style: preserve-3d;
+      perspective: 700px;
+      transition: transform .22s ease, border-color .22s ease, background .22s ease;
+    }
+
+    .feature:hover {
+      transform: translateY(-8px) rotateX(3deg) rotateY(-3deg);
+      border-color: rgba(39, 225, 215, .42);
+      background: rgba(22, 30, 34, .78);
+    }
+
+    .feature-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 50px;
+      height: 50px;
+      border-radius: 16px;
+      margin-bottom: 38px;
+      color: #111;
+      background: var(--cyan);
+      box-shadow: 0 18px 42px rgba(39, 225, 215, .22);
+    }
+
+    .feature:nth-child(2) .feature-icon { background: var(--coral); box-shadow: 0 18px 42px rgba(255, 107, 69, .22); }
+    .feature:nth-child(3) .feature-icon { background: var(--moss); box-shadow: 0 18px 42px rgba(167, 240, 90, .18); }
+    .feature:nth-child(4) .feature-icon { background: var(--amber); box-shadow: 0 18px 42px rgba(255, 200, 87, .18); }
+    .feature:nth-child(5) .feature-icon { background: var(--violet); box-shadow: 0 18px 42px rgba(139, 125, 255, .18); }
+
+    .feature h3 {
+      margin: 0;
+      font-size: 1.28rem;
+      letter-spacing: 0;
+    }
+
+    .feature p {
+      margin: 14px 0 0;
+      color: rgba(246, 251, 249, .65);
+      line-height: 1.75;
+    }
+
+    .workflow {
+      max-width: 1180px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: .85fr 1.15fr;
+      gap: 28px;
+      align-items: stretch;
+    }
+
+    .terminal-panel,
+    .steps {
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: var(--panel-strong);
+      box-shadow: 0 32px 90px rgba(0, 0, 0, .28);
+    }
+
+    .terminal-panel {
+      min-height: 460px;
+      padding: 24px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .terminal-panel::after {
+      content: "";
+      position: absolute;
+      inset: auto 22px 22px 22px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(39, 225, 215, .72), transparent);
+      animation: scanline 2.8s ease-in-out infinite;
+    }
+
+    .terminal-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 26px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--coral);
+    }
+
+    .dot:nth-child(2) { background: var(--amber); }
+    .dot:nth-child(3) { background: var(--moss); }
+
+    .command-line {
+      display: grid;
+      gap: 14px;
+      font-family: "Space Grotesk", "Noto Sans SC", monospace;
+      font-size: clamp(1.05rem, 2vw, 1.35rem);
+      font-weight: 700;
+      color: rgba(246, 251, 249, .88);
+    }
+
+    .command-line span {
+      display: block;
+      padding: 14px 16px;
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, .04);
+    }
+
+    .command-line b {
+      color: var(--cyan);
+      font-weight: 900;
+    }
+
+    .steps {
+      display: grid;
+      gap: 12px;
+      padding: 18px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 58px 1fr;
+      gap: 18px;
+      align-items: start;
+      min-height: 126px;
+      padding: 18px;
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, .04);
+      transition: transform .2s ease, background .2s ease;
+    }
+
+    .step:hover {
+      transform: translateX(6px);
+      background: rgba(255, 255, 255, .07);
+    }
+
+    .step-number {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      background: rgba(39, 225, 215, .12);
+      color: var(--cyan);
+      font-family: "Space Grotesk", Inter, sans-serif;
+      font-weight: 900;
+      box-shadow: inset 0 0 0 1px rgba(39, 225, 215, .25);
+    }
+
+    .step h3 {
+      margin: 0 0 8px;
+      font-size: 1.18rem;
+    }
+
+    .step p {
+      margin: 0;
+      color: rgba(246, 251, 249, .66);
+      line-height: 1.65;
+    }
+
+    .download {
+      max-width: 1180px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 26px;
+      align-items: center;
+      padding: 34px;
+      border: 1px solid rgba(255, 255, 255, .16);
+      border-radius: 30px;
+      background:
+        linear-gradient(135deg, rgba(255, 107, 69, .14), transparent 35%),
+        linear-gradient(90deg, rgba(39, 225, 215, .16), rgba(167, 240, 90, .08)),
+        rgba(18, 24, 28, .82);
+      box-shadow: 0 36px 110px rgba(0, 0, 0, .3);
+    }
+
+    .download h2 {
+      font-size: clamp(2rem, 4vw, 4.2rem);
+    }
+
+    .release {
+      display: inline-flex;
+      align-items: center;
+      min-height: 42px;
+      margin-top: 22px;
+      padding: 0 14px;
+      border: 1px solid rgba(39, 225, 215, .22);
+      border-radius: 999px;
+      color: rgba(246, 251, 249, .78);
+      background: rgba(8, 10, 14, .38);
+      font-size: .9rem;
+      font-weight: 800;
+    }
+
+    .footer {
+      position: relative;
+      z-index: 3;
+      padding: 28px clamp(20px, 5vw, 72px) 36px;
+      border-top: 1px solid rgba(255,255,255,.08);
+      background: rgba(8, 10, 14, .92);
+      color: rgba(246, 251, 249, .62);
+      font-size: .92rem;
+      font-weight: 650;
+    }
+
+    .footer-inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity .75s ease, transform .75s ease;
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @keyframes scanline {
+      0%, 100% { opacity: .2; transform: scaleX(.42); }
+      50% { opacity: 1; transform: scaleX(1); }
+    }
+
+    @media (max-width: 980px) {
+      .nav {
+        display: none;
+      }
+
+      .hero {
+        min-height: 96svh;
+      }
+
+      .hud-strip,
+      .feature-grid,
+      .workflow,
+      .section-head,
+      .download {
+        grid-template-columns: 1fr;
+      }
+
+      .download {
+        align-items: start;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .topbar {
+        left: 10px;
+        right: 10px;
+        top: 10px;
+      }
+
+      .brand span {
+        display: none;
+      }
+
+      .button {
+        min-height: 42px;
+        padding: 0 13px;
+        font-size: .86rem;
+      }
+
+      .hero {
+        padding: 104px 18px 70px;
+      }
+
+      .hero-actions {
+        flex-direction: column;
+      }
+
+      .hud-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .section {
+        padding: 70px 18px;
+      }
+
+      .feature {
+        min-height: 220px;
+      }
+
+      .step {
+        grid-template-columns: 1fr;
+      }
+
+      .footer-inner {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      *, *::before, *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+      }
+
+      .reveal {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="scene" aria-hidden="true">
+    <canvas id="hero3d"></canvas>
+  </div>
+  <div class="depth-haze" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="Tidy Desktop 首页">
+      <img src="../public/icon-256.png" alt="" />
+      <span>Tidy Desktop</span>
+    </a>
+    <nav class="nav" aria-label="页面导航">
+      <a href="#features">功能</a>
+      <a href="#workflow">流程</a>
+      <a href="#download">下载</a>
+    </nav>
+    <div class="top-actions">
+      <a class="button" href="https://github.com/Wan-Wuan/tidy-desktop">GitHub</a>
+      <a class="button primary" href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest">下载</a>
+    </div>
+  </header>
+
+  <main class="page" id="top">
+    <section class="hero">
+      <div class="hero-inner reveal">
+        <div class="tagline">Windows 桌面整理与快捷启动中心</div>
+        <h1>Tidy Desktop</h1>
+        <p class="hero-copy">
+          把应用、文件夹、文档和 Steam 游戏收拢进一个可搜索、可分类、可拖拽的启动台。主窗口负责整理，快速搜索框负责瞬间抵达。
+        </p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest">获取最新版本</a>
+          <a class="button" href="#features">查看亮点</a>
+        </div>
+        <div class="hud-strip" aria-label="核心能力">
+          <div class="hud-item">
+            <div class="hud-value">Alt + Space</div>
+            <div class="hud-label">主窗口唤起</div>
+          </div>
+          <div class="hud-item">
+            <div class="hud-value">Ctrl + K</div>
+            <div class="hud-label">快速搜索</div>
+          </div>
+          <div class="hud-item">
+            <div class="hud-value">多级</div>
+            <div class="hud-label">分类与子分类</div>
+          </div>
+          <div class="hud-item">
+            <div class="hud-value">自动</div>
+            <div class="hud-label">图标提取缓存</div>
+          </div>
+        </div>
+      </div>
+      <div class="scroll-cue"><span></span>继续浏览</div>
+    </section>
+
+    <section class="section" id="features">
+      <div class="section-head reveal">
+        <div>
+          <p class="eyebrow">Organize / Launch / Search</p>
+          <h2>一个面板，收住桌面的混乱。</h2>
+        </div>
+        <p class="section-copy">
+          这不是给桌面再套一层皮，而是缩短你每天重复的启动路径。分类、快捷键、图标缓存、文件发送和网页搜索都在一个节奏里。
+        </p>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature reveal">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h11"/></svg>
+          </div>
+          <h3>分类像工作台一样清楚</h3>
+          <p>创建分类与子分类，拖拽应用到合适位置。工具、资料、设计、游戏都能保留自己的入口。</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+          </div>
+          <h3>搜索不用记完整名称</h3>
+          <p>支持拼音、首字母、多关键词、路径和别名。输入 wx、vscode 或文件夹路径，都能快速抵达。</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 3v18"/><path d="M5 8h14"/><path d="M7 21h10a2 2 0 0 0 2-2V8H5v11a2 2 0 0 0 2 2Z"/></svg>
+          </div>
+          <h3>图标自己变整齐</h3>
+          <p>自动提取 exe、lnk 和 Steam 游戏图标并缓存。刷新图标、清理失效项、导出诊断都在设置里。</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M6 4h12v16H6z"/><path d="M9 8h6"/><path d="M9 12h6"/><path d="M9 16h3"/></svg>
+          </div>
+          <h3>文件发送更顺手</h3>
+          <p>文档可复制到剪贴板，图片可拖拽或复制内容，适合微信、Word、QQ 等日常发送场景。</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M3 12h18"/><path d="M12 3v18"/><path d="M5 5l14 14"/><path d="M19 5 5 19"/></svg>
+          </div>
+          <h3>搜索引擎直接接入</h3>
+          <p>输入前缀加空格即可切换 Bing、Google、GitHub、知乎、B 站等搜索入口。</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 2v6l4-4"/><path d="M12 8 8 4"/><path d="M5 12a7 7 0 1 0 14 0"/></svg>
+          </div>
+          <h3>维护能力留在手边</h3>
+          <p>支持导入导出备份、扫描快捷方式、健康检查、打开数据目录和更新安装日志。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section alt" id="workflow">
+      <div class="section-head reveal">
+        <div>
+          <p class="eyebrow">Daily Flow</p>
+          <h2>整理一次，每天少找几分钟。</h2>
+        </div>
+        <p class="section-copy">
+          Tidy Desktop 的核心流程很短：先把入口收进来，再按你的工作习惯整理，最后交给快捷键和搜索。
+        </p>
+      </div>
+
+      <div class="workflow">
+        <div class="terminal-panel reveal" aria-label="快捷命令示例">
+          <div class="terminal-top">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+          <div class="command-line">
+            <span><b>&gt;</b> scan desktop shortcuts</span>
+            <span><b>&gt;</b> group design tools</span>
+            <span><b>&gt;</b> ctrl+k vscode</span>
+            <span><b>&gt;</b> gh tidy desktop</span>
+          </div>
+        </div>
+
+        <div class="steps reveal">
+          <div class="step">
+            <div class="step-number">01</div>
+            <div>
+              <h3>扫描或拖入项目</h3>
+              <p>从桌面、开始菜单或文件管理器导入应用、文件夹、图片、文档和 Steam 链接。</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">02</div>
+            <div>
+              <h3>分类、排序、补图标</h3>
+              <p>按工作流创建分类，拖拽排序。缺失图标会在后台补齐，保持首屏响应更轻。</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">03</div>
+            <div>
+              <h3>用快捷键打开一切</h3>
+              <p>主界面浏览分类，搜索框负责快速启动。Enter 打开，Ctrl + Enter 打开所在文件夹。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="download">
+      <div class="download reveal">
+        <div>
+          <p class="eyebrow">Release</p>
+          <h2>下载最新版本，给桌面一个新的重力中心。</h2>
+          <div class="release" id="releaseStatus">正在读取 GitHub 最新 Release...</div>
+        </div>
+        <div class="hero-actions">
+          <a class="button primary" id="downloadButton" href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest">前往下载</a>
+          <a class="button" href="https://github.com/Wan-Wuan/tidy-desktop">查看源码</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span>Tidy Desktop - Windows 桌面整理与快速启动工具</span>
+      <span>Designed as a dimensional product showcase.</span>
+    </div>
+  </footer>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.161.0/build/three.module.js';
+
+    const canvas = document.getElementById('hero3d');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x080a0e);
+    scene.fog = new THREE.FogExp2(0x080a0e, 0.034);
+
+    const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 160);
+    camera.position.set(0, 5.6, 18);
+
+    const group = new THREE.Group();
+    scene.add(group);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.58);
+    scene.add(ambient);
+
+    const cyanLight = new THREE.PointLight(0x27e1d7, 15, 36);
+    cyanLight.position.set(7, 6, 8);
+    scene.add(cyanLight);
+
+    const coralLight = new THREE.PointLight(0xff6b45, 11, 34);
+    coralLight.position.set(-7, 3, 4);
+    scene.add(coralLight);
+
+    const mossLight = new THREE.PointLight(0xa7f05a, 7, 30);
+    mossLight.position.set(0, -2, 10);
+    scene.add(mossLight);
+
+    const grid = new THREE.GridHelper(70, 42, 0x27e1d7, 0x1c2a2b);
+    grid.position.y = -4.2;
+    grid.material.transparent = true;
+    grid.material.opacity = 0.28;
+    scene.add(grid);
+
+    const platformMaterial = new THREE.MeshStandardMaterial({
+      color: 0x101719,
+      metalness: 0.34,
+      roughness: 0.42,
+      emissive: 0x061112,
+      emissiveIntensity: 0.8
+    });
+
+    const platform = new THREE.Mesh(new THREE.BoxGeometry(10.8, 0.34, 6.6), platformMaterial);
+    platform.position.set(2.8, -1.8, 0);
+    platform.rotation.set(-0.03, -0.45, 0.03);
+    group.add(platform);
+
+    const edgeMaterial = new THREE.MeshBasicMaterial({ color: 0x27e1d7, transparent: true, opacity: 0.48 });
+    const edge = new THREE.LineSegments(new THREE.EdgesGeometry(platform.geometry), edgeMaterial);
+    edge.position.copy(platform.position);
+    edge.rotation.copy(platform.rotation);
+    group.add(edge);
+
+    const colors = [0x27e1d7, 0xff6b45, 0xa7f05a, 0xffc857, 0x8b7dff, 0xf6fbf9];
+    const tiles = [];
+    const tileGeometry = new THREE.BoxGeometry(1.18, 0.28, 1.18);
+
+    for (let row = 0; row < 3; row += 1) {
+      for (let col = 0; col < 5; col += 1) {
+        const color = colors[(row * 5 + col) % colors.length];
+        const mat = new THREE.MeshStandardMaterial({
+          color,
+          metalness: 0.16,
+          roughness: 0.34,
+          emissive: color,
+          emissiveIntensity: 0.12
+        });
+        const tile = new THREE.Mesh(tileGeometry, mat);
+        tile.position.set(col * 1.52 - 0.25, -1.36 + row * 0.08, row * 1.42 - 1.25);
+        tile.rotation.set(-0.02, -0.45, 0.03);
+        tile.userData.baseY = tile.position.y;
+        tile.userData.phase = row * 0.7 + col * 0.34;
+        tiles.push(tile);
+        group.add(tile);
+      }
+    }
+
+    const panelMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xeffffe,
+      transparent: true,
+      opacity: 0.22,
+      metalness: 0.02,
+      roughness: 0.08,
+      transmission: 0.25,
+      thickness: 0.5,
+      emissive: 0x27e1d7,
+      emissiveIntensity: 0.08
+    });
+
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(7.2, 3.6, 0.08), panelMaterial);
+    panel.position.set(3.3, 2.15, -1.2);
+    panel.rotation.set(-0.1, -0.48, 0.04);
+    group.add(panel);
+
+    const panelEdges = new THREE.LineSegments(new THREE.EdgesGeometry(panel.geometry), new THREE.MeshBasicMaterial({ color: 0xf6fbf9, transparent: true, opacity: 0.25 }));
+    panelEdges.position.copy(panel.position);
+    panelEdges.rotation.copy(panel.rotation);
+    group.add(panelEdges);
+
+    const ringMaterialCyan = new THREE.MeshBasicMaterial({ color: 0x27e1d7, transparent: true, opacity: 0.36, side: THREE.DoubleSide });
+    const ringMaterialCoral = new THREE.MeshBasicMaterial({ color: 0xff6b45, transparent: true, opacity: 0.28, side: THREE.DoubleSide });
+    const ringOne = new THREE.Mesh(new THREE.TorusGeometry(3.5, 0.018, 12, 160), ringMaterialCyan);
+    ringOne.position.set(3.2, 1.6, -1.25);
+    ringOne.rotation.set(1.22, 0.1, -0.55);
+    group.add(ringOne);
+
+    const ringTwo = new THREE.Mesh(new THREE.TorusGeometry(4.45, 0.014, 12, 180), ringMaterialCoral);
+    ringTwo.position.set(3.3, 1.65, -1.35);
+    ringTwo.rotation.set(1.08, 0.22, -0.75);
+    group.add(ringTwo);
+
+    const searchBar = new THREE.Mesh(
+      new THREE.BoxGeometry(5.8, 0.44, 0.12),
+      new THREE.MeshStandardMaterial({ color: 0x12181c, emissive: 0x27e1d7, emissiveIntensity: 0.18, roughness: 0.28, metalness: 0.08 })
+    );
+    searchBar.position.set(2.95, 3.1, -1.0);
+    searchBar.rotation.copy(panel.rotation);
+    group.add(searchBar);
+
+    const particleCount = 560;
+    const positions = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i += 1) {
+      const i3 = i * 3;
+      const angle = i * 0.12;
+      const radius = 6 + Math.sin(i * 0.31) * 2.4;
+      positions[i3] = Math.cos(angle) * radius + 3.8;
+      positions[i3 + 1] = Math.sin(i * 0.17) * 2.2 + 0.8;
+      positions[i3 + 2] = Math.sin(angle) * radius - 4.2;
+    }
+    const particleGeometry = new THREE.BufferGeometry();
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const particleMaterial = new THREE.PointsMaterial({
+      size: 0.045,
+      color: 0x27e1d7,
+      transparent: true,
+      opacity: 0.68,
+      depthWrite: false
+    });
+    const particles = new THREE.Points(particleGeometry, particleMaterial);
+    scene.add(particles);
+
+    const mouse = { x: 0, y: 0 };
+    window.addEventListener('pointermove', (event) => {
+      mouse.x = (event.clientX / window.innerWidth - 0.5) * 2;
+      mouse.y = (event.clientY / window.innerHeight - 0.5) * 2;
+    }, { passive: true });
+
+    function resize() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const clock = new THREE.Clock();
+
+    function animate() {
+      const t = clock.getElapsedTime();
+      const motion = reducedMotion ? 0 : 1;
+      group.rotation.y = -0.12 + mouse.x * 0.06 * motion + Math.sin(t * 0.18) * 0.025 * motion;
+      group.rotation.x = mouse.y * -0.025 * motion;
+      particles.rotation.y = t * 0.045 * motion;
+      particles.rotation.x = Math.sin(t * 0.14) * 0.04 * motion;
+      ringOne.rotation.z = -0.55 + t * 0.18 * motion;
+      ringTwo.rotation.z = -0.75 - t * 0.13 * motion;
+      searchBar.material.emissiveIntensity = 0.14 + Math.sin(t * 2.2) * 0.04;
+
+      tiles.forEach((tile) => {
+        tile.position.y = tile.userData.baseY + Math.sin(t * 1.4 + tile.userData.phase) * 0.12 * motion;
+      });
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    animate();
+
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.16 });
+
+    document.querySelectorAll('.reveal').forEach((item) => revealObserver.observe(item));
+
+    const releaseStatus = document.getElementById('releaseStatus');
+    const downloadButton = document.getElementById('downloadButton');
+
+    fetch('https://api.github.com/repos/Wan-Wuan/tidy-desktop/releases/latest')
+      .then((response) => {
+        if (!response.ok) throw new Error('release request failed');
+        return response.json();
+      })
+      .then((release) => {
+        const asset = (release.assets || []).find((item) => /tidy-desktop-Setup-.*\.exe$/i.test(item.name));
+        releaseStatus.textContent = asset ? `最新安装包：${asset.name}` : '已获取最新 Release，可进入页面选择安装包';
+        downloadButton.href = asset ? asset.browser_download_url : release.html_url;
+      })
+      .catch(() => {
+        releaseStatus.textContent = '暂时无法读取 GitHub 最新信息，可进入 Releases 手动下载';
+      });
+  </script>
+</body>
+</html>

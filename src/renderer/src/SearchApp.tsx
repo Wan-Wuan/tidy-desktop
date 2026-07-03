@@ -21,6 +21,7 @@ const RESULTS_PADDING_Y = 8
 const NO_RESULTS_HEIGHT = 44
 const EMPTY_HINT_HEIGHT = 44
 const RESIZE_DEBOUNCE_MS = 80
+const EMPTY_SEARCH_HEIGHT = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
 
 function SearchApp() {
   const [query, setQuery] = useState('')
@@ -36,10 +37,11 @@ function SearchApp() {
   const resultsContainerRef = useRef<HTMLDivElement>(null)
   const isActiveRef = useRef(false)
   const resizeTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const currentHeightRef = useRef(INPUT_HEIGHT + EMPTY_HINT_HEIGHT)
+  const currentHeightRef = useRef(EMPTY_SEARCH_HEIGHT)
 
   useEffect(() => {
     loadData()
+    window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
     const focusTimer = setTimeout(() => inputRef.current?.focus(), 50)
 
     const removeBlur = window.electronAPI.onBlur(() => {
@@ -54,9 +56,9 @@ function SearchApp() {
       resultsRef.current = []
       setActiveEngine(null)
       setActiveIndex(0)
-      currentHeightRef.current = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
+      currentHeightRef.current = EMPTY_SEARCH_HEIGHT
       loadData()
-      window.electronAPI.resizeSearchWindow(INPUT_HEIGHT + EMPTY_HINT_HEIGHT)
+      window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
       setTimeout(() => inputRef.current?.focus(), 50)
     })
 
@@ -105,7 +107,7 @@ function SearchApp() {
       } else if (hasQuery) {
         targetHeight = INPUT_HEIGHT + NO_RESULTS_HEIGHT
       } else {
-        targetHeight = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
+        targetHeight = EMPTY_SEARCH_HEIGHT
       }
       if (targetHeight !== currentHeightRef.current) {
         currentHeightRef.current = targetHeight
@@ -274,8 +276,8 @@ function SearchApp() {
     resultsRef.current = []
     setActiveEngine(null)
     setActiveIndex(0)
-    currentHeightRef.current = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
-    window.electronAPI.resizeSearchWindow(INPUT_HEIGHT + EMPTY_HINT_HEIGHT)
+    currentHeightRef.current = EMPTY_SEARCH_HEIGHT
+    window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
   }, [])
 
   const persistApps = async (nextApps: AppItem[]) => {
@@ -408,8 +410,8 @@ function SearchApp() {
         setResults([])
         resultsRef.current = []
         setActiveIndex(0)
-        currentHeightRef.current = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
-        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT + EMPTY_HINT_HEIGHT)
+        currentHeightRef.current = EMPTY_SEARCH_HEIGHT
+        window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
         return
       }
     }
@@ -423,8 +425,8 @@ function SearchApp() {
       setResults([])
       resultsRef.current = []
       setActiveIndex(0)
-      currentHeightRef.current = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
-      window.electronAPI.resizeSearchWindow(INPUT_HEIGHT + EMPTY_HINT_HEIGHT)
+      currentHeightRef.current = EMPTY_SEARCH_HEIGHT
+      window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
       return
     }
 
@@ -447,8 +449,8 @@ function SearchApp() {
         setQuery('')
         queryRef.current = ''
         if (activeEngine) setActiveEngine(null)
-        currentHeightRef.current = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
-        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT + EMPTY_HINT_HEIGHT)
+        currentHeightRef.current = EMPTY_SEARCH_HEIGHT
+        window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
       } else {
         window.electronAPI.hideSearchWindow()
       }

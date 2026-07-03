@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { readJsonFile, writeJsonFile, APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, getDefaultConfig } from '../config'
 import type { Config, AppsData, CategoriesData } from '../../shared/types'
+import { sanitizeAppsData, sanitizeCategoriesData, sanitizeConfig } from '../validation'
 
 export function registerFileHandlers() {
   ipcMain.handle('get-config', () => {
@@ -30,8 +31,10 @@ export function registerFileHandlers() {
     return config
   })
 
-  ipcMain.handle('save-config', (_, config) => {
-    const success = writeJsonFile(CONFIG_FILE, config)
+  ipcMain.handle('save-config', (_, config: unknown) => {
+    const sanitized = sanitizeConfig(config, getDefaultConfig())
+    if (!sanitized) return false
+    const success = writeJsonFile(CONFIG_FILE, sanitized)
     return success
   })
 
@@ -56,8 +59,10 @@ export function registerFileHandlers() {
     return data
   })
 
-  ipcMain.handle('save-apps', (_, data) => {
-    return writeJsonFile(APPS_FILE, data)
+  ipcMain.handle('save-apps', (_, data: unknown) => {
+    const sanitized = sanitizeAppsData(data)
+    if (!sanitized) return false
+    return writeJsonFile(APPS_FILE, sanitized)
   })
 
   ipcMain.handle('get-categories', () => {
@@ -66,7 +71,9 @@ export function registerFileHandlers() {
     return data
   })
 
-  ipcMain.handle('save-categories', (_, data) => {
-    return writeJsonFile(CATEGORIES_FILE, data)
+  ipcMain.handle('save-categories', (_, data: unknown) => {
+    const sanitized = sanitizeCategoriesData(data)
+    if (!sanitized) return false
+    return writeJsonFile(CATEGORIES_FILE, sanitized)
   })
 }
