@@ -50,6 +50,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('reset-search', handler)
     return () => ipcRenderer.removeListener('reset-search', handler)
   },
+  onAppsUpdated: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('apps-updated', handler)
+    return () => ipcRenderer.removeListener('apps-updated', handler)
+  },
   getVersion: () => ipcRenderer.invoke('get-version'),
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),

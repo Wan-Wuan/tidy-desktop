@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { AppItem, Category, Subcategory, Config, ShortcutImportItem } from '../../shared/types'
 import { isFolderPath, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
+import { hasDisplayableIcon, needsIconUpdate } from './utils/iconUtils'
 import { useUpdate } from './hooks/useUpdate'
 import { UpdateButton, UpdateDialog } from './components/UpdateButton'
 import {
@@ -83,7 +84,7 @@ function App() {
       })
     })
     // 小图标
-    if (app.icon && app.icon.startsWith('data:')) {
+    if (hasDisplayableIcon(app.icon)) {
       const img = document.createElement('img')
       img.src = app.icon
       img.style.cssText = 'width:18px;height:18px;border-radius:4px;'
@@ -331,7 +332,7 @@ function App() {
     setApps(prev => {
       let changed = false
       const updated = prev.map(app => {
-        if (app.icon && app.icon.startsWith('data:') && app.icon.length >= 1000) return app
+        if (!needsIconUpdate(app.icon)) return app
         const found = allIcons.find(result => result.id === app.id)
         if (!found) return app
         changed = true
@@ -388,9 +389,9 @@ function App() {
       activeCategoryRef.current = sortedCats[0].id
     }
 
-    const needsIconUpdate = loadedApps.filter(a => !a.icon || !a.icon.startsWith('data:') || a.icon.length < 1000)
-    if (needsIconUpdate.length > 0) {
-      scheduleIconBackfill(needsIconUpdate)
+    const appsNeedingIconUpdate = loadedApps.filter(a => needsIconUpdate(a.icon))
+    if (appsNeedingIconUpdate.length > 0) {
+      scheduleIconBackfill(appsNeedingIconUpdate)
     }
   }
 
@@ -952,8 +953,9 @@ function App() {
     const failures: string[] = []
     const CONCURRENCY = 4
     const isBetterIcon = (nextIcon: string, previousIcon: string) => {
-      if (!nextIcon) return false
+      if (!hasDisplayableIcon(nextIcon)) return false
       if (!previousIcon) return true
+      if (needsIconUpdate(previousIcon)) return true
       return nextIcon.length >= 1000 || nextIcon.length > previousIcon.length
     }
     const refreshOne = async (app: AppItem) => {
@@ -1072,7 +1074,7 @@ function App() {
     return {
       total: currentApps.length,
       invalidPaths: currentApps.filter(app => invalidIds.has(app.id)),
-      missingIcons: currentApps.filter(app => !app.icon || !app.icon.startsWith('data:') || app.icon.length < 1000),
+      missingIcons: currentApps.filter(app => needsIconUpdate(app.icon)),
       duplicatePaths: currentApps.filter(app => pathCounts.get(app.path.toLowerCase())! > 1),
       emptyCategories: categoriesRef.current.filter(cat => !usedCategoryIds.has(cat.id)),
       hiddenCount: currentApps.filter(app => app.hidden).length
@@ -1630,7 +1632,7 @@ function App() {
                           <div style={{ borderRadius: Math.min(br, 12) }} className={`${iconSize} flex items-center justify-center mb-3 mx-auto ${
                             app.type === 'folder' ? 'bg-gradient-to-br from-orange-50 to-orange-100' : app.type === 'steam' ? 'bg-gradient-to-br from-aurora-50 to-aurora-100' : 'bg-gradient-to-br from-brand-50 to-brand-100'
                           }`}>
-                            {app.icon ? (
+                            {hasDisplayableIcon(app.icon) ? (
                               <img src={app.icon} alt={app.name} className={iconInner} draggable={false} />
                             ) : (
 <span className={ui?.cardSize === 'small' ? 'text-xl' : ui?.cardSize === 'large' ? 'text-3xl' : 'text-2xl'}>{app.type === 'folder' ? '📁' : app.type === 'steam' ? '🎮' : '📦'}</span>

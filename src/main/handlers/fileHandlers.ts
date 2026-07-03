@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
 import { readJsonFile, writeJsonFile, APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, getDefaultConfig } from '../config'
 import type { Config, AppsData, CategoriesData } from '../../shared/types'
 import { sanitizeAppsData, sanitizeCategoriesData, sanitizeConfig } from '../validation'
@@ -62,7 +62,15 @@ export function registerFileHandlers() {
   ipcMain.handle('save-apps', (_, data: unknown) => {
     const sanitized = sanitizeAppsData(data)
     if (!sanitized) return false
-    return writeJsonFile(APPS_FILE, sanitized)
+    const success = writeJsonFile(APPS_FILE, sanitized)
+    if (success) {
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) {
+          win.webContents.send('apps-updated')
+        }
+      })
+    }
+    return success
   })
 
   ipcMain.handle('get-categories', () => {

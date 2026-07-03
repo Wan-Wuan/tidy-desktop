@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'
 import { AppItem, Config, Category } from '../../shared/types'
 import { getFolderSuggestion, checkSearchEngine } from '../../shared/utils'
+import { hasDisplayableIcon } from './utils/iconUtils'
 
 interface SearchEngineInfo {
   key: string
@@ -37,6 +38,7 @@ function SearchApp() {
   const resultsContainerRef = useRef<HTMLDivElement>(null)
   const isActiveRef = useRef(false)
   const resizeTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const dataReloadTimerRef = useRef<NodeJS.Timeout | null>(null)
   const currentHeightRef = useRef(EMPTY_SEARCH_HEIGHT)
 
   useEffect(() => {
@@ -48,8 +50,9 @@ function SearchApp() {
       // 搜索框永不因失焦而隐藏，只通过 Escape 或打开应用关闭
     })
 
-    const removeReset = window.electronAPI.onResetSearch(() => {
+    const removeReset = window.electronAPI.onResetSearch(async () => {
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
+      if (dataReloadTimerRef.current) clearTimeout(dataReloadTimerRef.current)
       setQuery('')
       queryRef.current = ''
       setResults([])
@@ -57,16 +60,26 @@ function SearchApp() {
       setActiveEngine(null)
       setActiveIndex(0)
       currentHeightRef.current = EMPTY_SEARCH_HEIGHT
-      loadData()
+      await loadData()
       window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
       setTimeout(() => inputRef.current?.focus(), 50)
+    })
+
+    const removeAppsUpdated = window.electronAPI.onAppsUpdated(() => {
+      if (dataReloadTimerRef.current) clearTimeout(dataReloadTimerRef.current)
+      dataReloadTimerRef.current = setTimeout(() => {
+        dataReloadTimerRef.current = null
+        loadData()
+      }, 180)
     })
 
     return () => {
       clearTimeout(focusTimer)
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
+      if (dataReloadTimerRef.current) clearTimeout(dataReloadTimerRef.current)
       removeBlur()
       removeReset()
+      removeAppsUpdated()
     }
   }, [])
 
@@ -123,8 +136,20 @@ function SearchApp() {
         window.electronAPI.getApps(),
         window.electronAPI.getCategories()
       ])
+      const loadedApps = appsData?.apps || []
       setConfig(configData)
-      setApps(appsData?.apps || [])
+      setApps(loadedApps)
+      setResults(prev => {
+        if (prev.length === 0) return prev
+        const appsById = new Map(loadedApps.map(app => [app.id, app]))
+        const updated = prev.map(result => {
+          if (result.id.startsWith('__') || result.type === 'action') return result
+          const fresh = appsById.get(result.id)
+          return fresh ? { ...result, ...fresh } : result
+        })
+        resultsRef.current = updated
+        return updated
+      })
       setCategories(categoriesData?.categories || [])
     } catch (err) {
       console.error('SearchApp: loadData failed:', err)
@@ -538,7 +563,7 @@ function SearchApp() {
               onMouseEnter={() => setActiveIndex(index)}
             >
               <div className={`search-result-icon ${app.type === 'folder' ? 'folder' : ''}`}>
-                {app.icon ? (
+                {hasDisplayableIcon(app.icon) ? (
                   <img src={app.icon} alt={app.name} width="28" height="28" />
                 ) : (
                   <span className="app-icon">{app.type === 'folder' ? '📁' : '📦'}</span>

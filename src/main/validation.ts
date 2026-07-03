@@ -17,6 +17,7 @@ const THEMES = new Set(['aurora', 'light', 'dark', 'system'])
 const QUICK_ACTIONS = new Set(['shutdown', 'restart', 'lock', 'settings', 'calculator', 'notepad', 'clipboard'])
 const MAX_ITEMS = 5000
 const MAX_STRING_LENGTH = 8192
+const MAX_ICON_LENGTH = 2_000_000
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -152,7 +153,7 @@ function sanitizeAppItem(value: unknown): AppItem | null {
     id,
     name,
     path: appPath,
-    icon: asString(value.icon),
+    icon: asString(value.icon, '', MAX_ICON_LENGTH),
     categoryId: asStringOrNull(value.categoryId),
     subcategoryId: asStringOrNull(value.subcategoryId),
     pinyin: asString(value.pinyin, '', 1000),

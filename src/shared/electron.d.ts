@@ -65,6 +65,7 @@ declare global {
       moveSearchWindowToCursorDisplay: () => Promise<boolean>
       onBlur: (callback: () => void) => () => void
       onResetSearch: (callback: () => void) => () => void
+      onAppsUpdated: (callback: () => void) => () => void
       getVersion: () => Promise<string>
       checkForUpdate: () => Promise<UpdateInfo>
       downloadUpdate: () => Promise<{ success: boolean; filePath?: string; error?: string }>
