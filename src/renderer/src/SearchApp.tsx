@@ -338,10 +338,10 @@ function SearchApp() {
     const raw = searchQuery.trim()
     const normalized = raw.toLowerCase()
     const commandMode = normalized.startsWith('>')
-    const term = commandMode ? normalized.slice(1).trim() : normalized
+    if (!commandMode) return []
+
+    const term = normalized.slice(1).trim()
     const compactTerm = compactSearchText(term)
-    const shouldSearchCommands = commandMode || compactTerm.length >= 2
-    if (!shouldSearchCommands) return []
 
     return BUILT_IN_COMMANDS
       .map<SearchResult | null>(command => {

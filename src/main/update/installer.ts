@@ -12,6 +12,14 @@ export function getUpdateFilePath(): string {
   return UPDATE_FILE
 }
 
+function getCurrentInstallDir(): string {
+  try {
+    return path.dirname(app.getPath('exe'))
+  } catch {
+    return path.dirname(process.execPath)
+  }
+}
+
 export function runInstaller(installerPath: string): Promise<InstallResult> {
   // Validate path matches expected update file
   const resolvedPath = path.resolve(installerPath)
@@ -27,7 +35,9 @@ export function runInstaller(installerPath: string): Promise<InstallResult> {
 
   try {
     const currentPid = process.pid
+    const installDir = getCurrentInstallDir()
     const escapedInstallerPath = installerPath.replace(/'/g, "''")
+    const escapedInstallDir = installDir.replace(/'/g, "''")
     const escapedLogPath = INSTALL_LOG.replace(/'/g, "''")
     const escapedScriptPath = PS_SCRIPT.replace(/'/g, "''")
 
@@ -37,11 +47,18 @@ try {
   $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
   "[$ts] Waiting for app PID ${currentPid} to exit..." | Out-File -FilePath $logFile -Encoding UTF8
 
-  Wait-Process -Id ${currentPid} -Timeout 30
+  try {
+    Wait-Process -Id ${currentPid} -Timeout 30
+  } catch {
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    "[$ts] Wait timed out or process already exited; continuing installer." | Out-File -FilePath $logFile -Append -Encoding UTF8
+  }
 
   $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-  "[$ts] App exited, starting installer..." | Out-File -FilePath $logFile -Append -Encoding UTF8
-  Start-Process -FilePath '${escapedInstallerPath}' -ArgumentList '/S', '--force-run' -Wait
+  "[$ts] App exited, starting installer for '${escapedInstallDir}'..." | Out-File -FilePath $logFile -Append -Encoding UTF8
+  $installDir = '${escapedInstallDir}'
+  $installerArgs = "/S --force-run /D=$installDir"
+  Start-Process -FilePath '${escapedInstallerPath}' -ArgumentList $installerArgs -Wait
 
   $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
   "[$ts] Installation completed, app start requested." | Out-File -FilePath $logFile -Append -Encoding UTF8
