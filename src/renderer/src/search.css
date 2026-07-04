@@ -151,8 +151,24 @@ html, body {
   background: linear-gradient(135deg, #FFF7ED, #FED7AA);
 }
 
+.search-result-icon.action {
+  background: linear-gradient(135deg, #ECFDF5, #D1FAE5);
+  color: #047857;
+  font-weight: 800;
+  font-size: 12px;
+}
+
 .search-result-icon .app-icon {
   font-size: 18px;
+}
+
+.search-result-icon.action .app-icon {
+  font-size: 12px;
+  line-height: 1;
+  max-width: 30px;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
 }
 
 .search-result-info {
@@ -289,6 +305,11 @@ html, body {
   background: linear-gradient(135deg, rgba(245, 158, 11, 0.24), rgba(251, 146, 60, 0.18));
 }
 
+.search-container.theme-dark .search-result-icon.action {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(45, 212, 191, 0.16));
+  color: #A7F3D0;
+}
+
 .search-container.theme-dark .search-result-category {
   background: rgba(129, 140, 248, 0.18);
 }
@@ -333,6 +354,11 @@ html, body {
 
   .search-container.theme-system .search-result-icon {
     background: linear-gradient(135deg, rgba(79, 70, 229, 0.28), rgba(99, 102, 241, 0.2));
+  }
+
+  .search-container.theme-system .search-result-icon.action {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(45, 212, 191, 0.16));
+    color: #A7F3D0;
   }
 
   .search-container.theme-system .search-result-category {

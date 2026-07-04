@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { AppItem, Category, Subcategory, Config, ShortcutImportItem } from '../../shared/types'
+import { AppItem, Category, Subcategory, Config, ShortcutImportItem, UiCommand } from '../../shared/types'
 import { isFolderPath, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { hasDisplayableIcon, needsIconUpdate } from './utils/iconUtils'
@@ -7,23 +7,47 @@ import { useUpdate } from './hooks/useUpdate'
 import { UpdateButton, UpdateDialog } from './components/UpdateButton'
 import {
   AddAppModal,
-  CategoryManagerModal,
   EditAppModal,
   OnboardingModal,
   SettingsModal,
-  SubcategoryManagerModal
+  SmartOrganizeModal,
 } from './components/modals'
 import type { HealthReport, IconRefreshProgress } from './components/modals'
 
 
 type DroppedFile = File & { path?: string }
+type CategoryContextMenuTarget =
+  | { type: 'all' }
+  | { type: 'category'; id: string }
+  | { type: 'subcategory'; id: string }
+type CategoryContextMenu = CategoryContextMenuTarget & { x: number; y: number }
+type CategoryEditDialog =
+  | { type: 'create-category'; title: string; name: string; icon: string }
+  | { type: 'rename-category'; title: string; id: string; name: string; icon: string }
+  | { type: 'add-subcategory'; title: string; parentId: string; name: string; icon: string }
+  | { type: 'rename-subcategory'; title: string; id: string; name: string; icon: string }
+
+const CATEGORY_ICON_OPTIONS = ['📁', '💼', '🧰', '🎮', '📚', '🖼️', '🎵', '⭐', '🔧', '🌐', '📦', '⚙️']
+const SUBCATEGORY_ICON_OPTIONS = ['•', '◦', '▪', '▸', '✓', '★', '◇', '◆', 'A', '1', '📌', '🔖']
+
+function appNeedsIconUpdate(app: AppItem): boolean {
+  return app.type !== 'folder' && needsIconUpdate(app.icon)
+}
+
+function getCategoryIconOptions(dialog: CategoryEditDialog) {
+  const baseOptions = dialog.type === 'add-subcategory' || dialog.type === 'rename-subcategory'
+    ? SUBCATEGORY_ICON_OPTIONS
+    : CATEGORY_ICON_OPTIONS
+  return dialog.icon && !baseOptions.includes(dialog.icon)
+    ? [dialog.icon, ...baseOptions]
+    : baseOptions
+}
 
 function App() {
   const [config, setConfig] = useState<Config | null>(null)
   const [apps, setApps] = useState<AppItem[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [subcategories, setSubcategories] = useState<Subcategory[]>([])
-  const [showSubcategoryManager, setShowSubcategoryManager] = useState(false)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const {
     state: updateState,
@@ -41,7 +65,7 @@ function App() {
   const [showAddApp, setShowAddApp] = useState(false)
   const [showEditApp, setShowEditApp] = useState(false)
   const [editingApp, setEditingApp] = useState<AppItem | null>(null)
-  const [showCategoryManager, setShowCategoryManager] = useState(false)
+  const [showSmartOrganize, setShowSmartOrganize] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
@@ -51,6 +75,7 @@ function App() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const categoryBarRef = useRef<HTMLDivElement>(null)
+  const subcategoryBarRef = useRef<HTMLDivElement>(null)
   const dragCounterRef = useRef(0)
   const draggedAppIdRef = useRef<string | null>(null)
   const dragTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -192,13 +217,13 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !showSettings && !showAddApp && !showEditApp && !showCategoryManager && !showSubcategoryManager) {
+      if (e.key === 'Escape' && !showSettings && !showAddApp && !showEditApp && !showSmartOrganize) {
         window.electronAPI.hideMainWindow()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showSettings, showAddApp, showEditApp, showCategoryManager, showSubcategoryManager])
+  }, [showSettings, showAddApp, showEditApp, showSmartOrganize])
 
   useEffect(() => {
     // 左键拖拽图片/文档文件：第一次 mousemove 时启动 Electron 原生拖拽（用于复制/发送到外部应用）
@@ -224,6 +249,8 @@ function App() {
 
   const [draggedSubId, setDraggedSubId] = useState<string | null>(null)
   const [dragOverSubId, setDragOverSubId] = useState<string | null>(null)
+  const [categoryContextMenu, setCategoryContextMenu] = useState<CategoryContextMenu | null>(null)
+  const [categoryEditDialog, setCategoryEditDialog] = useState<CategoryEditDialog | null>(null)
 
   useEffect(() => {
     // 右键自定义拖拽：图片/文档文件的右键拖拽排序分类（HTML5 draggable 不支持右键）
@@ -309,6 +336,24 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!categoryContextMenu) return
+    const closeMenu = () => setCategoryContextMenu(null)
+    const closeOnKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeMenu()
+    }
+    window.addEventListener('click', closeMenu)
+    window.addEventListener('contextmenu', closeMenu)
+    window.addEventListener('keydown', closeOnKey)
+    window.addEventListener('blur', closeMenu)
+    return () => {
+      window.removeEventListener('click', closeMenu)
+      window.removeEventListener('contextmenu', closeMenu)
+      window.removeEventListener('keydown', closeOnKey)
+      window.removeEventListener('blur', closeMenu)
+    }
+  }, [categoryContextMenu])
+
   const backfillMissingIcons = async (sourceApps: AppItem[]) => {
     const BATCH_SIZE = 3
     const allIcons: { id: string; icon: string }[] = []
@@ -332,7 +377,7 @@ function App() {
     setApps(prev => {
       let changed = false
       const updated = prev.map(app => {
-        if (!needsIconUpdate(app.icon)) return app
+        if (!appNeedsIconUpdate(app)) return app
         const found = allIcons.find(result => result.id === app.id)
         if (!found) return app
         changed = true
@@ -389,7 +434,7 @@ function App() {
       activeCategoryRef.current = sortedCats[0].id
     }
 
-    const appsNeedingIconUpdate = loadedApps.filter(a => needsIconUpdate(a.icon))
+    const appsNeedingIconUpdate = loadedApps.filter(appNeedsIconUpdate)
     if (appsNeedingIconUpdate.length > 0) {
       scheduleIconBackfill(appsNeedingIconUpdate)
     }
@@ -408,6 +453,50 @@ function App() {
     return apps
   }, [apps, activeCategory])
 
+  const activeCategoryLabel = useMemo(() => {
+    if (!activeCategory) return '全部项目'
+    return categories.find(category => category.id === activeCategory)?.name || '当前分类'
+  }, [activeCategory, categories])
+
+  const overviewStats = useMemo(() => ({
+    total: filteredApps.length,
+    folders: filteredApps.filter(app => app.type === 'folder').length,
+    missingIcons: filteredApps.filter(appNeedsIconUpdate).length,
+    hidden: filteredApps.filter(app => app.hidden).length,
+    visible: filteredApps.filter(app => !app.hidden).length
+  }), [filteredApps])
+
+  const overviewHealth = useMemo(() => {
+    if (overviewStats.missingIcons > 0 || overviewStats.hidden > 0) return '需要维护'
+    if (overviewStats.total === 0) return '等待导入'
+    return '状态良好'
+  }, [overviewStats.hidden, overviewStats.missingIcons, overviewStats.total])
+
+  const smartLaunchApps = useMemo(() => {
+    const now = Date.now()
+    return filteredApps
+      .filter(app => !app.hidden)
+      .map(app => {
+        const launchScore = (app.launchCount || 0) * 12
+        const recentScore = app.lastOpenedAt ? Math.max(0, 30 - Math.floor((now - app.lastOpenedAt) / 86400000)) : 0
+        return { app, score: launchScore + recentScore }
+      })
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4)
+      .map(item => item.app)
+  }, [filteredApps])
+
+  const recordAppLaunch = async (appId: string) => {
+    const updatedApps = appsRef.current.map(item => item.id === appId
+      ? { ...item, launchCount: (item.launchCount || 0) + 1, lastOpenedAt: Date.now() }
+      : item
+    )
+    appsRef.current = updatedApps
+    setApps(updatedApps)
+    await window.electronAPI.saveApps({ apps: updatedApps })
+  }
+
   const handleOpenApp = async (app: AppItem) => {
     if (app.id === '__folder_path__') {
       await window.electronAPI.openFolder(app.path)
@@ -420,6 +509,7 @@ function App() {
     } else {
       await window.electronAPI.openApp(app.path)
     }
+    await recordAppLaunch(app.id)
   }
 
   const isDocFile = (app: AppItem): boolean => {
@@ -478,6 +568,7 @@ function App() {
     }
 
     const updatedApps = [...currentApps, newApp]
+    appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
     setShowAddApp(false)
@@ -713,6 +804,7 @@ function App() {
         const found = appsWithIcons.find(n => n.id === a.id)
         return found || a
       })
+      appsRef.current = updatedApps
       setApps(updatedApps)
       await window.electronAPI.saveApps({ apps: updatedApps })
     }
@@ -731,26 +823,31 @@ function App() {
       order: categories.length + 1
     }
     const updatedCategories = [...categories, newCategory]
+    categoriesRef.current = updatedCategories
     setCategories(updatedCategories)
     setActiveCategory(newCategory.id)
+    activeCategoryRef.current = newCategory.id
     await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories })
   }
 
   const handleDeleteCategory = async (id: string) => {
     const updatedCategories = categories.filter(cat => cat.id !== id)
     const updatedSubcategories = subcategories.filter(sub => sub.parentId !== id)
+    categoriesRef.current = updatedCategories
     setCategories(updatedCategories)
     setSubcategories(updatedSubcategories)
     await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories: updatedSubcategories })
     
     if (activeCategory === id) {
       setActiveCategory(null)
+      activeCategoryRef.current = null
     }
 
     const currentApps = appsRef.current
     const updatedApps = currentApps.map(app =>
       app.categoryId === id ? { ...app, categoryId: null, subcategoryId: null } : app
     )
+    appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
   }
@@ -759,6 +856,7 @@ function App() {
     const updatedCategories = categories.map(cat => 
       cat.id === id ? { ...cat, name, icon } : cat
     )
+    categoriesRef.current = updatedCategories
     setCategories(updatedCategories)
     await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories })
   }
@@ -776,18 +874,13 @@ function App() {
     await window.electronAPI.saveCategories({ categories, subcategories: updated })
     const currentApps = appsRef.current
     const updatedApps = currentApps.map(a => a.subcategoryId === id ? { ...a, subcategoryId: null } : a)
+    appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
   }
 
   const handleUpdateSubcategory = async (id: string, name: string, icon: string) => {
     const updated = subcategories.map(s => s.id === id ? { ...s, name, icon } : s)
-    setSubcategories(updated)
-    await window.electronAPI.saveCategories({ categories, subcategories: updated })
-  }
-
-  const handleMoveSubcategory = async (id: string, newParentId: string | null) => {
-    const updated = subcategories.map(s => s.id === id ? { ...s, parentId: newParentId } : s)
     setSubcategories(updated)
     await window.electronAPI.saveCategories({ categories, subcategories: updated })
   }
@@ -811,8 +904,90 @@ function App() {
     await window.electronAPI.saveCategories({ categories, subcategories: updated })
   }
 
+  const openCategoryContextMenu = (e: React.MouseEvent, menu: CategoryContextMenuTarget) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const menuWidth = 180
+    const menuHeight = 220
+    setCategoryContextMenu({
+      ...menu,
+      x: Math.min(e.clientX, window.innerWidth - menuWidth - 8),
+      y: Math.min(e.clientY, window.innerHeight - menuHeight - 8)
+    } as CategoryContextMenu)
+  }
+
+  const createCategoryFromMenu = () => {
+    setCategoryContextMenu(null)
+    setCategoryEditDialog({ type: 'create-category', title: '新建分类', name: '', icon: '📁' })
+  }
+
+  const renameCategoryFromMenu = (category: Category) => {
+    setCategoryContextMenu(null)
+    setCategoryEditDialog({ type: 'rename-category', title: '重命名分类', id: category.id, name: category.name, icon: category.icon })
+  }
+
+  const addSubcategoryFromMenu = (category: Category) => {
+    setCategoryContextMenu(null)
+    setCategoryEditDialog({ type: 'add-subcategory', title: '添加子分类', parentId: category.id, name: '', icon: '•' })
+  }
+
+  const deleteCategoryFromMenu = async (category: Category) => {
+    const confirmed = await window.electronAPI.confirm(`确定删除分类"${category.name}"吗？该分类下的项目将移到未分类。`)
+    if (!confirmed) return
+    await handleDeleteCategory(category.id)
+    setCategoryContextMenu(null)
+  }
+
+  const renameSubcategoryFromMenu = (subcategory: Subcategory) => {
+    setCategoryContextMenu(null)
+    setCategoryEditDialog({ type: 'rename-subcategory', title: '重命名子分类', id: subcategory.id, name: subcategory.name, icon: subcategory.icon })
+  }
+
+  const deleteSubcategoryFromMenu = async (subcategory: Subcategory) => {
+    const confirmed = await window.electronAPI.confirm(`确定删除子分类"${subcategory.name}"吗？该子分类下的项目将移到当前分类下。`)
+    if (!confirmed) return
+    await handleDeleteSubcategory(subcategory.id)
+    setCategoryContextMenu(null)
+  }
+
+  const submitCategoryEditDialog = async () => {
+    if (!categoryEditDialog) return
+    const name = categoryEditDialog.name.trim()
+    const icon = categoryEditDialog.icon.trim() || '•'
+    if (!name) return
+
+    if (categoryEditDialog.type === 'create-category') {
+      await handleAddCategory(name, icon || '📁')
+    } else if (categoryEditDialog.type === 'rename-category') {
+      await handleUpdateCategory(categoryEditDialog.id, name, icon)
+    } else if (categoryEditDialog.type === 'add-subcategory') {
+      await handleAddSubcategory(name, icon, categoryEditDialog.parentId)
+      setActiveCategory(categoryEditDialog.parentId)
+      activeCategoryRef.current = categoryEditDialog.parentId
+    } else {
+      await handleUpdateSubcategory(categoryEditDialog.id, name, icon)
+    }
+
+    setCategoryEditDialog(null)
+  }
+
   const visibleSubcategories = subcategories.filter(s => s.parentId === activeCategory)
   const displaySubcategories = activeCategory ? visibleSubcategories : subcategories
+
+  const handleSubcategoryWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const el = e.currentTarget
+    const maxScrollLeft = el.scrollWidth - el.clientWidth
+    if (maxScrollLeft <= 0) return
+
+    const wheelDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+    if (wheelDelta === 0) return
+
+    const nextScrollLeft = Math.max(0, Math.min(maxScrollLeft, el.scrollLeft + wheelDelta))
+    if (nextScrollLeft === el.scrollLeft) return
+
+    e.preventDefault()
+    el.scrollLeft = nextScrollLeft
+  }, [])
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -945,6 +1120,7 @@ function App() {
   const handleRefreshAllIcons = async () => {
     const cleared = await window.electronAPI.clearIconCache()
     const sourceApps = [...appsRef.current]
+    const refreshTargets = sourceApps.filter(app => app.type !== 'folder')
     const refreshed: AppItem[] = [...sourceApps]
     const indexById = new Map(sourceApps.map((app, index) => [app.id, index]))
     let successCount = 0
@@ -979,7 +1155,7 @@ function App() {
       doneCount++
       setIconRefreshProgress({
         done: doneCount,
-        total: sourceApps.length,
+        total: refreshTargets.length,
         success: successCount,
         failed: failedCount,
         current: app.name,
@@ -987,17 +1163,19 @@ function App() {
       })
     }
 
-    setIconRefreshProgress({ done: 0, total: sourceApps.length, success: 0, failed: 0, failures: [] })
-    for (let i = 0; i < sourceApps.length; i += CONCURRENCY) {
-      const batch = sourceApps.slice(i, i + CONCURRENCY)
+    setIconRefreshProgress({ done: 0, total: refreshTargets.length, success: 0, failed: 0, failures: [] })
+    for (let i = 0; i < refreshTargets.length; i += CONCURRENCY) {
+      const batch = refreshTargets.slice(i, i + CONCURRENCY)
       await Promise.all(batch.map(refreshOne))
+      appsRef.current = [...refreshed]
       setApps([...refreshed])
       await window.electronAPI.saveApps({ apps: refreshed })
     }
+    appsRef.current = refreshed
     setApps(refreshed)
     await window.electronAPI.saveApps({ apps: refreshed })
     setIconRefreshProgress(null)
-    alert(`已清理 ${cleared.count} 个图标缓存，成功刷新 ${successCount} 个图标。${failedCount > 0 ? `有 ${failedCount} 个图标提取失败，已保留原图标。` : ''}`)
+    alert(`已清理 ${cleared.count} 个图标缓存，成功刷新 ${successCount} 个图标。文件夹使用默认图标，不参与补全。${failedCount > 0 ? `有 ${failedCount} 个图标提取失败，已保留原图标。` : ''}`)
   }
 
   const handleAutoCategorize = async () => {
@@ -1012,6 +1190,7 @@ function App() {
 
       return app
     })
+    appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
     alert('自动分类已完成。')
@@ -1031,12 +1210,14 @@ function App() {
     const confirmed = await window.electronAPI.confirm(`确定移除 ${invalidIds.size} 个失效项目吗？`)
     if (!confirmed) return
     const updatedApps = appsRef.current.filter(app => !invalidIds.has(app.id))
+    appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
   }
 
   const handleRestoreHiddenApps = async () => {
     const updatedApps = appsRef.current.map(app => ({ ...app, hidden: false }))
+    appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
     alert('已恢复搜索中隐藏的项目。')
@@ -1074,7 +1255,7 @@ function App() {
     return {
       total: currentApps.length,
       invalidPaths: currentApps.filter(app => invalidIds.has(app.id)),
-      missingIcons: currentApps.filter(app => needsIconUpdate(app.icon)),
+      missingIcons: currentApps.filter(appNeedsIconUpdate),
       duplicatePaths: currentApps.filter(app => pathCounts.get(app.path.toLowerCase())! > 1),
       emptyCategories: categoriesRef.current.filter(cat => !usedCategoryIds.has(cat.id)),
       hiddenCount: currentApps.filter(app => app.hidden).length
@@ -1107,6 +1288,24 @@ function App() {
         })
       }
     }
+    if (report.emptyCategories.length > 0) {
+      const confirmed = await window.electronAPI.confirm(`检测到 ${report.emptyCategories.length} 个空分类，是否删除这些分类？`)
+      if (confirmed) {
+        const emptyIds = new Set(report.emptyCategories.map(category => category.id))
+        const updatedCategories = categoriesRef.current.filter(category => !emptyIds.has(category.id))
+        const updatedSubcategories = subcategories.filter(subcategory => !subcategory.parentId || !emptyIds.has(subcategory.parentId))
+        categoriesRef.current = updatedCategories
+        setCategories(updatedCategories)
+        setSubcategories(updatedSubcategories)
+        await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories: updatedSubcategories })
+        if (activeCategoryRef.current && emptyIds.has(activeCategoryRef.current)) {
+          const nextCategoryId = updatedCategories[0]?.id || null
+          activeCategoryRef.current = nextCategoryId
+          setActiveCategory(nextCategoryId)
+        }
+      }
+    }
+    appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
     setHealthReport(await buildHealthReport())
@@ -1145,6 +1344,7 @@ function App() {
     const confirmed = await window.electronAPI.confirm(`发现 ${items.length} 个快捷方式，可新增 ${newApps.length} 个项目。是否导入到当前分类？`)
     if (!confirmed) return
     const updatedApps = [...appsRef.current, ...newApps]
+    appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
     await extractIconsForApps(newApps.filter(app => !app.icon))
@@ -1218,6 +1418,7 @@ function App() {
     } satisfies AppItem))
 
     const updatedApps = [...appsRef.current, ...newApps]
+    appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
     if (!activeCategoryRef.current && nextCategories.length > 0) {
@@ -1249,6 +1450,54 @@ function App() {
     setShowOnboarding(false)
   }
 
+  const runUiCommand = useCallback(async (command: UiCommand) => {
+    switch (command) {
+      case 'open-organizer':
+        setShowSmartOrganize(true)
+        await handleRunHealthCheck()
+        break
+      case 'health-check':
+        setShowSmartOrganize(true)
+        await handleRunHealthCheck()
+        break
+      case 'refresh-icons':
+        setShowSmartOrganize(true)
+        await handleRefreshAllIcons()
+        break
+      case 'auto-categorize':
+        await handleAutoCategorize()
+        setShowSmartOrganize(true)
+        await handleRunHealthCheck()
+        break
+      case 'import-shortcuts':
+        await handleImportShortcuts()
+        setShowSmartOrganize(true)
+        await handleRunHealthCheck()
+        break
+      case 'restore-hidden':
+        await handleRestoreHiddenApps()
+        setShowSmartOrganize(true)
+        await handleRunHealthCheck()
+        break
+      case 'export-backup':
+        await handleExportBackup()
+        break
+    }
+  }, [
+    handleAutoCategorize,
+    handleExportBackup,
+    handleImportShortcuts,
+    handleRefreshAllIcons,
+    handleRestoreHiddenApps,
+    handleRunHealthCheck
+  ])
+
+  useEffect(() => {
+    return window.electronAPI.onUiCommand((command) => {
+      void runUiCommand(command)
+    })
+  }, [runUiCommand])
+
   return (
     <div className={`flex flex-col h-screen relative theme-${config?.ui?.theme || 'aurora'}`}>
       {/* Aurora background orbs */}
@@ -1258,7 +1507,8 @@ function App() {
         <div className="aurora-orb aurora-orb--violet" />
       </div>
 
-      <header className="glass px-6 py-3.5 flex items-center justify-between sticky top-0 z-20">
+      <header className="glass mx-4 mt-3 px-5 py-3 sticky top-3 z-20 rounded-2xl">
+        <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-md shadow-brand-500/20">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1273,7 +1523,7 @@ function App() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowAddApp(true)}
-            className="px-3.5 py-1.5 bg-brand-600 text-white rounded-lg hover:bg-brand-700 text-sm font-medium transition-colors duration-200 shadow-sm shadow-brand-500/20 hover:shadow-md hover:shadow-brand-500/30"
+            className="focus-ring cursor-pointer px-3.5 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 text-sm font-medium transition-colors duration-200 shadow-sm shadow-brand-500/20 hover:shadow-md hover:shadow-brand-500/30"
           >
             <span className="flex items-center gap-1.5">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -1282,7 +1532,7 @@ function App() {
           </button>
           <button
             onClick={handleAddFolder}
-            className="px-3.5 py-1.5 bg-frost-400 text-brand-800 rounded-lg hover:bg-frost-500 text-sm font-medium transition-colors duration-200 shadow-sm shadow-frost-400/20"
+            className="focus-ring cursor-pointer px-3.5 py-2 bg-frost-500 text-white rounded-lg hover:bg-frost-600 text-sm font-medium transition-colors duration-200 shadow-sm shadow-frost-400/20"
           >
             <span className="flex items-center gap-1.5">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
@@ -1290,17 +1540,17 @@ function App() {
             </span>
           </button>
           <button
-            onClick={() => setShowCategoryManager(true)}
-            className="px-3.5 py-1.5 bg-white/60 text-brand-600 rounded-lg hover:bg-white/80 text-sm font-medium transition-colors duration-200 border border-brand-200/50"
+            onClick={() => setShowSmartOrganize(true)}
+            className="focus-ring cursor-pointer px-3.5 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-sm font-medium transition-colors duration-200 shadow-sm shadow-emerald-500/20 hover:shadow-md hover:shadow-emerald-500/25"
           >
             <span className="flex items-center gap-1.5">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-              管理分类
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.6 4.7L18 9.3l-4.4 1.6L12 15.6l-1.6-4.7L6 9.3l4.4-1.6L12 3z"/><path d="M19 14l.9 2.6 2.1.8-2.1.8L19 21l-.9-2.8-2.1-.8 2.1-.8L19 14z"/><path d="M5 13l.8 2.2 1.7.6-1.7.7L5 19l-.8-2.5-1.7-.7 1.7-.6L5 13z"/></svg>
+              整理中心
             </span>
           </button>
           <button
             onClick={() => setShowSettings(true)}
-            className="px-3.5 py-1.5 bg-white/60 text-slate-600 rounded-lg hover:bg-white/80 text-sm font-medium transition-colors duration-200 border border-slate-200/50"
+            className="focus-ring cursor-pointer px-3.5 py-2 bg-white/80 text-slate-700 rounded-lg hover:bg-slate-900 hover:text-white text-sm font-medium transition-colors duration-200 border border-slate-200/80"
           >
             <span className="flex items-center gap-1.5">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -1309,15 +1559,80 @@ function App() {
           </button>
           <UpdateButton state={updateState} version={updateVersion} progress={updateProgress ?? undefined} />
         </div>
+        </div>
+        <div className="mt-3 border-t border-brand-100/70 pt-3 flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-900 text-[11px] font-bold text-white shadow-sm shadow-slate-900/20">2.0</span>
+              <div>
+                <h2 className="text-sm font-display font-bold text-slate-900 truncate">{activeCategoryLabel}</h2>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
+                  <span className="rounded-full bg-slate-900 px-2 py-0.5 text-white border border-slate-900">{overviewHealth}</span>
+                  <span className="rounded-full bg-white/80 px-2 py-0.5 border border-slate-200/80">{overviewStats.visible}/{overviewStats.total} 可见</span>
+                  <span className="rounded-full bg-white/80 px-2 py-0.5 border border-slate-200/80">{displaySubcategories.length} 个子分类</span>
+                  <span className="rounded-full bg-white/80 px-2 py-0.5 border border-slate-200/80">{overviewStats.folders} 个文件夹</span>
+                  {overviewStats.missingIcons > 0 && (
+                    <button
+                      onClick={handleRefreshAllIcons}
+                      disabled={!!iconRefreshProgress}
+                      className="focus-ring cursor-pointer rounded-full bg-amber-50 px-2 py-0.5 text-amber-700 border border-amber-200 hover:bg-amber-500 hover:text-white hover:border-amber-500 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
+                    >
+                      {iconRefreshProgress ? `刷新中 ${iconRefreshProgress.done}/${iconRefreshProgress.total}` : `${overviewStats.missingIcons} 个图标待补全`}
+                    </button>
+                  )}
+                  {overviewStats.hidden > 0 && (
+                    <button
+                      onClick={handleRestoreHiddenApps}
+                      className="focus-ring cursor-pointer rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 border border-slate-200 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-colors"
+                    >
+                      恢复 {overviewStats.hidden} 个隐藏项
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+            {smartLaunchApps.length > 0 && (
+              <div className="hidden min-w-0 items-center gap-2 lg:flex">
+                <span className="shrink-0 text-[11px] font-semibold text-slate-500">智能启动</span>
+                {smartLaunchApps.map(app => (
+                  <button
+                    key={app.id}
+                    onClick={() => handleOpenApp(app)}
+                    className="group focus-ring cursor-pointer inline-flex max-w-[132px] items-center gap-1.5 rounded-lg border border-brand-100/80 bg-white/80 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white"
+                    title={app.name}
+                  >
+                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded bg-brand-50 group-hover:bg-white/15">
+                      {hasDisplayableIcon(app.icon) ? (
+                        <img src={app.icon} alt="" className="h-4 w-4" draggable={false} />
+                      ) : (
+                        <span className="text-[10px]">{app.type === 'folder' ? '📁' : app.type === 'steam' ? '🎮' : '📦'}</span>
+                      )}
+                    </span>
+                    <span className="truncate">{app.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {smartLaunchApps.length === 0 && overviewStats.total > 0 && (
+              <div className="hidden text-[11px] font-medium text-slate-500 lg:block">
+                打开几次项目后会生成智能启动
+              </div>
+            )}
+          </div>
+        </div>
       </header>
 
       <div ref={categoryBarRef} className="px-5 pt-3 pb-2 flex gap-2 overflow-x-auto">
         <button
           onClick={() => { setActiveCategory(null) }}
-          className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${
+          onContextMenu={(e) => openCategoryContextMenu(e, { type: 'all' })}
+          className={`focus-ring cursor-pointer px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${
             activeCategory === null
               ? 'bg-brand-600 text-white shadow-md shadow-brand-500/25'
-              : 'bg-white/60 text-slate-600 hover:bg-white/80 hover:text-brand-600 border border-brand-100/50'
+              : 'bg-white/60 text-slate-700 hover:bg-brand-600 hover:text-white hover:border-brand-600 border border-brand-100/50'
           }`}
         >
           全部
@@ -1327,6 +1642,7 @@ function App() {
             key={cat.id}
             data-category-id={cat.id}
             onClick={() => { setActiveCategory(cat.id) }}
+            onContextMenu={(e) => openCategoryContextMenu(e, { type: 'category', id: cat.id })}
             onDragOver={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -1357,6 +1673,7 @@ function App() {
                 const newApps = await parseFilesToApps(files, cat.id)
                 if (newApps.length > 0) {
                   const updatedApps = [...appsRef.current, ...newApps]
+                  appsRef.current = updatedApps
                   setApps(updatedApps)
                   await window.electronAPI.saveApps({ apps: updatedApps })
                   await extractIconsForApps(newApps)
@@ -1368,12 +1685,12 @@ function App() {
                 }
               }
             }}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${
+            className={`focus-ring cursor-pointer px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${
               activeCategory === cat.id
                 ? 'bg-brand-600 text-white shadow-md shadow-brand-500/25'
                 : dragOverCategory === cat.id
                   ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
-                  : 'bg-white/60 text-slate-600 hover:bg-white/80 hover:text-brand-600 border border-brand-100/50'
+                  : 'bg-white/60 text-slate-700 hover:bg-brand-600 hover:text-white hover:border-brand-600 border border-brand-100/50'
             }`}
           >
             {cat.icon} {cat.name}
@@ -1381,12 +1698,17 @@ function App() {
         ))}
       </div>
 
-      <div className="px-5 pb-3 flex gap-2 overflow-x-auto">
+      <div
+        ref={subcategoryBarRef}
+        onWheel={handleSubcategoryWheel}
+        className="subcategory-scroll px-5 pb-3 flex gap-2 overflow-x-auto"
+      >
         {displaySubcategories.map(sub => (
           <button
             key={sub.id}
             data-subcategory-id={sub.id}
             draggable
+            onContextMenu={(e) => openCategoryContextMenu(e, { type: 'subcategory', id: sub.id })}
             onClick={() => {
               const el = document.getElementById(`subcat-${sub.id}`)
               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -1432,20 +1754,20 @@ function App() {
               setDraggedSubId(null)
               setDragOverSubId(null)
             }}
-            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors duration-200 ${
+            className={`focus-ring cursor-pointer px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors duration-200 ${
               dragOverSubId === sub.id
                 ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
                 : draggedSubId === sub.id
                   ? 'opacity-40 scale-95'
-                  : 'bg-white/50 text-slate-500 hover:bg-white/70 hover:text-brand-600 border border-brand-100/40'
+                  : 'bg-white/50 text-slate-700 hover:bg-brand-500 hover:text-white hover:border-brand-500 border border-brand-100/40'
             }`}
           >
             {sub.icon} {sub.name}
           </button>
         ))}
         <button
-          onClick={() => setShowCategoryManager(true)}
-          className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/40 text-slate-400 hover:bg-white/60 hover:text-brand-600 transition-colors duration-200 border border-dashed border-brand-200/60"
+          onClick={createCategoryFromMenu}
+          className="focus-ring cursor-pointer px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
         >
           + 分类
         </button>
@@ -1455,9 +1777,10 @@ function App() {
               alert('请先创建一个主分类，然后再添加子分类。')
               return
             }
-            setShowSubcategoryManager(true)
+            const parentCategory = categories.find(category => category.id === activeCategory) || categories[0]
+            addSubcategoryFromMenu(parentCategory)
           }}
-          className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/40 text-slate-400 hover:bg-white/60 hover:text-brand-600 transition-colors duration-200 border border-dashed border-brand-200/60"
+          className="focus-ring cursor-pointer px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
         >
           + 子分类
         </button>
@@ -1474,6 +1797,54 @@ function App() {
         onDrop={handleDrop}
       >
         <div key={activeCategory} className="tab-fade-enter" style={{ contain: 'content' }}>
+          <section className="hidden">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-xs font-bold text-white shadow-sm shadow-slate-900/20">2.0</span>
+                <div>
+                  <h2 className="text-sm font-display font-bold text-slate-900 truncate">{activeCategoryLabel}</h2>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
+                    <span className="rounded-full bg-white/80 px-2 py-0.5 border border-slate-200/80">{overviewStats.total} 个项目</span>
+                    <span className="rounded-full bg-white/80 px-2 py-0.5 border border-slate-200/80">{displaySubcategories.length} 个子分类</span>
+                    <span className="rounded-full bg-white/80 px-2 py-0.5 border border-slate-200/80">{overviewStats.folders} 个文件夹</span>
+                    {overviewStats.missingIcons > 0 && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700 border border-amber-200">{overviewStats.missingIcons} 个图标待补全</span>}
+                    {overviewStats.hidden > 0 && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600 border border-slate-200">{overviewStats.hidden} 个搜索隐藏项</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+              {smartLaunchApps.length > 0 && (
+                <div className="hidden min-w-0 items-center gap-2 lg:flex">
+                  <span className="shrink-0 text-[11px] font-semibold text-slate-400">智能启动</span>
+                  {smartLaunchApps.map(app => (
+                    <button
+                      key={app.id}
+                      onClick={() => handleOpenApp(app)}
+                      className="group focus-ring cursor-pointer inline-flex max-w-[132px] items-center gap-1.5 rounded-lg border border-brand-100/80 bg-white/80 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white"
+                      title={app.name}
+                    >
+                      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded bg-brand-50 group-hover:bg-white/15">
+                        {hasDisplayableIcon(app.icon) ? (
+                          <img src={app.icon} alt="" className="h-4 w-4" draggable={false} />
+                        ) : (
+                          <span className="text-[10px]">{app.type === 'folder' ? '📁' : app.type === 'steam' ? '🎮' : '📦'}</span>
+                        )}
+                      </span>
+                      <span className="truncate">{app.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => setShowSmartOrganize(true)}
+                className="focus-ring cursor-pointer shrink-0 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white shadow-sm shadow-emerald-500/20 transition-colors hover:bg-emerald-600"
+              >
+                整理中心
+              </button>
+            </div>
+          </section>
         {(() => {
           const groups: { sub: Subcategory | null; apps: typeof filteredApps }[] = []
           const noSub = filteredApps.filter(a => !a.subcategoryId)
@@ -1683,6 +2054,132 @@ function App() {
         </span>
       </footer>
 
+      {categoryContextMenu && (
+        <div
+          className="fixed z-[70] w-44 rounded-xl border border-slate-200/80 bg-white/95 p-1.5 shadow-xl shadow-slate-900/15 backdrop-blur-md"
+          style={{ left: categoryContextMenu.x, top: categoryContextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+          }}
+        >
+          {categoryContextMenu.type === 'all' && (
+            <>
+              <button onClick={createCategoryFromMenu} className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-600 hover:text-white transition-colors">新建分类</button>
+            </>
+          )}
+          {categoryContextMenu.type === 'category' && (() => {
+            const category = categories.find(cat => cat.id === categoryContextMenu.id)
+            if (!category) return null
+            return (
+              <>
+                <button onClick={() => { setActiveCategory(category.id); activeCategoryRef.current = category.id; setCategoryContextMenu(null) }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-600 hover:text-white transition-colors">切换到此分类</button>
+                <button onClick={() => renameCategoryFromMenu(category)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-600 hover:text-white transition-colors">重命名分类</button>
+                <button onClick={() => addSubcategoryFromMenu(category)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-600 hover:text-white transition-colors">添加子分类</button>
+                <div className="my-1 h-px bg-slate-100" />
+                <button onClick={() => deleteCategoryFromMenu(category)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-500 hover:text-white transition-colors">删除分类</button>
+              </>
+            )
+          })()}
+          {categoryContextMenu.type === 'subcategory' && (() => {
+            const subcategory = subcategories.find(sub => sub.id === categoryContextMenu.id)
+            if (!subcategory) return null
+            return (
+              <>
+                <button onClick={() => { document.getElementById(`subcat-${subcategory.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); setCategoryContextMenu(null) }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-600 hover:text-white transition-colors">定位子分类</button>
+                <button onClick={() => renameSubcategoryFromMenu(subcategory)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-600 hover:text-white transition-colors">重命名子分类</button>
+                <div className="my-1 h-px bg-slate-100" />
+                <button onClick={() => deleteSubcategoryFromMenu(subcategory)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-500 hover:text-white transition-colors">删除子分类</button>
+              </>
+            )
+          })()}
+        </div>
+      )}
+
+      {categoryEditDialog && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/35 backdrop-blur-sm"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setCategoryEditDialog(null)
+          }}
+        >
+          <div
+            className="w-[360px] rounded-2xl border border-brand-100/80 bg-white/95 p-5 shadow-2xl shadow-slate-900/15"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-display font-bold text-slate-800">{categoryEditDialog.title}</h3>
+            <div className="mt-4 space-y-3">
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600">名称</span>
+                <input
+                  id="category-edit-name"
+                  value={categoryEditDialog.name}
+                  onChange={(e) => setCategoryEditDialog(prev => prev ? { ...prev, name: e.target.value } : prev)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') submitCategoryEditDialog()
+                    if (e.key === 'Escape') setCategoryEditDialog(null)
+                  }}
+                  autoFocus
+                  className="focus-ring mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-400"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600">图标</span>
+                <select
+                  id="category-edit-icon"
+                  value={categoryEditDialog.icon}
+                  onChange={(e) => setCategoryEditDialog(prev => prev ? { ...prev, icon: e.target.value } : prev)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') submitCategoryEditDialog()
+                    if (e.key === 'Escape') setCategoryEditDialog(null)
+                  }}
+                  className="focus-ring mt-1 w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-400"
+                >
+                  {getCategoryIconOptions(categoryEditDialog).map(icon => (
+                    <option key={icon} value={icon}>{icon}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setCategoryEditDialog(null)}
+                className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={submitCategoryEditDialog}
+                disabled={!categoryEditDialog.name.trim()}
+                className="focus-ring cursor-pointer rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSmartOrganize && (
+        <SmartOrganizeModal
+          apps={apps}
+          categories={categories}
+          healthReport={healthReport}
+          iconRefreshProgress={iconRefreshProgress}
+          onClose={() => setShowSmartOrganize(false)}
+          onRunHealthCheck={handleRunHealthCheck}
+          onFixHealthIssues={handleFixHealthIssues}
+          onRefreshIcons={handleRefreshAllIcons}
+          onAutoCategorize={handleAutoCategorize}
+          onImportShortcuts={handleImportShortcuts}
+          onCleanupInvalid={handleCleanupInvalidApps}
+          onRestoreHidden={handleRestoreHiddenApps}
+          onExportBackup={handleExportBackup}
+          onImportBackup={handleImportBackup}
+        />
+      )}
+
       {showSettings && config && (
         <SettingsModal
           config={config}
@@ -1735,29 +2232,6 @@ function App() {
           categories={categories}
           onClose={() => { setShowEditApp(false); setEditingApp(null) }}
           onUpdate={handleUpdateApp}
-        />
-      )}
-
-      {showCategoryManager && (
-        <CategoryManagerModal
-          categories={categories}
-          onClose={() => setShowCategoryManager(false)}
-          onAdd={handleAddCategory}
-          onDelete={handleDeleteCategory}
-          onUpdate={handleUpdateCategory}
-        />
-      )}
-
-      {showSubcategoryManager && (
-        <SubcategoryManagerModal
-          categories={categories}
-          subcategories={subcategories}
-          activeCategory={activeCategory}
-          onClose={() => setShowSubcategoryManager(false)}
-          onAdd={handleAddSubcategory}
-          onDelete={handleDeleteSubcategory}
-          onUpdate={handleUpdateSubcategory}
-          onMove={handleMoveSubcategory}
         />
       )}
 

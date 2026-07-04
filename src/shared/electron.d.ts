@@ -1,4 +1,4 @@
-import type { AppItem, Category, Subcategory, Config, ShortcutImportItem, DiagnosticExportResult } from './types'
+import type { AppItem, Category, Subcategory, Config, ShortcutImportItem, DiagnosticExportResult, UiCommand } from './types'
 
 export interface UpdateInfo {
   available: boolean
@@ -40,6 +40,7 @@ declare global {
       openUrl: (url: string) => Promise<boolean>
       openSteam: (steamUrl: string) => Promise<boolean>
       runQuickAction: (command: string) => Promise<boolean>
+      runUiCommand: (command: UiCommand) => Promise<boolean>
       selectFolder: () => Promise<string | null>
       hideMainWindow: () => Promise<void>
       confirm: (message: string) => Promise<boolean>
@@ -66,6 +67,7 @@ declare global {
       onBlur: (callback: () => void) => () => void
       onResetSearch: (callback: () => void) => () => void
       onAppsUpdated: (callback: () => void) => () => void
+      onUiCommand: (callback: (command: UiCommand) => void) => () => void
       getVersion: () => Promise<string>
       checkForUpdate: () => Promise<UpdateInfo>
       downloadUpdate: () => Promise<{ success: boolean; filePath?: string; error?: string }>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'
-import { AppItem, Config, Category } from '../../shared/types'
+import { AppItem, Config, Category, UiCommand } from '../../shared/types'
 import { getFolderSuggestion, checkSearchEngine } from '../../shared/utils'
 import { hasDisplayableIcon } from './utils/iconUtils'
 
@@ -12,6 +12,16 @@ interface SearchEngineInfo {
 type SearchResult = Omit<AppItem, 'type'> & {
   type?: AppItem['type'] | 'action'
   actionCommand?: string
+  uiCommand?: UiCommand
+}
+
+interface BuiltInCommand {
+  id: string
+  name: string
+  hint: string
+  icon: string
+  command: UiCommand
+  keywords: string[]
 }
 
 const MAX_DISPLAY = 6
@@ -23,6 +33,65 @@ const NO_RESULTS_HEIGHT = 44
 const EMPTY_HINT_HEIGHT = 44
 const RESIZE_DEBOUNCE_MS = 80
 const EMPTY_SEARCH_HEIGHT = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
+
+const BUILT_IN_COMMANDS: BuiltInCommand[] = [
+  {
+    id: 'open-organizer',
+    name: '打开整理中心',
+    hint: '查看健康分、建议队列和维护工具',
+    icon: '2.0',
+    command: 'open-organizer',
+    keywords: ['整理', '整理中心', 'organize', 'organizer', '2.0', '20']
+  },
+  {
+    id: 'health-check',
+    name: '数据健康检查',
+    hint: '扫描失效路径、缺失图标和重复项',
+    icon: 'OK',
+    command: 'health-check',
+    keywords: ['健康', '检查', '扫描', 'health', 'check']
+  },
+  {
+    id: 'refresh-icons',
+    name: '刷新全部图标',
+    hint: '重新提取应用图标并同步到搜索框',
+    icon: '↻',
+    command: 'refresh-icons',
+    keywords: ['刷新', '图标', 'icon', 'icons', 'refresh']
+  },
+  {
+    id: 'auto-categorize',
+    name: '自动分类',
+    hint: '按规则和名称重新整理应用分类',
+    icon: '#',
+    command: 'auto-categorize',
+    keywords: ['分类', '自动分类', 'category', 'categorize']
+  },
+  {
+    id: 'import-shortcuts',
+    name: '导入快捷方式',
+    hint: '从桌面和开始菜单导入新项目',
+    icon: '+',
+    command: 'import-shortcuts',
+    keywords: ['导入', '快捷方式', 'shortcut', 'shortcuts', 'import']
+  },
+  {
+    id: 'restore-hidden',
+    name: '恢复隐藏项',
+    hint: '让搜索中隐藏的项目重新出现',
+    icon: '<',
+    command: 'restore-hidden',
+    keywords: ['恢复', '隐藏', 'hidden', 'restore']
+  },
+  {
+    id: 'export-backup',
+    name: '导出备份',
+    hint: '备份当前应用、分类和配置',
+    icon: '↓',
+    command: 'export-backup',
+    keywords: ['备份', '导出', 'backup', 'export']
+  }
+]
 
 function SearchApp() {
   const [query, setQuery] = useState('')
@@ -265,8 +334,45 @@ function SearchApp() {
       }))
   }, [config])
 
+  const getBuiltInCommandResults = useCallback((searchQuery: string): SearchResult[] => {
+    const raw = searchQuery.trim()
+    const normalized = raw.toLowerCase()
+    const commandMode = normalized.startsWith('>')
+    const term = commandMode ? normalized.slice(1).trim() : normalized
+    const compactTerm = compactSearchText(term)
+    const shouldSearchCommands = commandMode || compactTerm.length >= 2
+    if (!shouldSearchCommands) return []
+
+    return BUILT_IN_COMMANDS
+      .map<SearchResult | null>(command => {
+        const searchText = compactSearchText([
+          command.name,
+          command.hint,
+          command.command,
+          ...command.keywords
+        ].join(' '))
+        const keywordHit = command.keywords.some(keyword => compactSearchText(keyword).includes(compactTerm))
+        const nameHit = searchText.includes(compactTerm)
+        const commandModeFallback = commandMode && compactTerm.length === 0
+        if (!commandModeFallback && !keywordHit && !nameHit) return null
+        return {
+          id: `__ui_${command.id}`,
+          name: command.name,
+          path: command.hint,
+          icon: command.icon,
+          categoryId: null,
+          subcategoryId: null,
+          pinyin: '',
+          firstLetter: '',
+          type: 'action' as const,
+          uiCommand: command.command
+        }
+      })
+      .filter((item): item is SearchResult => !!item)
+  }, [])
+
   const filterApps = useCallback((searchQuery: string): SearchResult[] => {
-    const actionResults = getQuickActionResults(searchQuery)
+    const actionResults = [...getBuiltInCommandResults(searchQuery), ...getQuickActionResults(searchQuery)]
     if (actionResults.length > 0) return actionResults
 
     const terms = searchQuery.toLowerCase().trim().split(/\s+/).filter(term => compactSearchText(term))
@@ -285,7 +391,7 @@ function SearchApp() {
     }
 
     return matched
-  }, [apps, getQuickActionResults])
+  }, [apps, getBuiltInCommandResults, getQuickActionResults])
 
   const getDefaultSearchEngine = useCallback((): SearchEngineInfo | null => {
     const key = config?.defaultEngine || 'b'
@@ -323,7 +429,9 @@ function SearchApp() {
     isActiveRef.current = true
     window.electronAPI.hideSearchWindow()
     resetAll()
-    if (app.type === 'action' && app.actionCommand) {
+    if (app.type === 'action' && app.uiCommand) {
+      await window.electronAPI.runUiCommand(app.uiCommand)
+    } else if (app.type === 'action' && app.actionCommand) {
       await window.electronAPI.runQuickAction(app.actionCommand)
     } else if (app.type === 'folder') {
       await window.electronAPI.openFolder(app.path)
@@ -562,17 +670,19 @@ function SearchApp() {
               onMouseDown={(e) => { e.preventDefault(); isActiveRef.current = true }}
               onMouseEnter={() => setActiveIndex(index)}
             >
-              <div className={`search-result-icon ${app.type === 'folder' ? 'folder' : ''}`}>
+              <div className={`search-result-icon ${app.type === 'folder' ? 'folder' : ''} ${app.type === 'action' ? 'action' : ''}`}>
                 {hasDisplayableIcon(app.icon) ? (
                   <img src={app.icon} alt={app.name} width="28" height="28" />
                 ) : (
-                  <span className="app-icon">{app.type === 'folder' ? '📁' : '📦'}</span>
+                  <span className="app-icon">{app.type === 'action' ? app.icon || '>' : app.type === 'folder' ? '📁' : '📦'}</span>
                 )}
               </div>
               <div className="search-result-info">
                 <div className="search-result-name">{app.name}</div>
                 <div className="search-result-path">
-                  {getCategoryName(app.categoryId) && (
+                  {app.type === 'action' ? (
+                    <span>{app.path}</span>
+                  ) : getCategoryName(app.categoryId) && (
                     <span className="search-result-category">{getCategoryName(app.categoryId)}</span>
                   )}
                 </div>

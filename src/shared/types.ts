@@ -56,6 +56,15 @@ export interface QuickAction {
   enabled: boolean
 }
 
+export type UiCommand =
+  | 'open-organizer'
+  | 'health-check'
+  | 'refresh-icons'
+  | 'auto-categorize'
+  | 'import-shortcuts'
+  | 'restore-hidden'
+  | 'export-backup'
+
 export interface Config {
   hotkey: string
   searchHotkey?: string

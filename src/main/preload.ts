@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
-import type { AppItem, AppsData, CategoriesData, Config } from '../shared/types'
+import type { AppItem, AppsData, CategoriesData, Config, UiCommand } from '../shared/types'
 import type { UpdateProgress } from '../shared/electron'
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openUrl: (url: string) => ipcRenderer.invoke('open-url', url),
   openSteam: (steamUrl: string) => ipcRenderer.invoke('open-steam', steamUrl),
   runQuickAction: (command: string) => ipcRenderer.invoke('run-quick-action', command),
+  runUiCommand: (command: UiCommand) => ipcRenderer.invoke('run-ui-command', command),
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   hideSearchWindow: () => ipcRenderer.invoke('hide-search-window'),
   hideMainWindow: () => ipcRenderer.invoke('hide-main-window'),
@@ -54,6 +55,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = () => callback()
     ipcRenderer.on('apps-updated', handler)
     return () => ipcRenderer.removeListener('apps-updated', handler)
+  },
+  onUiCommand: (callback: (command: UiCommand) => void) => {
+    const handler = (_event: IpcRendererEvent, command: UiCommand) => callback(command)
+    ipcRenderer.on('ui-command', handler)
+    return () => ipcRenderer.removeListener('ui-command', handler)
   },
   getVersion: () => ipcRenderer.invoke('get-version'),
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),

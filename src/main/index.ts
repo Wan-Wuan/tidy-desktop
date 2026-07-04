@@ -1,5 +1,6 @@
-import { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen, dialog, shell } from 'electron'
+import { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen, dialog, shell, ipcMain } from 'electron'
 import path from 'path'
+import type { UiCommand } from '../shared/types'
 import { ensureDataDir, readJsonFile, getDefaultConfig, CONFIG_FILE } from './config'
 import { registerAppHandlers } from './handlers/appHandlers'
 import { registerFileHandlers } from './handlers/fileHandlers'
@@ -248,6 +249,39 @@ function prewarmSearchWindow() {
   createSearchWindow(false)
 }
 
+function registerUiCommandHandler() {
+  const allowedCommands = new Set<UiCommand>([
+    'open-organizer',
+    'health-check',
+    'refresh-icons',
+    'auto-categorize',
+    'import-shortcuts',
+    'restore-hidden',
+    'export-backup'
+  ])
+
+  ipcMain.handle('run-ui-command', async (_, command: unknown) => {
+    if (typeof command !== 'string' || !allowedCommands.has(command as UiCommand)) return false
+
+    showMainWindow()
+    const target = mainWindowRef.current
+    if (!target || target.isDestroyed()) return false
+
+    const sendCommand = () => {
+      if (!target.isDestroyed()) {
+        target.webContents.send('ui-command', command)
+      }
+    }
+
+    if (target.webContents.isLoading()) {
+      target.webContents.once('did-finish-load', sendCommand)
+    } else {
+      sendCommand()
+    }
+    return true
+  })
+}
+
 function moveSearchWindowToCursorDisplay(win: BrowserWindow) {
   if (win.isDestroyed()) return
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
@@ -347,6 +381,7 @@ app.on('ready', () => {
   registerFileHandlers()
   registerIconHandlers()
   registerSystemHandlers()
+  registerUiCommandHandler()
   cleanupInstalledUpdateCache()
   registerUpdateHandlers()
 
