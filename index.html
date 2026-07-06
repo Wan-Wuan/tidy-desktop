@@ -1,12 +1,586 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>桌面整理</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/renderer/src/main.tsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Tidy Desktop 是一款适合 Windows 的桌面整理、应用分类、快捷搜索与文件启动工具。" />
+  <title>Tidy Desktop - 桌面整理与快速启动工具</title>
+  <link rel="icon" href="../public/favicon.svg" type="image/svg+xml" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: '#082f49',
+            ocean: '#0ea5e9',
+            lagoon: '#38bdf8',
+            ember: '#f97316',
+            mist: '#f0f9ff'
+          },
+          boxShadow: {
+            glass: '0 24px 80px rgba(14, 116, 144, .18)',
+            lift: '0 18px 48px rgba(8, 47, 73, .14)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap');
+
+    :root {
+      color-scheme: light;
+      --glass-border: rgba(255, 255, 255, .72);
+      --glass-fill: rgba(255, 255, 255, .68);
+      --text-soft: #475569;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      overflow-x: hidden;
+      color: #082f49;
+      background:
+        radial-gradient(circle at 18% 12%, rgba(56, 189, 248, .42), transparent 28rem),
+        radial-gradient(circle at 82% 10%, rgba(249, 115, 22, .20), transparent 26rem),
+        linear-gradient(145deg, #f8fdff 0%, #effaff 42%, #eef7ff 100%);
+      font-family: 'Noto Sans SC', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    .noise {
+      pointer-events: none;
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      opacity: .32;
+      background-image:
+        linear-gradient(rgba(255,255,255,.52) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.42) 1px, transparent 1px);
+      background-size: 64px 64px;
+      mask-image: linear-gradient(to bottom, black, transparent 72%);
+    }
+
+    .aurora {
+      pointer-events: none;
+      position: fixed;
+      inset: auto -12rem -18rem -12rem;
+      z-index: 0;
+      height: 38rem;
+      background:
+        radial-gradient(circle at 20% 40%, rgba(14,165,233,.28), transparent 22rem),
+        radial-gradient(circle at 72% 22%, rgba(249,115,22,.18), transparent 18rem),
+        radial-gradient(circle at 50% 70%, rgba(6,182,212,.22), transparent 20rem);
+      filter: blur(18px);
+      animation: drift 14s ease-in-out infinite alternate;
+    }
+
+    .glass {
+      border: 1px solid var(--glass-border);
+      background: linear-gradient(145deg, rgba(255,255,255,.78), rgba(255,255,255,.46));
+      box-shadow: 0 18px 60px rgba(8, 47, 73, .12), inset 0 1px 0 rgba(255,255,255,.74);
+      backdrop-filter: blur(24px) saturate(155%);
+      -webkit-backdrop-filter: blur(24px) saturate(155%);
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity .7s ease, transform .7s ease;
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .mesh-card {
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.88), rgba(255,255,255,.54)),
+        radial-gradient(circle at 80% 0%, rgba(56,189,248,.24), transparent 16rem);
+    }
+
+    .app-window {
+      border: 1px solid rgba(255,255,255,.8);
+      background:
+        linear-gradient(145deg, rgba(255,255,255,.9), rgba(255,255,255,.58)),
+        radial-gradient(circle at 18% 0%, rgba(14,165,233,.18), transparent 16rem);
+      box-shadow: 0 28px 90px rgba(8, 47, 73, .18);
+    }
+
+    .float-one {
+      animation: floatOne 7s ease-in-out infinite;
+    }
+
+    .float-two {
+      animation: floatTwo 8s ease-in-out infinite;
+    }
+
+    .line-glow {
+      position: relative;
+    }
+
+    .line-glow::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -.45rem;
+      height: .5rem;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(14,165,233,.18), rgba(249,115,22,.28), rgba(14,165,233,.08));
+      filter: blur(.5px);
+    }
+
+    .chapter-line {
+      background: linear-gradient(180deg, rgba(14,165,233,.42), rgba(249,115,22,.24), rgba(14,165,233,.12));
+    }
+
+    .icon-tile svg,
+    .nav-icon svg {
+      width: 1.25rem;
+      height: 1.25rem;
+      stroke-width: 2;
+    }
+
+    .progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 60;
+      height: 3px;
+      width: 0%;
+      background: linear-gradient(90deg, #0ea5e9, #f97316);
+      box-shadow: 0 0 18px rgba(14,165,233,.55);
+    }
+
+    @keyframes drift {
+      from { transform: translate3d(-2rem, 0, 0) scale(1); }
+      to { transform: translate3d(2rem, -2rem, 0) scale(1.06); }
+    }
+
+    @keyframes floatOne {
+      0%, 100% { transform: translateY(0) rotate(-2deg); }
+      50% { transform: translateY(-14px) rotate(2deg); }
+    }
+
+    @keyframes floatTwo {
+      0%, 100% { transform: translateY(0) rotate(2deg); }
+      50% { transform: translateY(12px) rotate(-1deg); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: .001ms !important;
+      }
+      .reveal {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <div class="noise"></div>
+  <div class="aurora"></div>
+
+  <header class="fixed left-4 right-4 top-4 z-50">
+    <nav class="glass mx-auto flex max-w-7xl items-center justify-between rounded-[28px] px-4 py-3 md:px-5" aria-label="主导航">
+      <a href="#top" class="flex min-h-11 items-center gap-3 rounded-full pr-2 text-ink outline-none transition hover:text-ocean focus-visible:ring-2 focus-visible:ring-ocean">
+        <img src="../public/icon-256.png" alt="Tidy Desktop 图标" class="h-10 w-10 rounded-2xl shadow-lift" />
+        <span class="text-base font-extrabold tracking-tight md:text-lg">Tidy Desktop</span>
+      </a>
+      <div class="hidden items-center gap-2 text-sm font-medium text-slate-600 md:flex">
+        <a class="rounded-full px-4 py-2 transition hover:bg-white/70 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-ocean" href="#features">功能</a>
+        <a class="rounded-full px-4 py-2 transition hover:bg-white/70 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-ocean" href="#workflow">使用方法</a>
+        <a class="rounded-full px-4 py-2 transition hover:bg-white/70 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-ocean" href="#details">细节</a>
+        <a class="rounded-full px-4 py-2 transition hover:bg-white/70 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-ocean" href="#faq">常见问题</a>
+      </div>
+      <a href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest" class="inline-flex min-h-11 items-center justify-center rounded-full bg-ember px-5 text-sm font-bold text-white shadow-lg shadow-orange-500/20 transition hover:-translate-y-0.5 hover:bg-orange-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500">
+        下载最新版
+      </a>
+    </nav>
+  </header>
+
+  <main id="top" class="relative z-10">
+    <section class="mx-auto grid min-h-screen max-w-7xl items-center gap-10 px-5 pb-20 pt-32 md:grid-cols-[1.02fr_.98fr] md:px-8 lg:pt-28">
+      <div class="reveal">
+        <p class="mb-5 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white/70 px-4 py-2 text-sm font-semibold text-ocean shadow-sm">
+          <span class="h-2 w-2 rounded-full bg-ember"></span>
+          Windows 桌面整理与快速启动中心
+        </p>
+        <h1 class="max-w-4xl text-5xl font-extrabold leading-tight tracking-tight text-ink md:text-7xl">
+          把杂乱桌面，整理成一个<span class="line-glow text-ocean">顺手的启动台</span>
+        </h1>
+        <p class="mt-7 max-w-2xl text-lg leading-8 text-slate-600 md:text-xl">
+          Tidy Desktop 帮你集中管理应用、文件夹、文档和 Steam 游戏。分类、搜索、拖拽、图标缓存、快捷键唤起都放在一个安静清爽的窗口里，让桌面重新变得可控。
+        </p>
+        <div class="mt-9 flex flex-col gap-3 sm:flex-row">
+          <a href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest" class="inline-flex min-h-12 items-center justify-center rounded-full bg-ember px-7 text-base font-bold text-white shadow-lg shadow-orange-500/25 transition hover:-translate-y-0.5 hover:bg-orange-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500">
+            获取安装包
+          </a>
+          <a href="#workflow" class="inline-flex min-h-12 items-center justify-center rounded-full border border-sky-200 bg-white/75 px-7 text-base font-bold text-ink shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean">
+            查看使用方式
+          </a>
+        </div>
+        <div class="mt-8 grid max-w-xl grid-cols-3 gap-3 text-center">
+          <div class="glass rounded-[24px] px-4 py-4">
+            <div class="text-2xl font-extrabold text-ink">2</div>
+            <div class="mt-1 text-xs font-semibold text-slate-500">快捷窗口</div>
+          </div>
+          <div class="glass rounded-[24px] px-4 py-4">
+            <div class="text-2xl font-extrabold text-ink">多级</div>
+            <div class="mt-1 text-xs font-semibold text-slate-500">分类管理</div>
+          </div>
+          <div class="glass rounded-[24px] px-4 py-4">
+            <div class="text-2xl font-extrabold text-ink">自动</div>
+            <div class="mt-1 text-xs font-semibold text-slate-500">图标缓存</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="reveal relative min-h-[520px]">
+        <div class="app-window float-one absolute left-0 top-10 w-full rounded-[36px] p-4 md:p-5">
+          <div class="flex items-center justify-between border-b border-white/70 pb-4">
+            <div class="flex items-center gap-2">
+              <span class="h-3 w-3 rounded-full bg-orange-400"></span>
+              <span class="h-3 w-3 rounded-full bg-sky-400"></span>
+              <span class="h-3 w-3 rounded-full bg-emerald-400"></span>
+            </div>
+            <div class="rounded-full bg-white/70 px-4 py-1 text-xs font-bold text-slate-500">Alt + Space</div>
+          </div>
+          <div class="grid gap-4 pt-5 md:grid-cols-[.72fr_1fr]">
+            <aside class="rounded-[28px] border border-white/70 bg-white/62 p-4">
+              <div class="mb-4 text-sm font-extrabold text-ink">分类</div>
+              <div class="space-y-2">
+                <div class="flex items-center gap-3 rounded-2xl bg-sky-100/80 px-3 py-3 text-sm font-bold text-sky-800">
+                  <span class="h-8 w-8 rounded-xl bg-white shadow-sm"></span> 常用工具
+                </div>
+                <div class="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-slate-600">
+                  <span class="h-8 w-8 rounded-xl bg-white/80 shadow-sm"></span> 设计软件
+                </div>
+                <div class="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-slate-600">
+                  <span class="h-8 w-8 rounded-xl bg-white/80 shadow-sm"></span> 文档资料
+                </div>
+              </div>
+            </aside>
+            <div class="rounded-[28px] border border-white/70 bg-white/58 p-4">
+              <div class="mb-4 flex items-center justify-between">
+                <div>
+                  <div class="text-sm font-extrabold text-ink">常用工具</div>
+                  <div class="mt-1 text-xs font-semibold text-slate-500">拖拽排序，快速启动</div>
+                </div>
+                <button class="min-h-11 rounded-full bg-ink px-4 text-sm font-bold text-white">添加</button>
+              </div>
+              <div class="grid grid-cols-3 gap-3">
+                <div class="rounded-[22px] bg-white/78 p-3 shadow-sm">
+                  <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-sky-200 to-white"></div>
+                  <div class="mt-3 h-3 rounded-full bg-slate-200"></div>
+                </div>
+                <div class="rounded-[22px] bg-white/78 p-3 shadow-sm">
+                  <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-orange-200 to-white"></div>
+                  <div class="mt-3 h-3 rounded-full bg-slate-200"></div>
+                </div>
+                <div class="rounded-[22px] bg-white/78 p-3 shadow-sm">
+                  <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-cyan-200 to-white"></div>
+                  <div class="mt-3 h-3 rounded-full bg-slate-200"></div>
+                </div>
+                <div class="rounded-[22px] bg-white/78 p-3 shadow-sm">
+                  <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-200 to-white"></div>
+                  <div class="mt-3 h-3 rounded-full bg-slate-200"></div>
+                </div>
+                <div class="rounded-[22px] bg-white/78 p-3 shadow-sm">
+                  <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-emerald-200 to-white"></div>
+                  <div class="mt-3 h-3 rounded-full bg-slate-200"></div>
+                </div>
+                <div class="rounded-[22px] bg-white/78 p-3 shadow-sm">
+                  <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-rose-200 to-white"></div>
+                  <div class="mt-3 h-3 rounded-full bg-slate-200"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass float-two absolute bottom-4 right-0 w-[92%] rounded-[30px] p-4 shadow-glass md:w-[82%]">
+          <div class="flex items-center gap-3 rounded-2xl bg-white/80 px-4 py-3">
+            <svg class="h-5 w-5 text-ocean" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span class="text-base font-semibold text-ink">输入 wx / vscode / C:\Users...</span>
+          </div>
+          <div class="mt-3 space-y-2">
+            <div class="flex items-center gap-3 rounded-2xl bg-sky-50/90 px-4 py-3">
+              <span class="h-9 w-9 rounded-xl bg-gradient-to-br from-sky-300 to-white"></span>
+              <div>
+                <div class="text-sm font-bold text-ink">微信</div>
+                <div class="text-xs font-semibold text-slate-500">拼音与首字母搜索</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 rounded-2xl bg-white/70 px-4 py-3">
+              <span class="h-9 w-9 rounded-xl bg-gradient-to-br from-orange-300 to-white"></span>
+              <div>
+                <div class="text-sm font-bold text-ink">Visual Studio Code</div>
+                <div class="text-xs font-semibold text-slate-500">多关键词匹配</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="mx-auto max-w-7xl px-5 py-20 md:px-8">
+      <div class="reveal mx-auto max-w-3xl text-center">
+        <p class="text-sm font-extrabold uppercase tracking-[.28em] text-ocean">Chapter 1</p>
+        <h2 class="mt-4 text-4xl font-extrabold tracking-tight text-ink md:text-5xl">不是换个图标架子，而是把启动流程变短</h2>
+        <p class="mt-5 text-lg leading-8 text-slate-600">应用、文件、文件夹、游戏入口和搜索引擎都可以进入同一个工作流。需要的时候一按快捷键，不需要的时候它安静待在托盘。</p>
+      </div>
+
+      <div class="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <article class="glass reveal rounded-[30px] p-6 transition hover:-translate-y-1 hover:shadow-lift">
+          <div class="icon-tile mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-ocean">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h10"/></svg>
+          </div>
+          <h3 class="text-xl font-extrabold text-ink">多级分类管理</h3>
+          <p class="mt-3 leading-7 text-slate-600">创建分类与子分类，拖拽调整顺序，把常用、工作、娱乐、文档分开放，桌面不再堆成一片。</p>
+        </article>
+
+        <article class="glass reveal rounded-[30px] p-6 transition hover:-translate-y-1 hover:shadow-lift">
+          <div class="icon-tile mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-100 text-ember">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/><path d="M8 11h6"/></svg>
+          </div>
+          <h3 class="text-xl font-extrabold text-ink">快速搜索框</h3>
+          <p class="mt-3 leading-7 text-slate-600">支持应用名、拼音、首字母、关键词和路径输入。独立搜索窗口更轻，适合随时唤起。</p>
+        </article>
+
+        <article class="glass reveal rounded-[30px] p-6 transition hover:-translate-y-1 hover:shadow-lift">
+          <div class="icon-tile mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-600">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 3v18"/><path d="M5 10h14"/><path d="M7 21h10a2 2 0 0 0 2-2V7H5v12a2 2 0 0 0 2 2Z"/></svg>
+          </div>
+          <h3 class="text-xl font-extrabold text-ink">图标自动提取</h3>
+          <p class="mt-3 leading-7 text-slate-600">从 exe、lnk、文件和 Steam 链接中提取图标并缓存，显示更稳定，刷新也更可控。</p>
+        </article>
+
+        <article class="glass reveal rounded-[30px] p-6 transition hover:-translate-y-1 hover:shadow-lift">
+          <div class="icon-tile mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h16"/><path d="M18 10v4"/></svg>
+          </div>
+          <h3 class="text-xl font-extrabold text-ink">自动扫描导入</h3>
+          <p class="mt-3 leading-7 text-slate-600">扫描桌面与开始菜单快捷方式，配合自动创建分类，初次整理不需要从零手动添加。</p>
+        </article>
+
+        <article class="glass reveal rounded-[30px] p-6 transition hover:-translate-y-1 hover:shadow-lift">
+          <div class="icon-tile mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M7 8h10"/><path d="M7 12h6"/><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 3v-3H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/></svg>
+          </div>
+          <h3 class="text-xl font-extrabold text-ink">文件发送辅助</h3>
+          <p class="mt-3 leading-7 text-slate-600">文档可复制到剪贴板，图片可拖拽或复制内容，适合发送到微信、Word、QQ 等场景。</p>
+        </article>
+
+        <article class="glass reveal rounded-[30px] p-6 transition hover:-translate-y-1 hover:shadow-lift">
+          <div class="icon-tile mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 2v6l4-4"/><path d="M12 8 8 4"/><path d="M5 12a7 7 0 1 0 14 0"/></svg>
+          </div>
+          <h3 class="text-xl font-extrabold text-ink">更新与维护</h3>
+          <p class="mt-3 leading-7 text-slate-600">支持检查更新、安装包下载、数据健康检查、诊断导出和数据目录打开。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="workflow" class="mx-auto max-w-7xl px-5 py-20 md:px-8">
+      <div class="grid gap-10 lg:grid-cols-[.72fr_1fr]">
+        <div class="reveal">
+          <p class="text-sm font-extrabold uppercase tracking-[.28em] text-ocean">Chapter 2</p>
+          <h2 class="mt-4 text-4xl font-extrabold tracking-tight text-ink md:text-5xl">三步开始整理</h2>
+          <p class="mt-5 text-lg leading-8 text-slate-600">它不强迫你改变习惯，而是把已有的桌面入口收拢起来。先导入，再分类，最后用快捷键打开。</p>
+        </div>
+        <div class="relative">
+          <div class="chapter-line absolute bottom-8 left-6 top-8 hidden w-px md:block"></div>
+          <div class="space-y-5">
+            <div class="glass reveal relative rounded-[30px] p-6 md:ml-12">
+              <span class="absolute -left-12 top-6 hidden h-12 w-12 items-center justify-center rounded-2xl bg-ocean text-lg font-extrabold text-white shadow-lg shadow-sky-500/25 md:flex">1</span>
+              <h3 class="text-2xl font-extrabold text-ink">导入桌面和开始菜单</h3>
+              <p class="mt-3 leading-7 text-slate-600">使用扫描功能收集快捷方式，也可以手动添加应用、文件夹、文档和 Steam 游戏。</p>
+            </div>
+            <div class="glass reveal relative rounded-[30px] p-6 md:ml-12">
+              <span class="absolute -left-12 top-6 hidden h-12 w-12 items-center justify-center rounded-2xl bg-ocean text-lg font-extrabold text-white shadow-lg shadow-sky-500/25 md:flex">2</span>
+              <h3 class="text-2xl font-extrabold text-ink">创建分类并拖拽整理</h3>
+              <p class="mt-3 leading-7 text-slate-600">按用途拆分分类与子分类，拖拽应用到合适位置，让启动台像你的工作流一样排列。</p>
+            </div>
+            <div class="glass reveal relative rounded-[30px] p-6 md:ml-12">
+              <span class="absolute -left-12 top-6 hidden h-12 w-12 items-center justify-center rounded-2xl bg-ember text-lg font-extrabold text-white shadow-lg shadow-orange-500/25 md:flex">3</span>
+              <h3 class="text-2xl font-extrabold text-ink">用快捷键唤起和搜索</h3>
+              <p class="mt-3 leading-7 text-slate-600">通过主窗口浏览分类，通过搜索窗口快速输入关键词。Enter 打开，Ctrl + Enter 打开所在文件夹。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="details" class="mx-auto max-w-7xl px-5 py-20 md:px-8">
+      <div class="mesh-card reveal rounded-[38px] border border-white/80 p-6 shadow-glass md:p-9">
+        <div class="grid gap-8 lg:grid-cols-[.9fr_1.1fr]">
+          <div>
+            <p class="text-sm font-extrabold uppercase tracking-[.28em] text-ocean">Chapter 3</p>
+            <h2 class="mt-4 text-4xl font-extrabold tracking-tight text-ink md:text-5xl">更适合长期使用的细节</h2>
+            <p class="mt-5 text-lg leading-8 text-slate-600">桌面整理工具不应该只在安装当天好看。Tidy Desktop 更关注日常重复使用时的效率、稳定和可维护。</p>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div class="rounded-[28px] bg-white/72 p-5 shadow-sm">
+              <div class="text-sm font-bold text-ocean">快捷键</div>
+              <div class="mt-2 text-2xl font-extrabold text-ink">Alt + Space</div>
+              <p class="mt-2 text-sm leading-6 text-slate-600">显示或隐藏主窗口，可在设置里改成你的习惯。</p>
+            </div>
+            <div class="rounded-[28px] bg-white/72 p-5 shadow-sm">
+              <div class="text-sm font-bold text-ocean">快速搜索</div>
+              <div class="mt-2 text-2xl font-extrabold text-ink">Ctrl + K</div>
+              <p class="mt-2 text-sm leading-6 text-slate-600">独立搜索框适合键盘用户，打开应用更快。</p>
+            </div>
+            <div class="rounded-[28px] bg-white/72 p-5 shadow-sm">
+              <div class="text-sm font-bold text-ocean">搜索引擎</div>
+              <div class="mt-2 text-2xl font-extrabold text-ink">b / g / gh</div>
+              <p class="mt-2 text-sm leading-6 text-slate-600">输入前缀加空格，可直接切到网页搜索。</p>
+            </div>
+            <div class="rounded-[28px] bg-white/72 p-5 shadow-sm">
+              <div class="text-sm font-bold text-ocean">数据位置</div>
+              <div class="mt-2 text-2xl font-extrabold text-ink">AppData</div>
+              <p class="mt-2 text-sm leading-6 text-slate-600">配置、应用列表、分类和图标缓存分开保存。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mx-auto max-w-7xl px-5 py-20 md:px-8">
+      <div class="reveal mx-auto max-w-3xl text-center">
+        <p class="text-sm font-extrabold uppercase tracking-[.28em] text-ocean">For whom</p>
+        <h2 class="mt-4 text-4xl font-extrabold tracking-tight text-ink md:text-5xl">适合这些桌面重度用户</h2>
+      </div>
+      <div class="mt-12 grid gap-5 md:grid-cols-3">
+        <div class="glass reveal rounded-[30px] p-6">
+          <h3 class="text-xl font-extrabold text-ink">应用很多的人</h3>
+          <p class="mt-3 leading-7 text-slate-600">工具链、设计软件、聊天软件、游戏和文件夹都很多，需要一个统一入口。</p>
+        </div>
+        <div class="glass reveal rounded-[30px] p-6">
+          <h3 class="text-xl font-extrabold text-ink">喜欢键盘启动的人</h3>
+          <p class="mt-3 leading-7 text-slate-600">不想层层点菜单，习惯输入几个字母直接打开目标。</p>
+        </div>
+        <div class="glass reveal rounded-[30px] p-6">
+          <h3 class="text-xl font-extrabold text-ink">经常重装和整理的人</h3>
+          <p class="mt-3 leading-7 text-slate-600">需要扫描导入、自动分类、诊断导出，让迁移和维护更省力。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="download" class="mx-auto max-w-7xl px-5 py-20 md:px-8">
+      <div class="glass reveal overflow-hidden rounded-[40px] p-7 md:p-10">
+        <div class="grid items-center gap-8 lg:grid-cols-[1fr_auto]">
+          <div>
+            <p class="text-sm font-extrabold uppercase tracking-[.28em] text-ember">Latest release</p>
+            <h2 class="mt-4 text-4xl font-extrabold tracking-tight text-ink md:text-5xl">下载最新安装包</h2>
+            <p class="mt-5 max-w-2xl text-lg leading-8 text-slate-600">页面会尝试读取 GitHub 最新 Release。读取失败时，仍可直接进入 Releases 页面手动下载。</p>
+            <div id="releaseStatus" class="mt-5 inline-flex min-h-11 items-center rounded-full border border-sky-200 bg-white/70 px-4 text-sm font-bold text-slate-600">正在获取最新版本...</div>
+          </div>
+          <div class="flex flex-col gap-3 sm:flex-row lg:flex-col">
+            <a id="downloadButton" href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest" class="inline-flex min-h-12 items-center justify-center rounded-full bg-ember px-7 text-base font-bold text-white shadow-lg shadow-orange-500/25 transition hover:-translate-y-0.5 hover:bg-orange-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500">
+              前往下载
+            </a>
+            <a href="https://github.com/Wan-Wuan/tidy-desktop" class="inline-flex min-h-12 items-center justify-center rounded-full border border-sky-200 bg-white/75 px-7 text-base font-bold text-ink transition hover:-translate-y-0.5 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean">
+              查看源码
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" class="mx-auto max-w-5xl px-5 py-20 md:px-8">
+      <div class="reveal text-center">
+        <p class="text-sm font-extrabold uppercase tracking-[.28em] text-ocean">FAQ</p>
+        <h2 class="mt-4 text-4xl font-extrabold tracking-tight text-ink md:text-5xl">常见问题</h2>
+      </div>
+      <div class="mt-10 space-y-4">
+        <details class="glass reveal group rounded-[28px] p-6">
+          <summary class="cursor-pointer text-lg font-extrabold text-ink outline-none focus-visible:ring-2 focus-visible:ring-ocean">它会替代 Windows 桌面吗？</summary>
+          <p class="mt-4 leading-7 text-slate-600">不会。它更像一个整理过的启动台，帮助你减少桌面快捷方式和重复寻找应用的时间。</p>
+        </details>
+        <details class="glass reveal group rounded-[28px] p-6">
+          <summary class="cursor-pointer text-lg font-extrabold text-ink outline-none focus-visible:ring-2 focus-visible:ring-ocean">可以添加哪些类型？</summary>
+          <p class="mt-4 leading-7 text-slate-600">可添加应用、快捷方式、文件夹、常见文档、压缩包、媒体、图片，以及 Steam 游戏链接。</p>
+        </details>
+        <details class="glass reveal group rounded-[28px] p-6">
+          <summary class="cursor-pointer text-lg font-extrabold text-ink outline-none focus-visible:ring-2 focus-visible:ring-ocean">图标不显示怎么办？</summary>
+          <p class="mt-4 leading-7 text-slate-600">可以使用刷新图标和数据健康检查。图标会缓存到本地，避免每次打开都重新提取。</p>
+        </details>
+        <details class="glass reveal group rounded-[28px] p-6">
+          <summary class="cursor-pointer text-lg font-extrabold text-ink outline-none focus-visible:ring-2 focus-visible:ring-ocean">更新失败怎么办？</summary>
+          <p class="mt-4 leading-7 text-slate-600">可进入 GitHub Releases 手动下载最新安装包。部分网络环境访问 GitHub 资源会不稳定，手动下载通常更可靠。</p>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="relative z-10 border-t border-white/70 bg-white/42 px-5 py-10 backdrop-blur md:px-8">
+    <div class="mx-auto flex max-w-7xl flex-col gap-4 text-sm font-semibold text-slate-600 md:flex-row md:items-center md:justify-between">
+      <div class="flex items-center gap-3">
+        <img src="../public/favicon.png" alt="" class="h-9 w-9 rounded-xl" />
+        <span>Tidy Desktop，给 Windows 桌面一个更安静的入口。</span>
+      </div>
+      <div class="flex gap-4">
+        <a class="transition hover:text-ocean focus-visible:outline focus-visible:outline-2 focus-visible:outline-ocean" href="https://github.com/Wan-Wuan/tidy-desktop">GitHub</a>
+        <a class="transition hover:text-ocean focus-visible:outline focus-visible:outline-2 focus-visible:outline-ocean" href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest">Releases</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const progress = document.getElementById('progress');
+    const releaseStatus = document.getElementById('releaseStatus');
+    const downloadButton = document.getElementById('downloadButton');
+
+    const updateProgress = () => {
+      const doc = document.documentElement;
+      const max = doc.scrollHeight - doc.clientHeight;
+      const value = max > 0 ? (doc.scrollTop / max) * 100 : 0;
+      progress.style.width = `${value}%`;
+    };
+
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.14 });
+
+    document.querySelectorAll('.reveal').forEach((item) => revealObserver.observe(item));
+    document.addEventListener('scroll', updateProgress, { passive: true });
+    updateProgress();
+
+    fetch('https://api.github.com/repos/Wan-Wuan/tidy-desktop/releases/latest')
+      .then((response) => {
+        if (!response.ok) throw new Error('release request failed');
+        return response.json();
+      })
+      .then((release) => {
+        const asset = (release.assets || []).find((item) => /tidy-desktop-Setup-.*\.exe$/i.test(item.name));
+        releaseStatus.textContent = asset ? `已找到最新安装包：${asset.name}` : '已获取最新 Release，请进入页面选择安装包';
+        downloadButton.href = asset ? asset.browser_download_url : release.html_url;
+      })
+      .catch(() => {
+        releaseStatus.textContent = '暂时无法读取 GitHub 最新信息，可进入 Releases 手动下载';
+      });
+  </script>
+</body>
 </html>
