@@ -163,15 +163,15 @@ function SearchApp() {
     const style = window.getComputedStyle(container)
     const paddingTop = parseFloat(style.paddingTop) || 0
     const paddingBottom = parseFloat(style.paddingBottom) || 0
-    const itemTop = item.offsetTop - paddingTop
-    const itemBottom = itemTop + item.offsetHeight
-    const visibleTop = container.scrollTop
-    const visibleBottom = visibleTop + container.clientHeight
+    const containerRect = container.getBoundingClientRect()
+    const itemRect = item.getBoundingClientRect()
+    const visibleTop = containerRect.top + paddingTop
+    const visibleBottom = containerRect.bottom - paddingBottom
 
-    if (itemTop < visibleTop) {
-      container.scrollTop = itemTop
-    } else if (itemBottom > visibleBottom) {
-      container.scrollTop = itemBottom - container.clientHeight + paddingBottom
+    if (itemRect.top < visibleTop) {
+      container.scrollTop += itemRect.top - visibleTop
+    } else if (itemRect.bottom > visibleBottom) {
+      container.scrollTop += itemRect.bottom - visibleBottom
     }
   }, [activeIndex, results])
 

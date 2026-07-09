@@ -37,11 +37,13 @@ export function UpdateButton({ state, version, progress }: UpdateButtonProps) {
 interface UpdateDialogProps {
   version?: string
   releaseNotes?: string
+  error?: string
   onConfirm: () => void
   onDismiss: () => void
+  onOpenLog?: () => void
 }
 
-export function UpdateDialog({ version, releaseNotes, onConfirm, onDismiss }: UpdateDialogProps) {
+export function UpdateDialog({ version, releaseNotes, error, onConfirm, onDismiss, onOpenLog }: UpdateDialogProps) {
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 modal-backdrop"
@@ -59,7 +61,21 @@ export function UpdateDialog({ version, releaseNotes, onConfirm, onDismiss }: Up
             <div className="whitespace-pre-wrap">{releaseNotes}</div>
           </div>
         )}
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+            <div className="font-medium">安装没有完成</div>
+            <div className="mt-1 text-xs">{error}</div>
+          </div>
+        )}
         <div className="flex justify-end gap-2">
+          {onOpenLog && (
+            <button
+              onClick={onOpenLog}
+              className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              打开日志
+            </button>
+          )}
           <button
             onClick={onDismiss}
             className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"

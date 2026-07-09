@@ -26,6 +26,14 @@ type CategoryEditDialog =
   | { type: 'rename-category'; title: string; id: string; name: string; icon: string }
   | { type: 'add-subcategory'; title: string; parentId: string; name: string; icon: string }
   | { type: 'rename-subcategory'; title: string; id: string; name: string; icon: string }
+type MaintenanceSummary = { title: string; items: string[] }
+type UndoSnapshot = {
+  label: string
+  apps: AppItem[]
+  categories: Category[]
+  subcategories: Subcategory[]
+  activeCategory: string | null
+}
 
 const CATEGORY_ICON_OPTIONS = ['📁', '💼', '🧰', '🎮', '📚', '🖼️', '🎵', '⭐', '🔧', '🌐', '📦', '⚙️']
 const SUBCATEGORY_ICON_OPTIONS = ['•', '◦', '▪', '▸', '✓', '★', '◇', '◆', 'A', '1', '📌', '🔖']
@@ -72,6 +80,8 @@ function App() {
   const [dragOverAppId, setDragOverAppId] = useState<string | null>(null)
   const [iconRefreshProgress, setIconRefreshProgress] = useState<IconRefreshProgress | null>(null)
   const [healthReport, setHealthReport] = useState<HealthReport | null>(null)
+  const [maintenanceSummary, setMaintenanceSummary] = useState<MaintenanceSummary | null>(null)
+  const [undoSnapshot, setUndoSnapshot] = useState<UndoSnapshot | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const categoryBarRef = useRef<HTMLDivElement>(null)
@@ -1175,12 +1185,22 @@ function App() {
     setApps(refreshed)
     await window.electronAPI.saveApps({ apps: refreshed })
     setIconRefreshProgress(null)
+    setMaintenanceSummary({
+      title: '图标刷新完成',
+      items: [
+        `已清理 ${cleared.count} 个图标缓存。`,
+        `成功刷新 ${successCount} 个图标。`,
+        `文件夹使用默认图标，不参与补全。`,
+        ...(failedCount > 0 ? [`${failedCount} 个图标提取失败，已保留原图标。`] : [])
+      ]
+    })
     alert(`已清理 ${cleared.count} 个图标缓存，成功刷新 ${successCount} 个图标。文件夹使用默认图标，不参与补全。${failedCount > 0 ? `有 ${failedCount} 个图标提取失败，已保留原图标。` : ''}`)
   }
 
   const handleAutoCategorize = async () => {
     const rules = config?.autoCategoryRules || []
-    const updatedApps = appsRef.current.map(app => {
+    const currentApps = appsRef.current
+    const updatedApps = currentApps.map(app => {
       const haystack = `${app.name} ${app.path} ${(app.aliases || []).join(' ')}`.toLowerCase()
       const rule = rules.find(item => item.categoryId && haystack.includes(item.match.toLowerCase()))
       if (rule) return { ...app, categoryId: rule.categoryId, subcategoryId: null }
@@ -1190,9 +1210,18 @@ function App() {
 
       return app
     })
+    const changedCount = updatedApps.filter((app, index) =>
+      app.categoryId !== currentApps[index]?.categoryId ||
+      app.subcategoryId !== currentApps[index]?.subcategoryId
+    ).length
+    if (changedCount > 0) captureUndoSnapshot('自动分类')
     appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
+    setMaintenanceSummary({
+      title: '自动分类完成',
+      items: [changedCount > 0 ? `${changedCount} 个项目已重新归类。` : '没有项目需要调整分类。']
+    })
     alert('自动分类已完成。')
   }
 
@@ -1209,17 +1238,28 @@ function App() {
     }
     const confirmed = await window.electronAPI.confirm(`确定移除 ${invalidIds.size} 个失效项目吗？`)
     if (!confirmed) return
+    captureUndoSnapshot('清理失效项')
     const updatedApps = appsRef.current.filter(app => !invalidIds.has(app.id))
     appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
+    setMaintenanceSummary({
+      title: '失效项已清理',
+      items: [`已移除 ${invalidIds.size} 个失效项目。`]
+    })
   }
 
   const handleRestoreHiddenApps = async () => {
+    const hiddenCount = appsRef.current.filter(app => app.hidden).length
+    if (hiddenCount > 0) captureUndoSnapshot('恢复隐藏项')
     const updatedApps = appsRef.current.map(app => ({ ...app, hidden: false }))
     appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
+    setMaintenanceSummary({
+      title: '隐藏项已恢复',
+      items: [hiddenCount > 0 ? `已恢复 ${hiddenCount} 个隐藏项目。` : '没有需要恢复的隐藏项目。']
+    })
     alert('已恢复搜索中隐藏的项目。')
   }
 
@@ -1262,6 +1302,38 @@ function App() {
     }
   }
 
+  const captureUndoSnapshot = (label: string) => {
+    setUndoSnapshot({
+      label,
+      apps: appsRef.current.map(app => ({ ...app })),
+      categories: categoriesRef.current.map(category => ({ ...category })),
+      subcategories: subcategories.map(subcategory => ({ ...subcategory })),
+      activeCategory: activeCategoryRef.current
+    })
+  }
+
+  const restoreUndoSnapshot = async () => {
+    if (!undoSnapshot) return
+
+    appsRef.current = undoSnapshot.apps
+    categoriesRef.current = undoSnapshot.categories
+    activeCategoryRef.current = undoSnapshot.activeCategory
+    setApps(undoSnapshot.apps)
+    setCategories(undoSnapshot.categories)
+    setSubcategories(undoSnapshot.subcategories)
+    setActiveCategory(undoSnapshot.activeCategory)
+    await Promise.all([
+      window.electronAPI.saveApps({ apps: undoSnapshot.apps }),
+      window.electronAPI.saveCategories({ categories: undoSnapshot.categories, subcategories: undoSnapshot.subcategories })
+    ])
+    setUndoSnapshot(null)
+    setMaintenanceSummary({
+      title: `已撤销：${undoSnapshot.label}`,
+      items: ['应用、分类和子分类已恢复到操作前状态。']
+    })
+    setHealthReport(await buildHealthReport())
+  }
+
   const handleRunHealthCheck = async () => {
     setHealthReport(await buildHealthReport())
   }
@@ -1269,28 +1341,44 @@ function App() {
   const handleFixHealthIssues = async () => {
     const report = healthReport || await buildHealthReport()
     let updatedApps = [...appsRef.current]
+    let removedInvalidCount = 0
+    let removedDuplicateCount = 0
+    let removedEmptyCategoryCount = 0
+    let undoCaptured = false
+    const ensureUndoSnapshot = () => {
+      if (undoCaptured) return
+      captureUndoSnapshot('一键修复')
+      undoCaptured = true
+    }
     if (report.invalidPaths.length > 0) {
       const confirmed = await window.electronAPI.confirm(`检测到 ${report.invalidPaths.length} 个失效路径，是否移除这些项目？`)
       if (confirmed) {
+        ensureUndoSnapshot()
         const invalidIds = new Set(report.invalidPaths.map(app => app.id))
+        removedInvalidCount = updatedApps.filter(app => invalidIds.has(app.id)).length
         updatedApps = updatedApps.filter(app => !invalidIds.has(app.id))
       }
     }
     if (report.duplicatePaths.length > 0) {
       const confirmed = await window.electronAPI.confirm('检测到重复路径，是否只保留每个路径的第一个项目？')
       if (confirmed) {
+        ensureUndoSnapshot()
         const seen = new Set<string>()
+        const beforeCount = updatedApps.length
         updatedApps = updatedApps.filter(app => {
           const key = app.path.toLowerCase()
           if (seen.has(key)) return false
           seen.add(key)
           return true
         })
+        removedDuplicateCount = beforeCount - updatedApps.length
       }
     }
     if (report.emptyCategories.length > 0) {
       const confirmed = await window.electronAPI.confirm(`检测到 ${report.emptyCategories.length} 个空分类，是否删除这些分类？`)
       if (confirmed) {
+        ensureUndoSnapshot()
+        removedEmptyCategoryCount = report.emptyCategories.length
         const emptyIds = new Set(report.emptyCategories.map(category => category.id))
         const updatedCategories = categoriesRef.current.filter(category => !emptyIds.has(category.id))
         const updatedSubcategories = subcategories.filter(subcategory => !subcategory.parentId || !emptyIds.has(subcategory.parentId))
@@ -1305,10 +1393,21 @@ function App() {
         }
       }
     }
+    const changed = removedInvalidCount > 0 || removedDuplicateCount > 0 || removedEmptyCategoryCount > 0
     appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
     setHealthReport(await buildHealthReport())
+    setMaintenanceSummary({
+      title: changed ? '一键修复完成' : '一键修复已检查',
+      items: changed
+        ? [
+          ...(removedInvalidCount > 0 ? [`移除 ${removedInvalidCount} 个失效项目。`] : []),
+          ...(removedDuplicateCount > 0 ? [`合并 ${removedDuplicateCount} 个重复项目。`] : []),
+          ...(removedEmptyCategoryCount > 0 ? [`删除 ${removedEmptyCategoryCount} 个空分类。`] : [])
+        ]
+        : ['没有发现需要自动修复的项目。']
+    })
   }
 
   const importShortcutItems = async (items: ShortcutImportItem[]) => {
@@ -1343,11 +1442,16 @@ function App() {
     }
     const confirmed = await window.electronAPI.confirm(`发现 ${items.length} 个快捷方式，可新增 ${newApps.length} 个项目。是否导入到当前分类？`)
     if (!confirmed) return
+    captureUndoSnapshot('导入快捷方式')
     const updatedApps = [...appsRef.current, ...newApps]
     appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
     await extractIconsForApps(newApps.filter(app => !app.icon))
+    setMaintenanceSummary({
+      title: '快捷方式导入完成',
+      items: [`新增 ${newApps.length} 个项目到当前分类。`]
+    })
     alert(`已导入 ${newApps.length} 个快捷方式。`)
   }
 
@@ -1398,6 +1502,7 @@ function App() {
     )
     if (!confirmed) return
 
+    captureUndoSnapshot('导入快捷方式')
     if (createdCount > 0) {
       setCategories(nextCategories)
       categoriesRef.current = nextCategories
@@ -1426,6 +1531,13 @@ function App() {
       activeCategoryRef.current = nextCategories[0].id
     }
     await extractIconsForApps(newApps.filter(app => !app.icon))
+    setMaintenanceSummary({
+      title: '快捷方式导入完成',
+      items: [
+        `新增 ${newApps.length} 个项目。`,
+        ...(createdCount > 0 ? [`自动创建 ${createdCount} 个分类。`] : [])
+      ]
+    })
     alert(`已导入 ${newApps.length} 个快捷方式。${createdCount > 0 ? `已自动创建 ${createdCount} 个分类。` : ''}`)
   }
 
@@ -2054,6 +2166,27 @@ function App() {
         </span>
       </footer>
 
+      {undoSnapshot && (
+        <div className="glass fixed bottom-16 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-3 rounded-xl border border-emerald-200/80 px-4 py-3 text-sm shadow-xl shadow-slate-900/12 backdrop-blur-md">
+          <div>
+            <div className="font-semibold text-slate-800">可以撤销：{undoSnapshot.label}</div>
+            <div className="mt-0.5 text-xs text-slate-500">将恢复应用、分类和子分类到操作前状态。</div>
+          </div>
+          <button
+            onClick={restoreUndoSnapshot}
+            className="focus-ring cursor-pointer rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-600"
+          >
+            撤销
+          </button>
+          <button
+            onClick={() => setUndoSnapshot(null)}
+            className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+          >
+            关闭
+          </button>
+        </div>
+      )}
+
       {categoryContextMenu && (
         <div
           className="fixed z-[70] w-44 rounded-xl border border-slate-200/80 bg-white/95 p-1.5 shadow-xl shadow-slate-900/15 backdrop-blur-md"
@@ -2167,6 +2300,7 @@ function App() {
           categories={categories}
           healthReport={healthReport}
           iconRefreshProgress={iconRefreshProgress}
+          maintenanceSummary={maintenanceSummary}
           onClose={() => setShowSmartOrganize(false)}
           onRunHealthCheck={handleRunHealthCheck}
           onFixHealthIssues={handleFixHealthIssues}
@@ -2273,8 +2407,10 @@ function App() {
         <UpdateDialog
           version={updateVersion}
           releaseNotes={updateReleaseNotes}
+          error={updateError}
           onConfirm={confirmInstall}
           onDismiss={dismissUpdate}
+          onOpenLog={() => window.electronAPI.openUpdateLog()}
         />
       )}
     </div>

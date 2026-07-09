@@ -19,6 +19,7 @@ interface SmartOrganizeModalProps {
   categories: Category[]
   healthReport: HealthReport | null
   iconRefreshProgress: IconRefreshProgress | null
+  maintenanceSummary: { title: string; items: string[] } | null
   onClose: () => void
   onRunHealthCheck: () => Promise<void>
   onFixHealthIssues: () => Promise<void>
@@ -52,6 +53,7 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
   categories,
   healthReport,
   iconRefreshProgress,
+  maintenanceSummary,
   onClose,
   onRunHealthCheck,
   onFixHealthIssues,
@@ -410,6 +412,24 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
                 ))}
               </div>
             </div>
+
+            {maintenanceSummary && (
+              <div className={`${panelClass} smart-maintenance-summary p-4 border-emerald-200/80 bg-emerald-50/70`}>
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-sm font-bold text-white">
+                    ✓
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-800">{maintenanceSummary.title}</div>
+                    <div className="mt-1 space-y-1">
+                      {maintenanceSummary.items.map(item => (
+                        <div key={item} className="text-xs text-slate-600">{item}</div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {iconRefreshProgress && (
               <div className={`${panelClass} p-4`}>

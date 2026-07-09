@@ -9,6 +9,10 @@ function run(command, args) {
   execFileSync(command, args, { stdio: 'inherit', shell: process.platform === 'win32' })
 }
 
+function read(command, args) {
+  return execFileSync(command, args, { encoding: 'utf8', shell: process.platform === 'win32' })
+}
+
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'))
 }
@@ -25,6 +29,34 @@ if (!validBumps.has(bump)) {
 const root = process.cwd()
 const packagePath = path.join(root, 'package.json')
 const lockPath = path.join(root, 'package-lock.json')
+const releaseRelevantPaths = [
+  'src',
+  'shared',
+  'scripts',
+  'build',
+  'electron-builder.yml',
+  'package.json',
+  'package-lock.json',
+  'tsconfig.json',
+  'tsconfig.main.json',
+  'vite.config.ts',
+  'tailwind.config.js',
+  'postcss.config.js'
+]
+
+const dirtyRelevantFiles = new Set([
+  ...read('git', ['diff', '--name-only', '--', ...releaseRelevantPaths]).trim().split(/\r?\n/).filter(Boolean),
+  ...read('git', ['diff', '--name-only', '--cached', '--', ...releaseRelevantPaths]).trim().split(/\r?\n/).filter(Boolean)
+])
+
+if (dirtyRelevantFiles.size > 0) {
+  console.error('Release blocked: commit release-relevant changes before packaging:')
+  for (const file of [...dirtyRelevantFiles].sort()) {
+    console.error(`  ${file}`)
+  }
+  process.exit(1)
+}
+
 const pkg = readJson(packagePath)
 const current = String(pkg.version || '0.0.0').split('.').map(Number)
 

@@ -471,6 +471,11 @@ body {
   background: rgba(30, 41, 59, 0.9);
 }
 
+.theme-dark .smart-maintenance-summary {
+  background: rgba(6, 78, 59, 0.24) !important;
+  border-color: rgba(52, 211, 153, 0.38) !important;
+}
+
 @media (prefers-color-scheme: dark) {
   .theme-system .smart-organize-modal {
     background:
@@ -544,6 +549,11 @@ body {
 
   .theme-system .smart-progress-track {
     background: rgba(30, 41, 59, 0.9);
+  }
+
+  .theme-system .smart-maintenance-summary {
+    background: rgba(6, 78, 59, 0.24) !important;
+    border-color: rgba(52, 211, 153, 0.38) !important;
   }
 }
 
