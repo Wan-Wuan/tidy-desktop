@@ -6,11 +6,12 @@ const bump = process.argv[2] || 'patch'
 const validBumps = new Set(['patch', 'minor', 'major'])
 
 function run(command, args) {
-  execFileSync(command, args, { stdio: 'inherit', shell: process.platform === 'win32' })
+  const executable = process.platform === 'win32' && command === 'npm' ? 'npm.cmd' : command
+  execFileSync(executable, args, { stdio: 'inherit' })
 }
 
 function read(command, args) {
-  return execFileSync(command, args, { encoding: 'utf8', shell: process.platform === 'win32' })
+  return execFileSync(command, args, { encoding: 'utf8' })
 }
 
 function readJson(file) {
