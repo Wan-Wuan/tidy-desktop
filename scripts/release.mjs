@@ -6,8 +6,14 @@ const bump = process.argv[2] || 'patch'
 const validBumps = new Set(['patch', 'minor', 'major'])
 
 function run(command, args) {
-  const executable = process.platform === 'win32' && command === 'npm' ? 'npm.cmd' : command
-  execFileSync(executable, args, { stdio: 'inherit' })
+  if (process.platform === 'win32' && command === 'npm') {
+    const npmScript = path.join(path.dirname(process.execPath), 'npm.ps1')
+    execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', npmScript, ...args], {
+      stdio: 'inherit'
+    })
+    return
+  }
+  execFileSync(command, args, { stdio: 'inherit' })
 }
 
 function read(command, args) {
