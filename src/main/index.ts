@@ -1,6 +1,6 @@
 import { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen, dialog, shell, ipcMain } from 'electron'
 import path from 'path'
-import type { UiCommand } from '../shared/types'
+import type { Config, UiCommand } from '../shared/types'
 import { ensureDataDir, readJsonFile, getDefaultConfig, CONFIG_FILE } from './config'
 import { registerAppHandlers } from './handlers/appHandlers'
 import { registerFileHandlers } from './handlers/fileHandlers'
@@ -14,9 +14,13 @@ const mainWindowRef: { current: BrowserWindow | null } = { current: null }
 const searchWindowRef: { current: BrowserWindow | null } = { current: null }
 let trayRef: Tray | null = null
 let singleInstancePromptOpen = false
+let searchWindowShouldShow = false
+let shortcutRetryTimer: NodeJS.Timeout | null = null
+const pendingSearchReveal = new WeakSet<BrowserWindow>()
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 const SEARCH_WINDOW_WIDTH = 600
 const SEARCH_WINDOW_EMPTY_HEIGHT = 100
+const SHORTCUT_RETRY_DELAY_MS = 1200
 
 function getAppIcon() {
   return nativeImage.createFromPath(path.join(__dirname, '../../../build/icon-256.png'))
@@ -153,30 +157,37 @@ function showMainWindow(showRunningPrompt = false) {
 function toggleSearchWindow() {
   const sw = searchWindowRef.current
   if (sw && !sw.isDestroyed()) {
-    if (sw.isVisible()) {
+    if (sw.isVisible() || searchWindowShouldShow) {
+      searchWindowShouldShow = false
       sw.hide()
     } else {
+      searchWindowShouldShow = true
       showSearchWindow(sw)
     }
     return
   }
+  searchWindowShouldShow = true
   createSearchWindow(true)
 }
 
 function showSearchWindow(win: BrowserWindow) {
-  if (win.isDestroyed()) return
-  moveSearchWindowToCursorDisplay(win)
-  win.show()
-  win.focus()
-  const resetSearch = () => {
-    if (!win.isDestroyed()) {
-      win.webContents.send('reset-search')
-    }
+  if (win.isDestroyed() || !searchWindowShouldShow) return
+
+  const reveal = () => {
+    pendingSearchReveal.delete(win)
+    if (win.isDestroyed() || !searchWindowShouldShow) return
+    moveSearchWindowToCursorDisplay(win)
+    win.show()
+    win.focus()
+    win.webContents.send('reset-search')
   }
+
   if (win.webContents.isLoading()) {
-    win.webContents.once('did-finish-load', resetSearch)
+    if (pendingSearchReveal.has(win)) return
+    pendingSearchReveal.add(win)
+    win.webContents.once('did-finish-load', reveal)
   } else {
-    resetSearch()
+    reveal()
   }
 }
 
@@ -217,9 +228,17 @@ function createSearchWindow(showOnReady = true) {
   }
 
   win.once('ready-to-show', () => {
-    if (showOnReady) {
+    if (showOnReady && searchWindowShouldShow) {
       showSearchWindow(win)
     }
+  })
+
+  win.on('show', () => {
+    searchWindowShouldShow = true
+  })
+
+  win.on('hide', () => {
+    searchWindowShouldShow = false
   })
 
   win.on('blur', () => {
@@ -238,6 +257,8 @@ function createSearchWindow(showOnReady = true) {
   })
 
   win.on('closed', () => {
+    pendingSearchReveal.delete(win)
+    searchWindowShouldShow = false
     searchWindowRef.current = null
   })
 
@@ -327,36 +348,63 @@ function createTray() {
   })
 }
 
-function registerGlobalShortcut() {
-  const config = readJsonFile(CONFIG_FILE, {
-    hotkey: 'Alt+Space',
-    searchHotkey: 'Ctrl+K'
-  })
+function bindGlobalShortcuts(config: Pick<Config, 'hotkey' | 'searchHotkey'>): boolean {
   const hotkey = config.hotkey || 'Alt+Space'
   const searchHotkey = config.searchHotkey || 'Ctrl+K'
-
   globalShortcut.unregisterAll()
 
-  const mainRegistered = globalShortcut.register(hotkey, () => {
-    const w = mainWindowRef.current
-    if (w) {
-      if (w.isVisible()) {
-        w.hide()
-      } else {
-        showMainWindow()
+  if (hotkey.toLowerCase() === searchHotkey.toLowerCase()) return false
+
+  try {
+    const mainRegistered = globalShortcut.register(hotkey, () => {
+      const w = mainWindowRef.current
+      if (w) {
+        if (w.isVisible()) {
+          w.hide()
+        } else {
+          showMainWindow()
+        }
       }
-    }
-  })
-  if (!mainRegistered) {
-    console.warn(`Failed to register main window hotkey: ${hotkey}`)
+    })
+    const searchRegistered = mainRegistered && globalShortcut.register(searchHotkey, () => {
+      toggleSearchWindow()
+    })
+    if (mainRegistered && searchRegistered) return true
+  } catch (error) {
+    console.error('Failed to register global shortcuts:', error)
   }
 
-  const searchRegistered = globalShortcut.register(searchHotkey, () => {
-    toggleSearchWindow()
-  })
-  if (!searchRegistered) {
-    console.warn(`Failed to register search hotkey: ${searchHotkey}`)
+  globalShortcut.unregisterAll()
+  return false
+}
+
+function applyGlobalShortcuts(nextConfig: Config): boolean {
+  if (shortcutRetryTimer) {
+    clearTimeout(shortcutRetryTimer)
+    shortcutRetryTimer = null
   }
+  const previousConfig = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
+  if (bindGlobalShortcuts(nextConfig)) return true
+
+  bindGlobalShortcuts(previousConfig)
+  return false
+}
+
+function registerGlobalShortcut() {
+  const config = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
+  if (bindGlobalShortcuts(config)) return
+
+  console.warn('Initial global shortcut registration failed; retrying after startup settles')
+  shortcutRetryTimer = setTimeout(() => {
+    shortcutRetryTimer = null
+    const latestConfig = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
+    if (bindGlobalShortcuts(latestConfig)) return
+
+    const defaults = getDefaultConfig()
+    if (!bindGlobalShortcuts(defaults)) {
+      console.error('Failed to register configured and default global shortcuts')
+    }
+  }, SHORTCUT_RETRY_DELAY_MS)
 }
 
 if (!hasSingleInstanceLock) {
@@ -378,7 +426,7 @@ app.on('ready', () => {
 
   // Register all IPC handlers
   registerAppHandlers()
-  registerFileHandlers()
+  registerFileHandlers(applyGlobalShortcuts)
   registerIconHandlers()
   registerSystemHandlers()
   registerUiCommandHandler()
@@ -388,7 +436,7 @@ app.on('ready', () => {
   createWindow()
   createTray()
   registerGlobalShortcut()
-  setTimeout(prewarmSearchWindow, 800)
+  setTimeout(prewarmSearchWindow, 350)
 })
 
 app.on('window-all-closed', () => {
@@ -406,6 +454,10 @@ app.on('activate', () => {
 })
 
 app.on('will-quit', () => {
+  if (shortcutRetryTimer) {
+    clearTimeout(shortcutRetryTimer)
+    shortcutRetryTimer = null
+  }
   globalShortcut.unregisterAll()
   trayRef?.destroy()
   trayRef = null

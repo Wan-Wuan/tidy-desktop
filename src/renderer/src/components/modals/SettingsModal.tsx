@@ -29,7 +29,7 @@ export const SettingsModal = React.memo(function SettingsModal({
   config: Config
   currentVersion: string
   onClose: () => void
-  onSave: (config: Config) => void
+  onSave: (config: Config) => Promise<boolean>
   updateState?: string
   updateVersion?: string
   updateError?: string
@@ -63,7 +63,7 @@ export const SettingsModal = React.memo(function SettingsModal({
     window.electronAPI.getAutoStart().then(setAutoStart)
   }, [])
 
-  const saveConfig = (overrides: Partial<Config> = {}) => {
+  const saveConfig = async (overrides: Partial<Config> = {}) => {
     const newConfig: Config = {
       ...config,
       hotkey: overrides.hotkey ?? hotkey,
@@ -73,7 +73,20 @@ export const SettingsModal = React.memo(function SettingsModal({
       ui: overrides.ui ?? ui,
       defaultEngine: overrides.defaultEngine ?? defaultEngine
     }
-    onSave(newConfig)
+    const success = await onSave(newConfig)
+    if (!success) {
+      setHotkey(config.hotkey)
+      setSearchHotkey(config.searchHotkey || 'Ctrl+K')
+      setAutoStart(config.autoStart === true)
+      setDefaultEngine(config.defaultEngine || 'b')
+      setUi(config.ui || {
+        gridColumns: 6, cardSize: 'medium', showIcon: true, showName: true, borderRadius: 8, theme: 'aurora'
+      })
+      if (overrides.autoStart !== undefined) {
+        await window.electronAPI.setAutoStart(config.autoStart === true)
+      }
+    }
+    return success
   }
 
   const saveConfigRef = useRef(saveConfig)
@@ -81,7 +94,7 @@ export const SettingsModal = React.memo(function SettingsModal({
 
   useEffect(() => {
     if (!recording) return
-    const handler = (e: KeyboardEvent) => {
+    const handler = async (e: KeyboardEvent) => {
       e.preventDefault()
       e.stopPropagation()
       const parts: string[] = []
@@ -95,10 +108,10 @@ export const SettingsModal = React.memo(function SettingsModal({
         const combo = parts.join('+')
         if (recording === 'main') {
           setHotkey(combo)
-          saveConfigRef.current({ hotkey: combo })
+          await saveConfigRef.current({ hotkey: combo })
         } else {
           setSearchHotkey(combo)
-          saveConfigRef.current({ searchHotkey: combo })
+          await saveConfigRef.current({ searchHotkey: combo })
         }
         setRecording(null)
       }

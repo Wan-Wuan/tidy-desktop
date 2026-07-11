@@ -1,21 +1,21 @@
 import { ipcMain, BrowserWindow, dialog, screen, app, nativeImage, shell } from 'electron'
-import { execFileSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
-import { APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, CONFIG_DIR, ICONS_DIR, getDefaultConfig, readJsonFile, writeJsonFile } from '../config'
+import { APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, CONFIG_DIR, ICONS_DIR, getDefaultConfig, readJsonFile, writeJsonFilesAtomically } from '../config'
 import type { AppsData, CategoriesData, Config, ShortcutImportItem } from '../../shared/types'
 import { sanitizeAppsData, sanitizeCategoriesData, sanitizeConfig } from '../validation'
 
 let mainWindowRef: { current: BrowserWindow | null } = { current: null }
 let searchWindowRef: { current: BrowserWindow | null } = { current: null }
+let shortcutScanCache: { createdAt: number; items: ShortcutImportItem[] } | null = null
+
+const SHORTCUT_SCAN_LIMIT = 500
+const SHORTCUT_RESULT_LIMIT = 300
+const SHORTCUT_CACHE_MS = 60_000
 
 export function setWindowRefs(main: { current: BrowserWindow | null }, search: { current: BrowserWindow | null }) {
   mainWindowRef = main
   searchWindowRef = search
-}
-
-function escapePsString(value: string): string {
-  return value.replace(/'/g, "''")
 }
 
 function expandWindowsEnvPath(value: string): string {
@@ -26,40 +26,29 @@ function expandWindowsEnvPath(value: string): string {
 
 function resolveShortcutTarget(filePath: string): string {
   try {
-    const escapedPath = escapePsString(filePath)
-    const result = execFileSync(
-      'powershell',
-      [
-        '-NoProfile',
-        '-Command',
-        `$sh = New-Object -ComObject WScript.Shell; $s = $sh.CreateShortcut('${escapedPath}'); [Console]::OutputEncoding=[Text.Encoding]::UTF8; $s.TargetPath`
-      ],
-      { encoding: 'utf8', windowsHide: true, timeout: 2500 }
-    ).trim()
-    return expandWindowsEnvPath(result)
+    const details = shell.readShortcutLink(filePath)
+    return expandWindowsEnvPath(details.target || '')
   } catch {
     return ''
   }
 }
 
-async function createShortcutImportItem(filePath: string, source: ShortcutImportItem['source']): Promise<ShortcutImportItem | null> {
-  const targetPath = resolveShortcutTarget(filePath)
-  if (!targetPath || !fs.existsSync(targetPath)) return null
-  const stat = fs.statSync(targetPath)
-  const type = stat.isDirectory() ? 'folder' : 'app'
-  let icon = ''
+function createShortcutImportItem(filePath: string, source: ShortcutImportItem['source']): ShortcutImportItem | null {
   try {
-    const fileIcon = await app.getFileIcon(filePath, { size: 'large' })
-    const png = fileIcon.toPNG()
-    if (png.length > 100) icon = `data:image/png;base64,${png.toString('base64')}`
-  } catch { /* ignore */ }
-  return {
-    name: path.basename(filePath, path.extname(filePath)),
-    path: filePath,
-    targetPath,
-    icon,
-    type,
-    source
+    const targetPath = resolveShortcutTarget(filePath)
+    if (!targetPath || !fs.existsSync(targetPath)) return null
+    const stat = fs.statSync(targetPath)
+    const type = stat.isDirectory() ? 'folder' : 'app'
+    return {
+      name: path.basename(filePath, path.extname(filePath)),
+      path: filePath,
+      targetPath,
+      icon: '',
+      type,
+      source
+    }
+  } catch {
+    return null
   }
 }
 
@@ -259,9 +248,14 @@ export function registerSystemHandlers() {
       if (backup.config && !nextConfig) return { success: false, error: 'Invalid config data' }
       if (backup.apps && !nextApps) return { success: false, error: 'Invalid apps data' }
       if (backup.categories && !nextCategories) return { success: false, error: 'Invalid categories data' }
-      if (nextConfig) writeJsonFile(CONFIG_FILE, nextConfig)
-      if (nextApps) writeJsonFile(APPS_FILE, nextApps)
-      if (nextCategories) writeJsonFile(CATEGORIES_FILE, nextCategories)
+      const entries = [
+        ...(nextConfig ? [{ filePath: CONFIG_FILE, data: nextConfig }] : []),
+        ...(nextApps ? [{ filePath: APPS_FILE, data: nextApps }] : []),
+        ...(nextCategories ? [{ filePath: CATEGORIES_FILE, data: nextCategories }] : [])
+      ]
+      if (!writeJsonFilesAtomically(entries)) {
+        return { success: false, error: 'Backup could not be written safely' }
+      }
       return { success: true, filePath: result.filePaths[0] }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) }
@@ -316,25 +310,46 @@ export function registerSystemHandlers() {
   })
 
   ipcMain.handle('scan-shortcuts', async () => {
-    const seen = new Set<string>()
-    const files = getShortcutRoots().flatMap(root => collectShortcutFiles(root.path).map(file => ({ file, source: root.source })))
-    const uniqueFiles = files.filter(item => {
-      const key = item.file.toLowerCase()
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-    const results = await Promise.all(uniqueFiles.map(item => createShortcutImportItem(item.file, item.source)))
+    if (shortcutScanCache && Date.now() - shortcutScanCache.createdAt < SHORTCUT_CACHE_MS) {
+      return shortcutScanCache.items
+    }
+
+    const seenRoots = new Set<string>()
+    const seenFiles = new Set<string>()
+    const files: Array<{ file: string; source: ShortcutImportItem['source'] }> = []
+    for (const root of getShortcutRoots()) {
+      const rootKey = path.resolve(root.path).toLowerCase()
+      if (seenRoots.has(rootKey)) continue
+      seenRoots.add(rootKey)
+      for (const file of collectShortcutFiles(root.path, SHORTCUT_SCAN_LIMIT)) {
+        const fileKey = file.toLowerCase()
+        if (seenFiles.has(fileKey)) continue
+        seenFiles.add(fileKey)
+        files.push({ file, source: root.source })
+        if (files.length >= SHORTCUT_SCAN_LIMIT) break
+      }
+      if (files.length >= SHORTCUT_SCAN_LIMIT) break
+    }
+
+    const results: ShortcutImportItem[] = []
+    for (let index = 0; index < files.length && results.length < SHORTCUT_RESULT_LIMIT; index++) {
+      const entry = files[index]
+      const item = createShortcutImportItem(entry.file, entry.source)
+      if (item) results.push(item)
+      if (index > 0 && index % 25 === 0) await new Promise<void>(resolve => setImmediate(resolve))
+    }
+
     const uniqueTargets = new Set<string>()
-    return results
-      .filter((item): item is ShortcutImportItem => !!item)
+    const uniqueResults = results
       .filter(item => {
         const key = item.targetPath.toLowerCase()
         if (uniqueTargets.has(key)) return false
         uniqueTargets.add(key)
         return true
       })
-      .slice(0, 300)
+      .slice(0, SHORTCUT_RESULT_LIMIT)
+    shortcutScanCache = { createdAt: Date.now(), items: uniqueResults }
+    return uniqueResults
   })
 
   ipcMain.handle('open-data-directory', async () => {

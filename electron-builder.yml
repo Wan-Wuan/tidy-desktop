@@ -15,10 +15,6 @@ win:
     - target: nsis
       arch:
         - x64
-  sign: null
-  signAndEditExecutable: false
-  verifyUpdateCodeSignature: false
-  publisherName: null
 nsis:
   artifactName: ${productName}-Setup-${version}.${ext}
   include: build/installer.nsh

@@ -3,7 +3,7 @@ import { readJsonFile, writeJsonFile, APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, g
 import type { Config, AppsData, CategoriesData } from '../../shared/types'
 import { sanitizeAppsData, sanitizeCategoriesData, sanitizeConfig } from '../validation'
 
-export function registerFileHandlers() {
+export function registerFileHandlers(applyGlobalShortcuts?: (config: Config) => boolean) {
   ipcMain.handle('get-config', () => {
     const defaults = getDefaultConfig()
     const config: Config = readJsonFile<Config>(CONFIG_FILE, defaults)
@@ -32,9 +32,14 @@ export function registerFileHandlers() {
   })
 
   ipcMain.handle('save-config', (_, config: unknown) => {
-    const sanitized = sanitizeConfig(config, getDefaultConfig())
+    const defaults = getDefaultConfig()
+    const sanitized = sanitizeConfig(config, defaults)
     if (!sanitized) return false
+    const previous = readJsonFile<Config>(CONFIG_FILE, defaults)
+    const hotkeysChanged = previous.hotkey !== sanitized.hotkey || previous.searchHotkey !== sanitized.searchHotkey
+    if (hotkeysChanged && applyGlobalShortcuts && !applyGlobalShortcuts(sanitized)) return false
     const success = writeJsonFile(CONFIG_FILE, sanitized)
+    if (!success && hotkeysChanged && applyGlobalShortcuts) applyGlobalShortcuts(previous)
     return success
   })
 

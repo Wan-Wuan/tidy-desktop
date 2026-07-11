@@ -131,6 +131,18 @@ export function registerAppHandlers() {
 
   ipcMain.handle('run-quick-action', async (_, command: string) => {
     try {
+      if (command === 'shutdown' || command === 'restart') {
+        const actionLabel = command === 'shutdown' ? '关机' : '重启'
+        const result = await dialog.showMessageBox({
+          type: 'warning',
+          buttons: ['取消', `确认${actionLabel}`],
+          defaultId: 0,
+          cancelId: 0,
+          message: `确定要立即${actionLabel}电脑吗？`,
+          detail: '未保存的工作可能会丢失。'
+        })
+        if (result.response !== 1) return false
+      }
       switch (command) {
         case 'shutdown':
           spawn('shutdown.exe', ['/s', '/t', '0'], { detached: true, stdio: 'ignore', windowsHide: true }).unref()

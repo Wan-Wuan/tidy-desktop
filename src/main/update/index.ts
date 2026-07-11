@@ -4,6 +4,7 @@ import path from 'path'
 import { compareVersions, fetchJson, downloadWithRetry, cleanupFile } from './network'
 import { runInstaller, getUpdateFilePath } from './installer'
 import { UpdateInfo } from './types'
+import { hashFileSha256, parseSha256Digest } from './integrity'
 
 const GITHUB_API = 'https://api.github.com/repos/Wan-Wuan/tidy-desktop/releases/latest'
 
@@ -13,17 +14,20 @@ interface GitHubReleaseAsset {
   name?: string
   browser_download_url?: string
   size?: number
+  digest?: string
 }
 
 interface InstallerAsset {
   downloadUrl: string
   size: number
+  sha256: string
 }
 
 interface DownloadCacheMeta {
   version: string
   downloadUrl: string
   size: number
+  sha256: string
 }
 
 const UPDATE_META_FILE = path.join(app.getPath('temp'), 'tidy-desktop-update.json')
@@ -49,9 +53,12 @@ function getInstallerAsset(release: { assets?: GitHubReleaseAsset[] }): Installe
     isTrustedReleaseAssetUrl(asset.browser_download_url)
   )
   if (!exeAsset?.browser_download_url) return null
+  const sha256 = parseSha256Digest(exeAsset.digest)
+  if (!sha256) return null
   return {
     downloadUrl: exeAsset.browser_download_url,
-    size: exeAsset.size || 0
+    size: exeAsset.size || 0,
+    sha256
   }
 }
 
@@ -86,15 +93,17 @@ export function cleanupInstalledUpdateCache(): void {
   }
 }
 
-function hasCachedInstaller(version: string, asset: InstallerAsset): boolean {
+async function hasCachedInstaller(version: string, asset: InstallerAsset): Promise<boolean> {
   try {
     const meta = readDownloadCacheMeta()
     if (!meta) return false
     if (meta.version !== version || meta.downloadUrl !== asset.downloadUrl) return false
     if (asset.size > 0 && meta.size !== asset.size) return false
+    if (meta.sha256 !== asset.sha256) return false
 
     const stat = fs.statSync(getUpdateFilePath())
-    return stat.isFile() && (asset.size <= 0 || stat.size === asset.size)
+    if (!stat.isFile() || (asset.size > 0 && stat.size !== asset.size)) return false
+    return await hashFileSha256(getUpdateFilePath()) === asset.sha256
   } catch {
     return false
   }
@@ -114,12 +123,12 @@ export function registerUpdateHandlers() {
       const installerAsset = getInstallerAsset(release)
 
       if (!installerAsset) {
-        return { available: false }
+        return { available: false, error: 'Release installer is missing a trusted SHA-256 digest' }
       }
 
       return {
         available: true,
-        downloaded: hasCachedInstaller(latestVersion, installerAsset),
+        downloaded: await hasCachedInstaller(latestVersion, installerAsset),
         version: latestVersion,
         downloadUrl: installerAsset.downloadUrl,
         releaseNotes: release.body || ''
@@ -146,7 +155,7 @@ export function registerUpdateHandlers() {
       const sender = event.sender
       const updateFile = getUpdateFilePath()
 
-      if (hasCachedInstaller(version, installerAsset)) {
+      if (await hasCachedInstaller(version, installerAsset)) {
         if (!sender.isDestroyed()) {
           sender.send('update-progress', {
             percent: 100,
@@ -157,15 +166,22 @@ export function registerUpdateHandlers() {
         return { success: true, filePath: updateFile }
       }
 
+      cleanupDownloadCache()
+
       await downloadWithRetry(installerAsset.downloadUrl, updateFile, (progress) => {
         if (!sender.isDestroyed()) {
           sender.send('update-progress', progress)
         }
       })
+      const actualSha256 = await hashFileSha256(updateFile)
+      if (actualSha256 !== installerAsset.sha256) {
+        throw new Error('Downloaded installer failed SHA-256 verification')
+      }
       writeDownloadCacheMeta({
         version,
         downloadUrl: installerAsset.downloadUrl,
-        size: installerAsset.size
+        size: installerAsset.size,
+        sha256: installerAsset.sha256
       })
 
       return { success: true, filePath: updateFile }

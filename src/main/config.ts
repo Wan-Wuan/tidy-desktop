@@ -2,6 +2,8 @@ import { app } from 'electron'
 import path from 'path'
 import fs from 'fs'
 
+export { writeJsonFilesAtomically } from './jsonTransaction'
+
 export const CONFIG_DIR = path.join(app.getPath('userData'), 'data')
 export const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json')
 export const APPS_FILE = path.join(CONFIG_DIR, 'apps.json')

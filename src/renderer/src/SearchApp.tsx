@@ -427,17 +427,30 @@ function SearchApp() {
 
   const handleOpenItem = async (app: SearchResult) => {
     isActiveRef.current = true
-    window.electronAPI.hideSearchWindow()
-    resetAll()
-    if (app.type === 'action' && app.uiCommand) {
+    if (app.type === 'action' && app.actionCommand) {
+      const completed = await window.electronAPI.runQuickAction(app.actionCommand)
+      if (!completed) {
+        isActiveRef.current = false
+        inputRef.current?.focus()
+        return
+      }
+      window.electronAPI.hideSearchWindow()
+      resetAll()
+    } else if (app.type === 'action' && app.uiCommand) {
+      window.electronAPI.hideSearchWindow()
+      resetAll()
       await window.electronAPI.runUiCommand(app.uiCommand)
-    } else if (app.type === 'action' && app.actionCommand) {
-      await window.electronAPI.runQuickAction(app.actionCommand)
     } else if (app.type === 'folder') {
+      window.electronAPI.hideSearchWindow()
+      resetAll()
       await window.electronAPI.openFolder(app.path)
     } else if (app.type === 'steam') {
+      window.electronAPI.hideSearchWindow()
+      resetAll()
       await window.electronAPI.openSteam(app.path)
     } else {
+      window.electronAPI.hideSearchWindow()
+      resetAll()
       await window.electronAPI.openApp(app.path)
     }
     await recordLaunch(app)

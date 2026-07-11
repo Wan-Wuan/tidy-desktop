@@ -55,7 +55,7 @@ declare global {
       classifyPaths: (filePaths: string[]) => Promise<PathInfo[]>
       validateApps: (apps: { id: string; path: string; type?: string }[]) => Promise<{ id: string; path: string; exists: boolean }[]>
       exportBackup: () => Promise<{ success: boolean; filePath?: string }>
-      importBackup: () => Promise<{ success: boolean; filePath?: string }>
+      importBackup: () => Promise<{ success: boolean; filePath?: string; error?: string }>
       exportDiagnostics: () => Promise<DiagnosticExportResult>
       scanShortcuts: () => Promise<ShortcutImportItem[]>
       openDataDirectory: () => Promise<boolean>

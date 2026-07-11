@@ -3,8 +3,15 @@ import { AppItem, Category, Subcategory, Config, ShortcutImportItem, UiCommand }
 import { isFolderPath, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { hasDisplayableIcon, needsIconUpdate } from './utils/iconUtils'
+import { deduplicateAppsByPath, filterStillEmptyCategories, findEmptyCategories } from './utils/maintenance'
 import { useUpdate } from './hooks/useUpdate'
 import { UpdateButton, UpdateDialog } from './components/UpdateButton'
+import {
+  CategoryContextMenuOverlay,
+  CategoryEditDialogOverlay,
+  UndoToast
+} from './components/CategoryOverlays'
+import type { CategoryContextMenu, CategoryContextMenuTarget, CategoryEditDialog } from './components/CategoryOverlays'
 import {
   AddAppModal,
   EditAppModal,
@@ -16,16 +23,6 @@ import type { HealthReport, IconRefreshProgress } from './components/modals'
 
 
 type DroppedFile = File & { path?: string }
-type CategoryContextMenuTarget =
-  | { type: 'all' }
-  | { type: 'category'; id: string }
-  | { type: 'subcategory'; id: string }
-type CategoryContextMenu = CategoryContextMenuTarget & { x: number; y: number }
-type CategoryEditDialog =
-  | { type: 'create-category'; title: string; name: string; icon: string }
-  | { type: 'rename-category'; title: string; id: string; name: string; icon: string }
-  | { type: 'add-subcategory'; title: string; parentId: string; name: string; icon: string }
-  | { type: 'rename-subcategory'; title: string; id: string; name: string; icon: string }
 type MaintenanceSummary = { title: string; items: string[] }
 type UndoSnapshot = {
   label: string
@@ -35,20 +32,8 @@ type UndoSnapshot = {
   activeCategory: string | null
 }
 
-const CATEGORY_ICON_OPTIONS = ['📁', '💼', '🧰', '🎮', '📚', '🖼️', '🎵', '⭐', '🔧', '🌐', '📦', '⚙️']
-const SUBCATEGORY_ICON_OPTIONS = ['•', '◦', '▪', '▸', '✓', '★', '◇', '◆', 'A', '1', '📌', '🔖']
-
 function appNeedsIconUpdate(app: AppItem): boolean {
   return app.type !== 'folder' && needsIconUpdate(app.icon)
-}
-
-function getCategoryIconOptions(dialog: CategoryEditDialog) {
-  const baseOptions = dialog.type === 'add-subcategory' || dialog.type === 'rename-subcategory'
-    ? SUBCATEGORY_ICON_OPTIONS
-    : CATEGORY_ICON_OPTIONS
-  return dialog.icon && !baseOptions.includes(dialog.icon)
-    ? [dialog.icon, ...baseOptions]
-    : baseOptions
 }
 
 function App() {
@@ -97,6 +82,30 @@ function App() {
   const rightDragRef = useRef<{ appId: string; active: boolean; startX: number; startY: number } | null>(null)
   const dragGhostRef = useRef<HTMLDivElement | null>(null)
   const iconBackfillTimerRef = useRef<number | null>(null)
+  const maintenanceSummaryTimerRef = useRef<number | null>(null)
+  const shortcutImportInFlightRef = useRef(false)
+
+  const showMaintenanceSummary = useCallback((summary: MaintenanceSummary, autoDismiss = true) => {
+    if (maintenanceSummaryTimerRef.current) {
+      window.clearTimeout(maintenanceSummaryTimerRef.current)
+      maintenanceSummaryTimerRef.current = null
+    }
+    setMaintenanceSummary(summary)
+    if (autoDismiss) {
+      maintenanceSummaryTimerRef.current = window.setTimeout(() => {
+        maintenanceSummaryTimerRef.current = null
+        setMaintenanceSummary(null)
+      }, 10_000)
+    }
+  }, [])
+
+  const clearMaintenanceSummary = useCallback(() => {
+    if (maintenanceSummaryTimerRef.current) {
+      window.clearTimeout(maintenanceSummaryTimerRef.current)
+      maintenanceSummaryTimerRef.current = null
+    }
+    setMaintenanceSummary(null)
+  }, [])
 
   // 创建跟随鼠标的幽灵卡片（HTML5拖拽和右键拖拽共用）
   const dragGhostRafRef = useRef(0)
@@ -221,6 +230,10 @@ function App() {
       if (iconBackfillTimerRef.current) {
         window.clearTimeout(iconBackfillTimerRef.current)
         iconBackfillTimerRef.current = null
+      }
+      if (maintenanceSummaryTimerRef.current) {
+        window.clearTimeout(maintenanceSummaryTimerRef.current)
+        maintenanceSummaryTimerRef.current = null
       }
     }
   }, [])
@@ -821,8 +834,13 @@ function App() {
   }
 
   const handleUpdateConfig = async (newConfig: Config) => {
+    const success = await window.electronAPI.saveConfig(newConfig)
+    if (!success) {
+      alert('配置保存失败。若刚修改了快捷键，它可能已被其他程序占用；原配置已恢复。')
+      return false
+    }
     setConfig(newConfig)
-    await window.electronAPI.saveConfig(newConfig)
+    return true
   }
 
   const handleAddCategory = async (name: string, icon: string) => {
@@ -1185,7 +1203,7 @@ function App() {
     setApps(refreshed)
     await window.electronAPI.saveApps({ apps: refreshed })
     setIconRefreshProgress(null)
-    setMaintenanceSummary({
+    showMaintenanceSummary({
       title: '图标刷新完成',
       items: [
         `已清理 ${cleared.count} 个图标缓存。`,
@@ -1218,7 +1236,7 @@ function App() {
     appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
-    setMaintenanceSummary({
+    showMaintenanceSummary({
       title: '自动分类完成',
       items: [changedCount > 0 ? `${changedCount} 个项目已重新归类。` : '没有项目需要调整分类。']
     })
@@ -1243,7 +1261,7 @@ function App() {
     appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
-    setMaintenanceSummary({
+    showMaintenanceSummary({
       title: '失效项已清理',
       items: [`已移除 ${invalidIds.size} 个失效项目。`]
     })
@@ -1256,7 +1274,7 @@ function App() {
     appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
-    setMaintenanceSummary({
+    showMaintenanceSummary({
       title: '隐藏项已恢复',
       items: [hiddenCount > 0 ? `已恢复 ${hiddenCount} 个隐藏项目。` : '没有需要恢复的隐藏项目。']
     })
@@ -1291,13 +1309,12 @@ function App() {
       const key = app.path.toLowerCase()
       pathCounts.set(key, (pathCounts.get(key) || 0) + 1)
     }
-    const usedCategoryIds = new Set(currentApps.filter(app => !app.hidden && app.categoryId).map(app => app.categoryId))
     return {
       total: currentApps.length,
       invalidPaths: currentApps.filter(app => invalidIds.has(app.id)),
       missingIcons: currentApps.filter(appNeedsIconUpdate),
       duplicatePaths: currentApps.filter(app => pathCounts.get(app.path.toLowerCase())! > 1),
-      emptyCategories: categoriesRef.current.filter(cat => !usedCategoryIds.has(cat.id)),
+      emptyCategories: findEmptyCategories(currentApps, categoriesRef.current),
       hiddenCount: currentApps.filter(app => app.hidden).length
     }
   }
@@ -1327,7 +1344,7 @@ function App() {
       window.electronAPI.saveCategories({ categories: undoSnapshot.categories, subcategories: undoSnapshot.subcategories })
     ])
     setUndoSnapshot(null)
-    setMaintenanceSummary({
+    showMaintenanceSummary({
       title: `已撤销：${undoSnapshot.label}`,
       items: ['应用、分类和子分类已恢复到操作前状态。']
     })
@@ -1363,23 +1380,18 @@ function App() {
       const confirmed = await window.electronAPI.confirm('检测到重复路径，是否只保留每个路径的第一个项目？')
       if (confirmed) {
         ensureUndoSnapshot()
-        const seen = new Set<string>()
-        const beforeCount = updatedApps.length
-        updatedApps = updatedApps.filter(app => {
-          const key = app.path.toLowerCase()
-          if (seen.has(key)) return false
-          seen.add(key)
-          return true
-        })
-        removedDuplicateCount = beforeCount - updatedApps.length
+        const deduplicated = deduplicateAppsByPath(updatedApps)
+        updatedApps = deduplicated.apps
+        removedDuplicateCount = deduplicated.removedCount
       }
     }
     if (report.emptyCategories.length > 0) {
-      const confirmed = await window.electronAPI.confirm(`检测到 ${report.emptyCategories.length} 个空分类，是否删除这些分类？`)
+      const emptyCategories = filterStillEmptyCategories(report.emptyCategories, updatedApps)
+      const confirmed = emptyCategories.length > 0 && await window.electronAPI.confirm(`检测到 ${emptyCategories.length} 个空分类，是否删除这些分类？`)
       if (confirmed) {
         ensureUndoSnapshot()
-        removedEmptyCategoryCount = report.emptyCategories.length
-        const emptyIds = new Set(report.emptyCategories.map(category => category.id))
+        removedEmptyCategoryCount = emptyCategories.length
+        const emptyIds = new Set(emptyCategories.map(category => category.id))
         const updatedCategories = categoriesRef.current.filter(category => !emptyIds.has(category.id))
         const updatedSubcategories = subcategories.filter(subcategory => !subcategory.parentId || !emptyIds.has(subcategory.parentId))
         categoriesRef.current = updatedCategories
@@ -1398,7 +1410,7 @@ function App() {
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
     setHealthReport(await buildHealthReport())
-    setMaintenanceSummary({
+    showMaintenanceSummary({
       title: changed ? '一键修复完成' : '一键修复已检查',
       items: changed
         ? [
@@ -1410,55 +1422,10 @@ function App() {
     })
   }
 
-  const importShortcutItems = async (items: ShortcutImportItem[]) => {
+  const importShortcutItemsWithAutoCategories = async (items: ShortcutImportItem[]): Promise<boolean> => {
     if (items.length === 0) {
       alert('没有发现可导入的桌面或开始菜单快捷方式。')
-      return
-    }
-    if (categories.length === 0) {
-      alert('请先创建一个分类，然后再导入快捷方式。')
-      return
-    }
-    const existingPaths = new Set(appsRef.current.map(app => app.path.toLowerCase()))
-    const targetCategory = activeCategoryRef.current || categories[0].id
-    const newApps = items
-      .filter(item => !existingPaths.has(item.targetPath.toLowerCase()))
-      .slice(0, 120)
-      .map(item => ({
-        id: Date.now().toString() + Math.random().toString(36).slice(2),
-        name: item.name,
-        path: item.targetPath,
-        icon: item.icon,
-        categoryId: targetCategory,
-        subcategoryId: null,
-        pinyin: getPinyin(item.name),
-        firstLetter: getFirstLetter(item.name),
-        type: item.type,
-        aliases: []
-      } satisfies AppItem))
-    if (newApps.length === 0) {
-      alert('扫描到的快捷方式已经在列表中。')
-      return
-    }
-    const confirmed = await window.electronAPI.confirm(`发现 ${items.length} 个快捷方式，可新增 ${newApps.length} 个项目。是否导入到当前分类？`)
-    if (!confirmed) return
-    captureUndoSnapshot('导入快捷方式')
-    const updatedApps = [...appsRef.current, ...newApps]
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
-    await extractIconsForApps(newApps.filter(app => !app.icon))
-    setMaintenanceSummary({
-      title: '快捷方式导入完成',
-      items: [`新增 ${newApps.length} 个项目到当前分类。`]
-    })
-    alert(`已导入 ${newApps.length} 个快捷方式。`)
-  }
-
-  const importShortcutItemsWithAutoCategories = async (items: ShortcutImportItem[]) => {
-    if (items.length === 0) {
-      alert('没有发现可导入的桌面或开始菜单快捷方式。')
-      return
+      return false
     }
 
     const existingPaths = new Set(appsRef.current.map(app => app.path.toLowerCase()))
@@ -1468,7 +1435,7 @@ function App() {
 
     if (importableItems.length === 0) {
       alert('扫描到的快捷方式已经在列表中。')
-      return
+      return false
     }
 
     const sourceMeta: Record<ShortcutImportItem['source'], { name: string; icon: string }> = {
@@ -1500,7 +1467,7 @@ function App() {
       `发现 ${items.length} 个快捷方式，可新增 ${importableItems.length} 个项目。` +
       `${createdCount > 0 ? `将自动创建 ${createdCount} 个分类。` : ''}是否继续导入？`
     )
-    if (!confirmed) return
+    if (!confirmed) return false
 
     captureUndoSnapshot('导入快捷方式')
     if (createdCount > 0) {
@@ -1530,19 +1497,35 @@ function App() {
       setActiveCategory(nextCategories[0].id)
       activeCategoryRef.current = nextCategories[0].id
     }
-    await extractIconsForApps(newApps.filter(app => !app.icon))
-    setMaintenanceSummary({
+    scheduleIconBackfill(newApps.filter(app => !app.icon))
+    showMaintenanceSummary({
       title: '快捷方式导入完成',
       items: [
         `新增 ${newApps.length} 个项目。`,
         ...(createdCount > 0 ? [`自动创建 ${createdCount} 个分类。`] : [])
       ]
     })
-    alert(`已导入 ${newApps.length} 个快捷方式。${createdCount > 0 ? `已自动创建 ${createdCount} 个分类。` : ''}`)
+    return true
   }
 
   const handleImportShortcuts = async () => {
-    await importShortcutItemsWithAutoCategories(await window.electronAPI.scanShortcuts())
+    if (shortcutImportInFlightRef.current) return
+    shortcutImportInFlightRef.current = true
+    showMaintenanceSummary({
+      title: '正在扫描快捷方式',
+      items: ['首次扫描会读取桌面和开始菜单，请稍候。']
+    }, false)
+    try {
+      const imported = await importShortcutItemsWithAutoCategories(await window.electronAPI.scanShortcuts())
+      if (!imported) clearMaintenanceSummary()
+    } catch (error) {
+      showMaintenanceSummary({
+        title: '快捷方式导入失败',
+        items: [error instanceof Error ? error.message : '扫描快捷方式时发生未知错误。']
+      })
+    } finally {
+      shortcutImportInFlightRef.current = false
+    }
   }
 
   const handleExportDiagnostics = async () => {
@@ -1582,8 +1565,8 @@ function App() {
         await handleRunHealthCheck()
         break
       case 'import-shortcuts':
-        await handleImportShortcuts()
         setShowSmartOrganize(true)
+        await handleImportShortcuts()
         await handleRunHealthCheck()
         break
       case 'restore-hidden':
@@ -2167,131 +2150,43 @@ function App() {
       </footer>
 
       {undoSnapshot && (
-        <div className="glass fixed bottom-16 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-3 rounded-xl border border-emerald-200/80 px-4 py-3 text-sm shadow-xl shadow-slate-900/12 backdrop-blur-md">
-          <div>
-            <div className="font-semibold text-slate-800">可以撤销：{undoSnapshot.label}</div>
-            <div className="mt-0.5 text-xs text-slate-500">将恢复应用、分类和子分类到操作前状态。</div>
-          </div>
-          <button
-            onClick={restoreUndoSnapshot}
-            className="focus-ring cursor-pointer rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-600"
-          >
-            撤销
-          </button>
-          <button
-            onClick={() => setUndoSnapshot(null)}
-            className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
-          >
-            关闭
-          </button>
-        </div>
+        <UndoToast
+          label={undoSnapshot.label}
+          onUndo={restoreUndoSnapshot}
+          onClose={() => setUndoSnapshot(null)}
+        />
       )}
 
       {categoryContextMenu && (
-        <div
-          className="fixed z-[70] w-44 rounded-xl border border-slate-200/80 bg-white/95 p-1.5 shadow-xl shadow-slate-900/15 backdrop-blur-md"
-          style={{ left: categoryContextMenu.x, top: categoryContextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-          onContextMenu={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
+        <CategoryContextMenuOverlay
+          menu={categoryContextMenu}
+          categories={categories}
+          subcategories={subcategories}
+          onCreateCategory={createCategoryFromMenu}
+          onSelectCategory={category => {
+            setActiveCategory(category.id)
+            activeCategoryRef.current = category.id
+            setCategoryContextMenu(null)
           }}
-        >
-          {categoryContextMenu.type === 'all' && (
-            <>
-              <button onClick={createCategoryFromMenu} className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-600 hover:text-white transition-colors">新建分类</button>
-            </>
-          )}
-          {categoryContextMenu.type === 'category' && (() => {
-            const category = categories.find(cat => cat.id === categoryContextMenu.id)
-            if (!category) return null
-            return (
-              <>
-                <button onClick={() => { setActiveCategory(category.id); activeCategoryRef.current = category.id; setCategoryContextMenu(null) }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-600 hover:text-white transition-colors">切换到此分类</button>
-                <button onClick={() => renameCategoryFromMenu(category)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-600 hover:text-white transition-colors">重命名分类</button>
-                <button onClick={() => addSubcategoryFromMenu(category)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-600 hover:text-white transition-colors">添加子分类</button>
-                <div className="my-1 h-px bg-slate-100" />
-                <button onClick={() => deleteCategoryFromMenu(category)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-500 hover:text-white transition-colors">删除分类</button>
-              </>
-            )
-          })()}
-          {categoryContextMenu.type === 'subcategory' && (() => {
-            const subcategory = subcategories.find(sub => sub.id === categoryContextMenu.id)
-            if (!subcategory) return null
-            return (
-              <>
-                <button onClick={() => { document.getElementById(`subcat-${subcategory.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); setCategoryContextMenu(null) }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-600 hover:text-white transition-colors">定位子分类</button>
-                <button onClick={() => renameSubcategoryFromMenu(subcategory)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-600 hover:text-white transition-colors">重命名子分类</button>
-                <div className="my-1 h-px bg-slate-100" />
-                <button onClick={() => deleteSubcategoryFromMenu(subcategory)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-500 hover:text-white transition-colors">删除子分类</button>
-              </>
-            )
-          })()}
-        </div>
+          onRenameCategory={renameCategoryFromMenu}
+          onAddSubcategory={addSubcategoryFromMenu}
+          onDeleteCategory={deleteCategoryFromMenu}
+          onLocateSubcategory={subcategory => {
+            document.getElementById(`subcat-${subcategory.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            setCategoryContextMenu(null)
+          }}
+          onRenameSubcategory={renameSubcategoryFromMenu}
+          onDeleteSubcategory={deleteSubcategoryFromMenu}
+        />
       )}
 
       {categoryEditDialog && (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/35 backdrop-blur-sm"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setCategoryEditDialog(null)
-          }}
-        >
-          <div
-            className="w-[360px] rounded-2xl border border-brand-100/80 bg-white/95 p-5 shadow-2xl shadow-slate-900/15"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-base font-display font-bold text-slate-800">{categoryEditDialog.title}</h3>
-            <div className="mt-4 space-y-3">
-              <label className="block">
-                <span className="text-xs font-medium text-slate-600">名称</span>
-                <input
-                  id="category-edit-name"
-                  value={categoryEditDialog.name}
-                  onChange={(e) => setCategoryEditDialog(prev => prev ? { ...prev, name: e.target.value } : prev)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') submitCategoryEditDialog()
-                    if (e.key === 'Escape') setCategoryEditDialog(null)
-                  }}
-                  autoFocus
-                  className="focus-ring mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-400"
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-slate-600">图标</span>
-                <select
-                  id="category-edit-icon"
-                  value={categoryEditDialog.icon}
-                  onChange={(e) => setCategoryEditDialog(prev => prev ? { ...prev, icon: e.target.value } : prev)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') submitCategoryEditDialog()
-                    if (e.key === 'Escape') setCategoryEditDialog(null)
-                  }}
-                  className="focus-ring mt-1 w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-400"
-                >
-                  {getCategoryIconOptions(categoryEditDialog).map(icon => (
-                    <option key={icon} value={icon}>{icon}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                onClick={() => setCategoryEditDialog(null)}
-                className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                取消
-              </button>
-              <button
-                onClick={submitCategoryEditDialog}
-                disabled={!categoryEditDialog.name.trim()}
-                className="focus-ring cursor-pointer rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                保存
-              </button>
-            </div>
-          </div>
-        </div>
+        <CategoryEditDialogOverlay
+          dialog={categoryEditDialog}
+          onChange={setCategoryEditDialog}
+          onClose={() => setCategoryEditDialog(null)}
+          onSubmit={submitCategoryEditDialog}
+        />
       )}
 
       {showSmartOrganize && (

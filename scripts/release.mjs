@@ -35,11 +35,16 @@ const releaseRelevantPaths = [
   'shared',
   'scripts',
   'build',
+  'public',
+  'index.html',
+  'search.html',
   'electron-builder.yml',
   'package.json',
   'package-lock.json',
   'tsconfig.json',
   'tsconfig.main.json',
+  'tsconfig.node.json',
+  'vitest.config.ts',
   'vite.config.ts',
   'tailwind.config.js',
   'postcss.config.js'
@@ -47,7 +52,8 @@ const releaseRelevantPaths = [
 
 const dirtyRelevantFiles = new Set([
   ...read('git', ['diff', '--name-only', '--', ...releaseRelevantPaths]).trim().split(/\r?\n/).filter(Boolean),
-  ...read('git', ['diff', '--name-only', '--cached', '--', ...releaseRelevantPaths]).trim().split(/\r?\n/).filter(Boolean)
+  ...read('git', ['diff', '--name-only', '--cached', '--', ...releaseRelevantPaths]).trim().split(/\r?\n/).filter(Boolean),
+  ...read('git', ['ls-files', '--others', '--exclude-standard', '--', ...releaseRelevantPaths]).trim().split(/\r?\n/).filter(Boolean)
 ])
 
 if (dirtyRelevantFiles.size > 0) {
@@ -60,6 +66,8 @@ if (dirtyRelevantFiles.size > 0) {
 
 const pkg = readJson(packagePath)
 const current = String(pkg.version || '0.0.0').split('.').map(Number)
+const originalPackage = fs.readFileSync(packagePath, 'utf8')
+const originalLock = fs.existsSync(lockPath) ? fs.readFileSync(lockPath, 'utf8') : null
 
 while (current.length < 3) current.push(0)
 if (bump === 'major') {
@@ -74,23 +82,48 @@ if (bump === 'major') {
 }
 
 const nextVersion = current.join('.')
-pkg.version = nextVersion
-writeJson(packagePath, pkg)
-
-if (fs.existsSync(lockPath)) {
-  const lock = readJson(lockPath)
-  lock.version = nextVersion
-  if (lock.packages?.['']) {
-    lock.packages[''].version = nextVersion
-  }
-  writeJson(lockPath, lock)
+const tagExists = read('git', ['tag', '--list', `v${nextVersion}`]).trim() === `v${nextVersion}`
+if (tagExists) {
+  console.error(`Release blocked: tag v${nextVersion} already exists`)
+  process.exit(1)
 }
 
-run('npm', ['run', 'typecheck'])
-run('npm', ['run', 'electron:build'])
-run('git', ['add', 'package.json', 'package-lock.json'])
-run('git', ['commit', '-m', `release: v${nextVersion}`])
-run('git', ['tag', `v${nextVersion}`])
+if (process.platform === 'win32' && !process.env.CSC_LINK && process.env.ALLOW_UNSIGNED_RELEASE !== '1') {
+  console.error('Release blocked: CSC_LINK is required for a signed Windows release.')
+  console.error('Set ALLOW_UNSIGNED_RELEASE=1 only for local test packages.')
+  process.exit(1)
+}
+
+let releaseCommitted = false
+try {
+  pkg.version = nextVersion
+  writeJson(packagePath, pkg)
+
+  if (fs.existsSync(lockPath)) {
+    const lock = readJson(lockPath)
+    lock.version = nextVersion
+    if (lock.packages?.['']) {
+      lock.packages[''].version = nextVersion
+    }
+    writeJson(lockPath, lock)
+  }
+
+  run('npm', ['run', 'typecheck'])
+  run('npm', ['run', 'test'])
+  run('npm', ['run', 'electron:build'])
+  run('git', ['add', 'package.json', 'package-lock.json'])
+  run('git', ['commit', '-m', `release: v${nextVersion}`])
+  releaseCommitted = true
+  run('git', ['tag', `v${nextVersion}`])
+} catch (error) {
+  if (!releaseCommitted) {
+    fs.writeFileSync(packagePath, originalPackage, 'utf8')
+    if (originalLock !== null) fs.writeFileSync(lockPath, originalLock, 'utf8')
+    run('git', ['add', 'package.json', 'package-lock.json'])
+  }
+  console.error(`Release failed: ${error instanceof Error ? error.message : String(error)}`)
+  process.exit(1)
+}
 
 console.log(`\nRelease build complete: v${nextVersion}`)
 console.log('Next commands:')

@@ -1,0 +1,161 @@
+import React from 'react'
+import type { Category, Subcategory } from '../../../shared/types'
+
+export type CategoryContextMenuTarget =
+  | { type: 'all' }
+  | { type: 'category'; id: string }
+  | { type: 'subcategory'; id: string }
+
+export type CategoryContextMenu = CategoryContextMenuTarget & { x: number; y: number }
+
+export type CategoryEditDialog =
+  | { type: 'create-category'; title: string; name: string; icon: string }
+  | { type: 'rename-category'; title: string; id: string; name: string; icon: string }
+  | { type: 'add-subcategory'; title: string; parentId: string; name: string; icon: string }
+  | { type: 'rename-subcategory'; title: string; id: string; name: string; icon: string }
+
+const CATEGORY_ICON_OPTIONS = ['📁', '💼', '🧰', '🎮', '📚', '🖼️', '🎵', '⭐', '🔧', '🌐', '📦', '⚙️']
+const SUBCATEGORY_ICON_OPTIONS = ['•', '◦', '▪', '▸', '✓', '★', '◇', '◆', 'A', '1', '📌', '🔖']
+
+export function UndoToast({ label, onUndo, onClose }: {
+  label: string
+  onUndo: () => void
+  onClose: () => void
+}) {
+  return (
+    <div className="glass fixed bottom-16 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-3 rounded-xl border border-emerald-200/80 px-4 py-3 text-sm shadow-xl shadow-slate-900/12 backdrop-blur-md">
+      <div>
+        <div className="font-semibold text-slate-800">可以撤销：{label}</div>
+        <div className="mt-0.5 text-xs text-slate-500">将恢复应用、分类和子分类到操作前状态。</div>
+      </div>
+      <button onClick={onUndo} className="focus-ring cursor-pointer rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-600">
+        撤销
+      </button>
+      <button onClick={onClose} className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100">
+        关闭
+      </button>
+    </div>
+  )
+}
+
+export function CategoryContextMenuOverlay({
+  menu,
+  categories,
+  subcategories,
+  onCreateCategory,
+  onSelectCategory,
+  onRenameCategory,
+  onAddSubcategory,
+  onDeleteCategory,
+  onLocateSubcategory,
+  onRenameSubcategory,
+  onDeleteSubcategory
+}: {
+  menu: CategoryContextMenu
+  categories: Category[]
+  subcategories: Subcategory[]
+  onCreateCategory: () => void
+  onSelectCategory: (category: Category) => void
+  onRenameCategory: (category: Category) => void
+  onAddSubcategory: (category: Category) => void
+  onDeleteCategory: (category: Category) => void
+  onLocateSubcategory: (subcategory: Subcategory) => void
+  onRenameSubcategory: (subcategory: Subcategory) => void
+  onDeleteSubcategory: (subcategory: Subcategory) => void
+}) {
+  const itemClass = 'w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-brand-600 hover:text-white'
+  const dangerClass = 'w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-500 hover:text-white'
+  const category = menu.type === 'category' ? categories.find(item => item.id === menu.id) : null
+  const subcategory = menu.type === 'subcategory' ? subcategories.find(item => item.id === menu.id) : null
+  if ((menu.type === 'category' && !category) || (menu.type === 'subcategory' && !subcategory)) return null
+
+  return (
+    <div
+      className="fixed z-[70] w-44 rounded-xl border border-slate-200/80 bg-white/95 p-1.5 shadow-xl shadow-slate-900/15 backdrop-blur-md"
+      style={{ left: menu.x, top: menu.y }}
+      onClick={event => event.stopPropagation()}
+      onContextMenu={event => {
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+    >
+      {menu.type === 'all' && <button onClick={onCreateCategory} className={itemClass}>新建分类</button>}
+      {category && (
+        <>
+          <button onClick={() => onSelectCategory(category)} className={itemClass}>切换到此分类</button>
+          <button onClick={() => onRenameCategory(category)} className={itemClass}>重命名分类</button>
+          <button onClick={() => onAddSubcategory(category)} className={itemClass}>添加子分类</button>
+          <div className="my-1 h-px bg-slate-100" />
+          <button onClick={() => onDeleteCategory(category)} className={dangerClass}>删除分类</button>
+        </>
+      )}
+      {subcategory && (
+        <>
+          <button onClick={() => onLocateSubcategory(subcategory)} className={itemClass}>定位子分类</button>
+          <button onClick={() => onRenameSubcategory(subcategory)} className={itemClass}>重命名子分类</button>
+          <div className="my-1 h-px bg-slate-100" />
+          <button onClick={() => onDeleteSubcategory(subcategory)} className={dangerClass}>删除子分类</button>
+        </>
+      )}
+    </div>
+  )
+}
+
+export function CategoryEditDialogOverlay({ dialog, onChange, onClose, onSubmit }: {
+  dialog: CategoryEditDialog
+  onChange: (dialog: CategoryEditDialog) => void
+  onClose: () => void
+  onSubmit: () => void
+}) {
+  const baseIconOptions = dialog.type === 'create-category' || dialog.type === 'rename-category'
+    ? CATEGORY_ICON_OPTIONS
+    : SUBCATEGORY_ICON_OPTIONS
+  const iconOptions = dialog.icon && !baseIconOptions.includes(dialog.icon)
+    ? [dialog.icon, ...baseIconOptions]
+    : baseIconOptions
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/35 backdrop-blur-sm" onMouseDown={event => {
+      if (event.target === event.currentTarget) onClose()
+    }}>
+      <div className="w-[360px] rounded-2xl border border-brand-100/80 bg-white/95 p-5 shadow-2xl shadow-slate-900/15" onMouseDown={event => event.stopPropagation()}>
+        <h3 className="text-base font-display font-bold text-slate-800">{dialog.title}</h3>
+        <div className="mt-4 space-y-3">
+          <label className="block">
+            <span className="text-xs font-medium text-slate-600">名称</span>
+            <input
+              id="category-edit-name"
+              value={dialog.name}
+              onChange={event => onChange({ ...dialog, name: event.target.value })}
+              onKeyDown={event => {
+                if (event.key === 'Enter') onSubmit()
+                if (event.key === 'Escape') onClose()
+              }}
+              autoFocus
+              className="focus-ring mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-400"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-slate-600">图标</span>
+            <select
+              id="category-edit-icon"
+              value={dialog.icon}
+              onChange={event => onChange({ ...dialog, icon: event.target.value })}
+              onKeyDown={event => {
+                if (event.key === 'Enter') onSubmit()
+                if (event.key === 'Escape') onClose()
+              }}
+              className="focus-ring mt-1 w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-400"
+            >
+              {iconOptions.map(icon => <option key={icon} value={icon}>{icon}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">取消</button>
+          <button onClick={onSubmit} disabled={!dialog.name.trim()} className="focus-ring cursor-pointer rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50">保存</button>
+        </div>
+      </div>
+    </div>
+  )
+}
