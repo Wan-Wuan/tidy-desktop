@@ -4,6 +4,7 @@ import fs from 'fs'
 import { DownloadProgress } from './types'
 
 const MAX_REDIRECTS = 5
+const MAX_TEXT_RESPONSE_BYTES = 128 * 1024
 
 export function compareVersions(a: string, b: string): number {
   // Strip pre-release suffixes (e.g. "2.0.0-beta1" → "2.0.0")
@@ -57,6 +58,48 @@ export function fetchJson<T = any>(url: string, redirectsLeft = MAX_REDIRECTS): 
         try { resolve(JSON.parse(data)) }
         catch (e) { reject(e) }
       })
+    })
+    req.on('error', reject)
+    req.setTimeout(10000, () => { req.destroy(); reject(new Error('timeout')) })
+  })
+}
+
+export function fetchText(url: string, redirectsLeft = MAX_REDIRECTS): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (redirectsLeft <= 0) {
+      reject(new Error('Too many redirects'))
+      return
+    }
+
+    const client = url.startsWith('https') ? https : http
+    const req = client.get(url, { headers: { 'User-Agent': 'tidy-desktop-updater' } }, (res) => {
+      if (res.statusCode === 302 || res.statusCode === 301) {
+        const redirect = res.headers.location
+        if (redirect && redirect.startsWith('https://')) {
+          res.resume()
+          fetchText(redirect, redirectsLeft - 1).then(resolve).catch(reject)
+          return
+        }
+        reject(new Error('Invalid redirect'))
+        return
+      }
+      if (res.statusCode !== 200) {
+        reject(new Error(`HTTP ${res.statusCode}`))
+        return
+      }
+
+      let size = 0
+      let data = ''
+      res.setEncoding('utf8')
+      res.on('data', (chunk: string) => {
+        size += Buffer.byteLength(chunk)
+        if (size > MAX_TEXT_RESPONSE_BYTES) {
+          req.destroy(new Error('Response too large'))
+          return
+        }
+        data += chunk
+      })
+      res.on('end', () => resolve(data))
     })
     req.on('error', reject)
     req.setTimeout(10000, () => { req.destroy(); reject(new Error('timeout')) })

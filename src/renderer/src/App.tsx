@@ -47,6 +47,7 @@ function App() {
     version: updateVersion,
     progress: updateProgress,
     releaseNotes: updateReleaseNotes,
+    source: updateSource,
     error: updateError,
     currentVersion,
     checkForUpdate: manualCheckForUpdate,
@@ -2217,6 +2218,7 @@ function App() {
           onSave={handleUpdateConfig}
           updateState={updateState}
           updateVersion={updateVersion}
+          updateSource={updateSource}
           updateError={updateError}
           onCheckUpdate={manualCheckForUpdate}
           onRefreshIcons={handleRefreshAllIcons}

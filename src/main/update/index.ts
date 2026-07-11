@@ -1,16 +1,19 @@
 import { ipcMain, app } from 'electron'
 import fs from 'fs'
 import path from 'path'
-import { compareVersions, fetchJson, downloadWithRetry, cleanupFile } from './network'
+import { compareVersions, fetchJson, fetchText, downloadWithRetry, cleanupFile } from './network'
 import { runInstaller, getUpdateFilePath } from './installer'
 import { UpdateInfo } from './types'
-import { hashFileSha256, parseSha256Digest } from './integrity'
+import { hashFileSha256, parseSha256Checksum, parseSha256Digest } from './integrity'
 
 const GITHUB_API = 'https://api.github.com/repos/Wan-Wuan/tidy-desktop/releases/latest'
+const GITEE_API = 'https://gitee.com/api/v5/repos/wanwuan/tidy_desktop/releases/latest'
 
 let downloading = false
 
-interface GitHubReleaseAsset {
+type UpdateChannel = 'gitee' | 'github'
+
+interface ReleaseAsset {
   name?: string
   browser_download_url?: string
   size?: number
@@ -23,6 +26,13 @@ interface InstallerAsset {
   sha256: string
 }
 
+interface ResolvedUpdate {
+  version: string
+  installer: InstallerAsset
+  releaseNotes: string
+  source: UpdateChannel
+}
+
 interface DownloadCacheMeta {
   version: string
   downloadUrl: string
@@ -32,34 +42,82 @@ interface DownloadCacheMeta {
 
 const UPDATE_META_FILE = path.join(app.getPath('temp'), 'tidy-desktop-update.json')
 
-function isTrustedReleaseAssetUrl(rawUrl: string): boolean {
+function isTrustedReleaseAssetUrl(rawUrl: string, source: UpdateChannel): boolean {
   try {
     const url = new URL(rawUrl)
-    return url.protocol === 'https:' &&
-      url.hostname === 'github.com' &&
-      url.pathname.startsWith('/Wan-Wuan/tidy-desktop/releases/download/')
+    if (url.protocol !== 'https:') return false
+    if (source === 'github') {
+      return url.hostname === 'github.com' &&
+        url.pathname.startsWith('/Wan-Wuan/tidy-desktop/releases/download/')
+    }
+    return url.hostname === 'gitee.com' &&
+      url.pathname.startsWith('/wanwuan/tidy_desktop/releases/download/')
   } catch {
     return false
   }
 }
 
-function getInstallerAsset(release: { assets?: GitHubReleaseAsset[] }): InstallerAsset | null {
+async function getInstallerAsset(
+  release: { assets?: ReleaseAsset[] },
+  source: UpdateChannel
+): Promise<InstallerAsset | null> {
   const assets = release.assets || []
   const exeAsset = assets.find((asset) =>
     asset.name &&
     asset.name.endsWith('.exe') &&
     !asset.name.includes('blockmap') &&
     asset.browser_download_url &&
-    isTrustedReleaseAssetUrl(asset.browser_download_url)
+    isTrustedReleaseAssetUrl(asset.browser_download_url, source)
   )
   if (!exeAsset?.browser_download_url) return null
-  const sha256 = parseSha256Digest(exeAsset.digest)
+
+  let sha256 = parseSha256Digest(exeAsset.digest)
+  if (!sha256 && source === 'gitee' && exeAsset.name) {
+    const checksumAsset = assets.find((asset) =>
+      asset.name === `${exeAsset.name}.sha256` &&
+      asset.browser_download_url &&
+      isTrustedReleaseAssetUrl(asset.browser_download_url, source)
+    )
+    if (checksumAsset?.browser_download_url) {
+      sha256 = parseSha256Checksum(await fetchText(checksumAsset.browser_download_url), exeAsset.name)
+    }
+  }
   if (!sha256) return null
   return {
     downloadUrl: exeAsset.browser_download_url,
     size: exeAsset.size || 0,
     sha256
   }
+}
+
+async function resolveLatestUpdate(): Promise<ResolvedUpdate | null> {
+  const errors: string[] = []
+  const sources: Array<{ name: UpdateChannel; apiUrl: string }> = [
+    { name: 'gitee', apiUrl: GITEE_API },
+    { name: 'github', apiUrl: GITHUB_API }
+  ]
+
+  for (const source of sources) {
+    try {
+      const release = await fetchJson<any>(source.apiUrl)
+      const version = (release.tag_name || '').replace(/^v/i, '')
+      if (!version || compareVersions(version, app.getVersion()) <= 0) continue
+
+      const installer = await getInstallerAsset(release, source.name)
+      if (!installer) {
+        errors.push(`${source.name} release is missing a verified installer`)
+        continue
+      }
+      return { version, installer, releaseNotes: release.body || '', source: source.name }
+    } catch (error: any) {
+      errors.push(`${source.name}: ${error.message || 'request failed'}`)
+    }
+  }
+
+  if (errors.length === sources.length) {
+    throw new Error(errors.join('; '))
+  }
+  return null
 }
 
 function readDownloadCacheMeta(): DownloadCacheMeta | null {
@@ -112,26 +170,16 @@ async function hasCachedInstaller(version: string, asset: InstallerAsset): Promi
 export function registerUpdateHandlers() {
   ipcMain.handle('check-for-update', async (): Promise<UpdateInfo> => {
     try {
-      const currentVersion = app.getVersion()
-      const release = await fetchJson<any>(GITHUB_API)
-      const latestVersion = (release.tag_name || '').replace(/^v/i, '')
-
-      if (!latestVersion || compareVersions(latestVersion, currentVersion) <= 0) {
-        return { available: false }
-      }
-
-      const installerAsset = getInstallerAsset(release)
-
-      if (!installerAsset) {
-        return { available: false, error: 'Release installer is missing a trusted SHA-256 digest' }
-      }
+      const update = await resolveLatestUpdate()
+      if (!update) return { available: false }
 
       return {
         available: true,
-        downloaded: await hasCachedInstaller(latestVersion, installerAsset),
-        version: latestVersion,
-        downloadUrl: installerAsset.downloadUrl,
-        releaseNotes: release.body || ''
+        downloaded: await hasCachedInstaller(update.version, update.installer),
+        version: update.version,
+        downloadUrl: update.installer.downloadUrl,
+        releaseNotes: update.releaseNotes,
+        source: update.source
       }
     } catch (err: any) {
       return { available: false, error: err.message || 'check failed' }
@@ -145,12 +193,11 @@ export function registerUpdateHandlers() {
     downloading = true
 
     try {
-      const release = await fetchJson<any>(GITHUB_API)
-      const version = (release.tag_name || '').replace(/^v/i, '')
-      const installerAsset = getInstallerAsset(release)
-      if (!version || !installerAsset) {
+      const update = await resolveLatestUpdate()
+      if (!update) {
         return { success: false, error: 'No installer found' }
       }
+      const { version, installer: installerAsset } = update
 
       const sender = event.sender
       const updateFile = getUpdateFilePath()

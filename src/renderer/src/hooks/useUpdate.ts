@@ -9,6 +9,7 @@ interface UseUpdateReturn {
   progress?: UpdateProgress
   error?: string
   releaseNotes?: string
+  source?: 'gitee' | 'github'
   currentVersion: string
 
   checkForUpdate: () => Promise<void>
@@ -23,6 +24,7 @@ export function useUpdate(): UseUpdateReturn {
   const [progress, setProgress] = useState<UpdateProgress | undefined>()
   const [error, setError] = useState<string | undefined>()
   const [releaseNotes, setReleaseNotes] = useState<string | undefined>()
+  const [source, setSource] = useState<'gitee' | 'github' | undefined>()
   const [currentVersion, setCurrentVersion] = useState('')
   const mountedRef = useRef(true)
 
@@ -85,6 +87,7 @@ export function useUpdate(): UseUpdateReturn {
       if (info.available) {
         setVersion(info.version)
         setReleaseNotes(info.releaseNotes)
+        setSource(info.source)
         setState(info.downloaded ? 'downloaded' : 'available')
       } else {
         setState('idle')
@@ -140,6 +143,7 @@ export function useUpdate(): UseUpdateReturn {
     progress,
     error,
     releaseNotes,
+    source,
     currentVersion,
     checkForUpdate,
     startDownload,

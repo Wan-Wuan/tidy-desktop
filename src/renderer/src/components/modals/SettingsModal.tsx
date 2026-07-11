@@ -9,6 +9,7 @@ export const SettingsModal = React.memo(function SettingsModal({
   onSave,
   updateState,
   updateVersion,
+  updateSource,
   updateError,
   onCheckUpdate,
   onRefreshIcons,
@@ -32,6 +33,7 @@ export const SettingsModal = React.memo(function SettingsModal({
   onSave: (config: Config) => Promise<boolean>
   updateState?: string
   updateVersion?: string
+  updateSource?: 'gitee' | 'github'
   updateError?: string
   onCheckUpdate?: () => Promise<void>
   onRefreshIcons: () => Promise<void>
@@ -402,6 +404,7 @@ export const SettingsModal = React.memo(function SettingsModal({
               <div className="flex items-center gap-2 mt-2 pt-2 border-t border-brand-100/50">
                 <span className="text-sm text-emerald-500">🎉</span>
                 <span className="text-sm text-brand-600 font-medium">发现新版本 v{updateVersion}</span>
+                {updateSource && <span className="text-xs text-slate-500">{updateSource === 'gitee' ? 'Gitee 镜像' : 'GitHub'}</span>}
               </div>
             )}
             {updateState === 'idle' && !updateError && (

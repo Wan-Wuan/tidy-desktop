@@ -3,7 +3,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { hashFileSha256, parseSha256Digest } from './integrity'
+import { hashFileSha256, parseSha256Checksum, parseSha256Digest } from './integrity'
 
 const tempFiles: string[] = []
 
@@ -18,6 +18,13 @@ describe('update integrity', () => {
     expect(parseSha256Digest(`sha512:${hash}`)).toBeNull()
     expect(parseSha256Digest('sha256:abc')).toBeNull()
     expect(parseSha256Digest(undefined)).toBeNull()
+  })
+
+  it('reads a named SHA-256 checksum from a mirror manifest', () => {
+    const hash = 'B'.repeat(64)
+    expect(parseSha256Checksum(`${hash}  tidy-desktop-Setup-2.0.4.exe\n`, 'tidy-desktop-Setup-2.0.4.exe')).toBe(hash.toLowerCase())
+    expect(parseSha256Checksum(`${hash}  another-file.exe\n`, 'tidy-desktop-Setup-2.0.4.exe')).toBeNull()
+    expect(parseSha256Checksum('not a checksum', 'tidy-desktop-Setup-2.0.4.exe')).toBeNull()
   })
 
   it('calculates the SHA-256 of a downloaded file', async () => {

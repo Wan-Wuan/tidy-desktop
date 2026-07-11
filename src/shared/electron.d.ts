@@ -5,6 +5,7 @@ export interface UpdateInfo {
   downloaded?: boolean
   version?: string
   downloadUrl?: string
+  source?: 'gitee' | 'github'
   releaseNotes?: string
   error?: string
 }

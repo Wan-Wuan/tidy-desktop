@@ -6,6 +6,12 @@ export function parseSha256Digest(digest: string | undefined): string | null {
   return match ? match[1].toLowerCase() : null
 }
 
+export function parseSha256Checksum(contents: string, fileName: string): string | null {
+  const escapedName = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = contents.match(new RegExp(`^\\s*([a-fA-F0-9]{64})\\s+(?:\\*|)?${escapedName}\\s*$`, 'm'))
+  return match ? match[1].toLowerCase() : null
+}
+
 export function hashFileSha256(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256')

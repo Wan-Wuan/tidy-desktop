@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "release": "node scripts/release.mjs"
+    "release": "node scripts/release.mjs",
+    "publish:gitee": "node scripts/publish-gitee-release.mjs"
   },
   "dependencies": {
     "pinyin-pro": "^3.18.0",

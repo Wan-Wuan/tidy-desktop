@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -26,6 +27,16 @@ function readJson(file) {
 
 function writeJson(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n', 'utf8')
+}
+
+function writeInstallerChecksum(version) {
+  const installerName = `tidy-desktop-Setup-${version}.exe`
+  const installerPath = path.join(root, 'release', installerName)
+  if (!fs.existsSync(installerPath)) {
+    throw new Error(`Release installer was not generated: ${installerPath}`)
+  }
+  const checksum = crypto.createHash('sha256').update(fs.readFileSync(installerPath)).digest('hex')
+  fs.writeFileSync(`${installerPath}.sha256`, `${checksum}  ${installerName}\n`, 'utf8')
 }
 
 if (!validBumps.has(bump)) {
@@ -117,6 +128,7 @@ try {
   run('npm', ['run', 'typecheck'])
   run('npm', ['run', 'test'])
   run('npm', ['run', 'electron:build'])
+  writeInstallerChecksum(nextVersion)
   run('git', ['add', 'package.json', 'package-lock.json'])
   run('git', ['commit', '-m', `release: v${nextVersion}`])
   releaseCommitted = true
