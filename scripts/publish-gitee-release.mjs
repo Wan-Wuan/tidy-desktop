@@ -43,11 +43,14 @@ async function request(url, options = {}) {
   return response.json()
 }
 
-let release
+let release = null
 try {
   release = await request(`${apiBase}/releases/tags/${encodeURIComponent(tag)}`)
 } catch (error) {
   if (!String(error).includes('HTTP 404')) throw error
+}
+
+if (!release?.id) {
   release = await request(`${apiBase}/releases`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
