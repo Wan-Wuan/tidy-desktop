@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from 'electron'
 import type { AppItem, AppsData, CategoriesData, Config, UiCommand } from '../shared/types'
 import type { UpdateProgress } from '../shared/electron'
 
@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resizeSearchWindow: (height: number) => ipcRenderer.invoke('resize-search-window', height),
   setAutoStart: (enabled: boolean) => ipcRenderer.invoke('set-auto-start', enabled),
   getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
+  getPathForFile: (file: File) => {
+    try { return webUtils.getPathForFile(file) } catch { return '' }
+  },
   classifyPaths: (filePaths: string[]) => ipcRenderer.invoke('classify-paths', filePaths),
   validateApps: (apps: Pick<AppItem, 'id' | 'path' | 'type'>[]) => ipcRenderer.invoke('validate-apps', apps),
   exportBackup: () => ipcRenderer.invoke('export-backup'),

@@ -53,6 +53,7 @@ declare global {
       startDragFile: (filePath: string) => Promise<boolean>
       setAutoStart: (enabled: boolean) => Promise<boolean>
       getAutoStart: () => Promise<boolean>
+      getPathForFile: (file: File) => string
       classifyPaths: (filePaths: string[]) => Promise<PathInfo[]>
       validateApps: (apps: { id: string; path: string; type?: string }[]) => Promise<{ id: string; path: string; exists: boolean }[]>
       exportBackup: () => Promise<{ success: boolean; filePath?: string }>

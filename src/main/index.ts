@@ -70,12 +70,18 @@ function attachWindowSecurity(win: BrowserWindow) {
 
 function createWindow() {
   const config = readJsonFile(CONFIG_FILE, getDefaultConfig())
+  const workArea = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
+  const maxWidth = Math.max(520, workArea.width - 32)
+  const maxHeight = Math.max(400, workArea.height - 32)
+  const width = Math.min(config.windowSize?.width ?? 1050, maxWidth)
+  const height = Math.min(config.windowSize?.height ?? 800, maxHeight)
 
   const win = new BrowserWindow({
-    width: config.windowSize?.width ?? 1050,
-    height: config.windowSize?.height ?? 800,
-    minWidth: 600,
-    minHeight: 400,
+    width,
+    height,
+    minWidth: Math.min(600, maxWidth),
+    minHeight: Math.min(400, maxHeight),
+    center: true,
     show: false,
     frame: true,
     resizable: true,
