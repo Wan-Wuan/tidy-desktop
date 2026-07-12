@@ -1,5 +1,9 @@
 type DroppedFileLike = { path?: string }
 
+export function normalizeDroppedPath(value: string): string {
+  return value.trim().replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()
+}
+
 function fromFileUri(value: string): string | null {
   try {
     const url = new URL(value)

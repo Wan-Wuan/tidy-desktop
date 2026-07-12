@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { AppItem, Category, Subcategory, Config, ShortcutImportItem, UiCommand } from '../../shared/types'
 import { isFolderPath, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
-import { getDroppedPaths } from './utils/dropPaths'
+import { getDroppedPaths, normalizeDroppedPath } from './utils/dropPaths'
 import { filterNewShortcutItems } from './utils/shortcutImport'
 import { hasDisplayableIcon, needsIconUpdate } from './utils/iconUtils'
 import { deduplicateAppsByPath, filterStillEmptyCategories, findEmptyCategories } from './utils/maintenance'
@@ -25,6 +25,7 @@ import type { HealthReport, IconRefreshProgress } from './components/modals'
 
 
 type MaintenanceSummary = { title: string; items: string[] }
+type ParsedDrop = { apps: AppItem[]; duplicateCount: number; unsupportedCount: number }
 type UndoSnapshot = {
   label: string
   apps: AppItem[]
@@ -61,7 +62,6 @@ function App() {
   const [showEditApp, setShowEditApp] = useState(false)
   const [editingApp, setEditingApp] = useState<AppItem | null>(null)
   const [showSmartOrganize, setShowSmartOrganize] = useState(false)
-  const [isDragging, setIsDragging] = useState(false)
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [dragOverAppId, setDragOverAppId] = useState<string | null>(null)
@@ -198,7 +198,6 @@ function App() {
     const resetExternalDrag = (e: DragEvent) => {
       if (e.relatedTarget === null) {
         dragCounterRef.current = 0
-        setIsDragging(false)
         isExternalDragRef.current = false
       }
     }
@@ -209,7 +208,6 @@ function App() {
         dragTimeoutRef.current = null
       }
       dragCounterRef.current = 0
-      setIsDragging(false)
       isExternalDragRef.current = false
       setDraggedAppId(null)
       setDragOverCategory(null)
@@ -754,9 +752,11 @@ function App() {
     return null
   }
 
-  const parsePathsToApps = async (filePaths: string[], categoryId: string): Promise<AppItem[]> => {
+  const parsePathsToApps = async (filePaths: string[], categoryId: string): Promise<ParsedDrop> => {
     const currentApps = appsRef.current
     const newApps: AppItem[] = []
+    let duplicateCount = 0
+    let unsupportedCount = 0
 
     const execExts = ['.exe', '.lnk', '.msi', '.bat', '.cmd', '.vbs', '.ps1']
     const docExts = ['.ppt', '.pptx', '.doc', '.docx', '.xls', '.xlsx', '.pdf', '.txt', '.rtf', '.csv']
@@ -764,13 +764,18 @@ function App() {
     const mediaExts = ['.mp3', '.mp4', '.wav', '.avi', '.mkv', '.flv', '.wmv', '.mov', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg']
     const allFileExts = [...execExts, ...docExts, ...archiveExts, ...mediaExts]
 
-    if (filePaths.length === 0) return newApps
+    if (filePaths.length === 0) return { apps: newApps, duplicateCount, unsupportedCount }
     const pathInfoByPath = new Map(
       (await window.electronAPI.classifyPaths(filePaths)).map(info => [info.path, info])
     )
-    const knownPaths = new Set(currentApps.map(app => app.path))
+    const knownPaths = new Set(currentApps.map(app => normalizeDroppedPath(app.path)))
 
     for (const filePath of filePaths) {
+      const pathKey = normalizeDroppedPath(filePath)
+      if (knownPaths.has(pathKey)) {
+        duplicateCount++
+        continue
+      }
       const info = pathInfoByPath.get(filePath)
       const ext = info?.extension || filePath.toLowerCase().substring(filePath.lastIndexOf('.'))
       const isKnownFile = allFileExts.includes(ext)
@@ -778,7 +783,7 @@ function App() {
 
       if (info?.isFile && isKnownFile) {
         const name = getFileNameFromPath(filePath)
-        if (!knownPaths.has(filePath)) {
+        if (!knownPaths.has(pathKey)) {
           newApps.push({
             id: crypto.randomUUID(),
             name,
@@ -790,12 +795,12 @@ function App() {
             firstLetter: getFirstLetter(name),
             type: 'app'
           })
-          knownPaths.add(filePath)
+          knownPaths.add(pathKey)
         }
       } else if (isDirectory) {
         const parts = filePath.replace(/\\/g, '/').split('/')
         const folderName = parts[parts.length - 1] || '文件夹'
-        if (!knownPaths.has(filePath)) {
+        if (!knownPaths.has(pathKey)) {
           newApps.push({
             id: crypto.randomUUID(),
             name: folderName,
@@ -807,12 +812,27 @@ function App() {
             firstLetter: getFirstLetter(folderName),
             type: 'folder'
           })
-          knownPaths.add(filePath)
+          knownPaths.add(pathKey)
         }
+      } else {
+        unsupportedCount++
       }
     }
 
-    return newApps
+    return { apps: newApps, duplicateCount, unsupportedCount }
+  }
+
+  const showDropResult = ({ apps, duplicateCount, unsupportedCount }: ParsedDrop) => {
+    const items = [
+      ...(apps.length > 0 ? [`新增 ${apps.length} 个项目。`] : []),
+      ...(duplicateCount > 0 ? [`跳过 ${duplicateCount} 个重复项目。`] : []),
+      ...(unsupportedCount > 0 ? [`忽略 ${unsupportedCount} 个不支持的项目。`] : [])
+    ]
+    if (items.length === 0) return
+    showMaintenanceSummary({
+      title: apps.length > 0 ? '拖入完成' : duplicateCount > 0 ? '未添加重复项目' : '没有可导入的项目',
+      items
+    })
   }
 
   const getDroppedPathsFromEvent = (dataTransfer: DataTransfer): string[] => getDroppedPaths(
@@ -1038,9 +1058,6 @@ function App() {
     if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/uri-list')) {
       isExternalDragRef.current = true
       dragCounterRef.current++
-      if (dragCounterRef.current === 1) {
-        setIsDragging(true)
-      }
     }
   }, [])
 
@@ -1051,7 +1068,6 @@ function App() {
     dragCounterRef.current--
     if (dragCounterRef.current <= 0) {
       dragCounterRef.current = 0
-      setIsDragging(false)
       isExternalDragRef.current = false
     }
   }, [])
@@ -1069,7 +1085,6 @@ function App() {
   const handleDragEnd = useCallback(() => {
     removeDragGhost()
     dragCounterRef.current = 0
-    setIsDragging(false)
     isExternalDragRef.current = false
     setDraggedAppId(null)
     setDragOverCategory(null)
@@ -1080,7 +1095,6 @@ function App() {
     e.preventDefault()
     e.stopPropagation()
     dragCounterRef.current = 0
-    setIsDragging(false)
     isExternalDragRef.current = false
 
     if (draggedAppIdRef.current) return
@@ -1138,7 +1152,8 @@ function App() {
     }
 
     const targetCategory = activeCategoryRef.current || (categoriesRef.current.length > 0 ? categoriesRef.current[0].id : '')
-    const newApps = await parsePathsToApps(filePaths, targetCategory)
+    const result = await parsePathsToApps(filePaths, targetCategory)
+    const newApps = result.apps
 
     if (newApps.length > 0) {
       const updatedApps = [...appsRef.current, ...newApps]
@@ -1147,6 +1162,7 @@ function App() {
       await window.electronAPI.saveApps({ apps: updatedApps })
       await extractIconsForApps(newApps)
     }
+    showDropResult(result)
   }, [])
 
   const handleReorderApp = async (sourceId: string, targetId: string) => {
@@ -1795,7 +1811,8 @@ function App() {
 
               const filePaths = getDroppedPathsFromEvent(e.dataTransfer)
               if (filePaths.length > 0) {
-                const newApps = await parsePathsToApps(filePaths, cat.id)
+                const result = await parsePathsToApps(filePaths, cat.id)
+                const newApps = result.apps
                 if (newApps.length > 0) {
                   const updatedApps = [...appsRef.current, ...newApps]
                   appsRef.current = updatedApps
@@ -1803,6 +1820,7 @@ function App() {
                   await window.electronAPI.saveApps({ apps: updatedApps })
                   await extractIconsForApps(newApps)
                 }
+                showDropResult(result)
               } else {
                 const appId = e.dataTransfer.getData('text/plain')
                 if (appId) {
@@ -1916,14 +1934,6 @@ function App() {
         className="relative flex-1 overflow-y-scroll px-5 py-4"
         style={{ scrollbarGutter: 'stable', willChange: 'scroll-position', backdropFilter: 'blur(40px) saturate(1.2)', WebkitBackdropFilter: 'blur(40px) saturate(1.2)' }}
       >
-        {isDragging && (
-          <div className="pointer-events-none absolute inset-4 z-30 flex items-center justify-center rounded-xl border-2 border-dashed border-brand-400 bg-brand-50/90 text-center shadow-lg shadow-brand-500/10 backdrop-blur-sm">
-            <div>
-              <div className="text-sm font-semibold text-brand-700">释放以导入快捷方式或文件</div>
-              <div className="mt-1 text-xs text-slate-600">将添加到当前分类，并自动跳过重复项目</div>
-            </div>
-          </div>
-        )}
         <div key={activeCategory} className="tab-fade-enter" style={{ contain: 'content' }}>
           <section className="hidden">
             <div className="min-w-0">
