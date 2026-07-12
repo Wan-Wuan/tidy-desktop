@@ -32,10 +32,7 @@ for (const file of assets) {
 async function request(url, options = {}) {
   const response = await fetch(url, {
     ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...options.headers
-    }
+    headers: options.headers
   })
   if (!response.ok) {
     throw new Error(`Gitee API request failed: HTTP ${response.status} ${await response.text()}`)
@@ -43,25 +40,39 @@ async function request(url, options = {}) {
   return response.json()
 }
 
+function withToken(url) {
+  const parsed = new URL(url)
+  parsed.searchParams.set('access_token', token)
+  return parsed.toString()
+}
+
 let release
 try {
-  release = await request(`${apiBase}/releases/tags/${encodeURIComponent(tag)}`)
+  release = await request(withToken(`${apiBase}/releases/tags/${encodeURIComponent(tag)}`))
 } catch (error) {
   if (!String(error).includes('HTTP 404')) throw error
+  const body = new URLSearchParams({
+    access_token: token,
+    tag_name: tag,
+    name: tag,
+    body: `Release ${tag}`,
+    target_commitish: 'master'
+  })
   release = await request(`${apiBase}/releases`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      tag_name: tag,
-      name: tag,
-      body: `Release ${tag}`,
-      target_commitish: 'master'
-    })
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body
   })
 }
 
+if (!release?.id) {
+  release = await request(withToken(`${apiBase}/releases/tags/${encodeURIComponent(tag)}`))
+}
+if (!release?.id) throw new Error(`Gitee did not return a Release ID for ${tag}`)
+
 for (const file of assets) {
   const form = new FormData()
+  form.set('access_token', token)
   form.set('file', await fs.openAsBlob(file), path.basename(file))
   await request(`${apiBase}/releases/${release.id}/attach_files`, {
     method: 'POST',
