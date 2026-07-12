@@ -1458,7 +1458,10 @@ function App() {
 
   const importShortcutItemsWithAutoCategories = async (items: ShortcutImportItem[]): Promise<boolean> => {
     if (items.length === 0) {
-      alert('没有发现可导入的桌面或开始菜单快捷方式。')
+      showMaintenanceSummary({
+        title: '没有发现快捷方式',
+        items: ['桌面和开始菜单中没有可导入的快捷方式。']
+      })
       return false
     }
 
@@ -1473,7 +1476,10 @@ function App() {
     ).slice(0, 120)
 
     if (importableItems.length === 0) {
-      alert('扫描到的快捷方式已经在列表中。')
+      showMaintenanceSummary({
+        title: '未新增快捷方式',
+        items: [`扫描到 ${items.length} 个快捷方式，目标程序均已存在，已全部跳过。`]
+      })
       return false
     }
 
@@ -1555,8 +1561,7 @@ function App() {
       items: ['首次扫描会读取桌面和开始菜单，请稍候。']
     }, false)
     try {
-      const imported = await importShortcutItemsWithAutoCategories(await window.electronAPI.scanShortcuts())
-      if (!imported) clearMaintenanceSummary()
+      await importShortcutItemsWithAutoCategories(await window.electronAPI.scanShortcuts())
     } catch (error) {
       showMaintenanceSummary({
         title: '快捷方式导入失败',
