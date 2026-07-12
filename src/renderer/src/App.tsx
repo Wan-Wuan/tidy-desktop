@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { AppItem, Category, Subcategory, Config, ShortcutImportItem, UiCommand } from '../../shared/types'
 import { isFolderPath, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
-import { getDroppedPaths, normalizeDroppedPath } from './utils/dropPaths'
+import { buildShortcutTargetMap, getDroppedPathIdentities, getDroppedPaths, normalizeDroppedPath } from './utils/dropPaths'
 import { filterNewShortcutItems } from './utils/shortcutImport'
 import { hasDisplayableIcon, needsIconUpdate } from './utils/iconUtils'
 import { deduplicateAppsByPath, filterStillEmptyCategories, findEmptyCategories } from './utils/maintenance'
@@ -765,17 +765,26 @@ function App() {
     const allFileExts = [...execExts, ...docExts, ...archiveExts, ...mediaExts]
 
     if (filePaths.length === 0) return { apps: newApps, duplicateCount, unsupportedCount }
-    const pathInfoByPath = new Map(
-      (await window.electronAPI.classifyPaths(filePaths)).map(info => [info.path, info])
-    )
+    const shortcutPaths = [...currentApps.map(app => app.path), ...filePaths]
+      .filter(filePath => filePath.toLowerCase().endsWith('.lnk'))
+    const [pathInfos, resolvedShortcutTargets] = await Promise.all([
+      window.electronAPI.classifyPaths(filePaths),
+      window.electronAPI.resolveShortcutTargets(shortcutPaths)
+    ])
+    const pathInfoByPath = new Map(pathInfos.map(info => [info.path, info]))
+    const shortcutTargets = buildShortcutTargetMap(resolvedShortcutTargets)
     const knownPaths = new Set(currentApps.map(app => normalizeDroppedPath(app.path)))
+    for (const app of currentApps) {
+      for (const identity of getDroppedPathIdentities(app.path, shortcutTargets)) knownPaths.add(identity)
+    }
 
     for (const filePath of filePaths) {
-      const pathKey = normalizeDroppedPath(filePath)
-      if (knownPaths.has(pathKey)) {
+      const identities = getDroppedPathIdentities(filePath, shortcutTargets)
+      if (identities.some(identity => knownPaths.has(identity))) {
         duplicateCount++
         continue
       }
+      const pathKey = identities[0]
       const info = pathInfoByPath.get(filePath)
       const ext = info?.extension || filePath.toLowerCase().substring(filePath.lastIndexOf('.'))
       const isKnownFile = allFileExts.includes(ext)
@@ -795,7 +804,7 @@ function App() {
             firstLetter: getFirstLetter(name),
             type: 'app'
           })
-          knownPaths.add(pathKey)
+          for (const identity of identities) knownPaths.add(identity)
         }
       } else if (isDirectory) {
         const parts = filePath.replace(/\\/g, '/').split('/')
@@ -812,7 +821,7 @@ function App() {
             firstLetter: getFirstLetter(folderName),
             type: 'folder'
           })
-          knownPaths.add(pathKey)
+          for (const identity of identities) knownPaths.add(identity)
         }
       } else {
         unsupportedCount++
@@ -2211,6 +2220,34 @@ function App() {
           onUndo={restoreUndoSnapshot}
           onClose={() => setUndoSnapshot(null)}
         />
+      )}
+
+      {maintenanceSummary && !showSmartOrganize && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="glass fixed right-5 top-24 z-[90] w-[min(360px,calc(100vw-40px))] rounded-xl border border-brand-200/70 px-4 py-3 shadow-xl shadow-slate-900/10"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-slate-800">{maintenanceSummary.title}</div>
+              <div className="mt-1 space-y-0.5">
+                {maintenanceSummary.items.map((item, index) => (
+                  <div key={`${item}-${index}`} className="text-xs leading-5 text-slate-600">{item}</div>
+                ))}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={clearMaintenanceSummary}
+              aria-label="关闭提示"
+              title="关闭提示"
+              className="focus-ring shrink-0 rounded p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+            >
+              ×
+            </button>
+          </div>
+        </div>
       )}
 
       {categoryContextMenu && (
