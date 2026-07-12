@@ -1462,7 +1462,15 @@ function App() {
       return false
     }
 
-    const importableItems = filterNewShortcutItems(items, appsRef.current).slice(0, 120)
+    const currentApps = appsRef.current
+    const shortcutTargets = await window.electronAPI.resolveShortcutTargets(
+      currentApps.map(app => app.path).filter(appPath => appPath.toLowerCase().endsWith('.lnk'))
+    )
+    const importableItems = filterNewShortcutItems(
+      items,
+      currentApps,
+      shortcutTargets.map(item => item.targetPath)
+    ).slice(0, 120)
 
     if (importableItems.length === 0) {
       alert('扫描到的快捷方式已经在列表中。')

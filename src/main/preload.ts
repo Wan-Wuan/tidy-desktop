@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   importBackup: () => ipcRenderer.invoke('import-backup'),
   exportDiagnostics: () => ipcRenderer.invoke('export-diagnostics'),
   scanShortcuts: () => ipcRenderer.invoke('scan-shortcuts'),
+  resolveShortcutTargets: (filePaths: string[]) => ipcRenderer.invoke('resolve-shortcut-targets', filePaths),
   openDataDirectory: () => ipcRenderer.invoke('open-data-directory'),
   clearIconCache: () => ipcRenderer.invoke('clear-icon-cache'),
   openUpdateLog: () => ipcRenderer.invoke('open-update-log'),

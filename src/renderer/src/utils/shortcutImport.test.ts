@@ -35,4 +35,11 @@ describe('filterNewShortcutItems', () => {
     const startMenu = { ...shortcut('C:\\Start Menu\\Tool.lnk', target), source: 'startMenu' as const }
     expect(filterNewShortcutItems([desktop, startMenu], [])).toEqual([desktop])
   })
+
+  it('matches an imported target against an existing shortcut resolved from another link', () => {
+    const target = 'C:\\Users\\Wan-wuan\\AppData\\Local\\Programs\\OpenCode\\OpenCode.exe'
+    const existingDesktopLink = app('C:\\Users\\Wan-wuan\\OneDrive\\Desktop\\OpenCode.lnk')
+    const startMenu = shortcut('C:\\Users\\Wan-wuan\\Start Menu\\OpenCode.lnk', target)
+    expect(filterNewShortcutItems([startMenu], [existingDesktopLink], [target])).toEqual([])
+  })
 })

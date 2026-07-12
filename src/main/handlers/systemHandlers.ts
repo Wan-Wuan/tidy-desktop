@@ -352,6 +352,15 @@ export function registerSystemHandlers() {
     return uniqueResults
   })
 
+  ipcMain.handle('resolve-shortcut-targets', (_, values: unknown) => {
+    if (!Array.isArray(values)) return []
+    return values
+      .filter((value): value is string => typeof value === 'string' && value.toLowerCase().endsWith('.lnk'))
+      .slice(0, SHORTCUT_RESULT_LIMIT)
+      .map(filePath => ({ filePath, targetPath: resolveShortcutTarget(filePath) }))
+      .filter(item => !!item.targetPath)
+  })
+
   ipcMain.handle('open-data-directory', async () => {
     const error = await shell.openPath(CONFIG_DIR)
     return !error

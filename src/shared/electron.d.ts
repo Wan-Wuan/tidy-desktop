@@ -60,6 +60,7 @@ declare global {
       importBackup: () => Promise<{ success: boolean; filePath?: string; error?: string }>
       exportDiagnostics: () => Promise<DiagnosticExportResult>
       scanShortcuts: () => Promise<ShortcutImportItem[]>
+      resolveShortcutTargets: (filePaths: string[]) => Promise<Array<{ filePath: string; targetPath: string }>>
       openDataDirectory: () => Promise<boolean>
       clearIconCache: () => Promise<{ success: boolean; count: number }>
       openUpdateLog: () => Promise<boolean>

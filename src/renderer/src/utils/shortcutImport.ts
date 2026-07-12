@@ -6,9 +6,13 @@ function normalizePath(value: string): string {
 
 export function filterNewShortcutItems(
   items: ShortcutImportItem[],
-  apps: AppItem[]
+  apps: AppItem[],
+  resolvedExistingTargets: string[] = []
 ): ShortcutImportItem[] {
-  const knownPaths = new Set(apps.map(app => normalizePath(app.path)).filter(Boolean))
+  const knownPaths = new Set([
+    ...apps.map(app => normalizePath(app.path)),
+    ...resolvedExistingTargets.map(normalizePath)
+  ].filter(Boolean))
   const importable: ShortcutImportItem[] = []
 
   for (const item of items) {
