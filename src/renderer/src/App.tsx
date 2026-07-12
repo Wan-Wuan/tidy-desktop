@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { AppItem, Category, Subcategory, Config, ShortcutImportItem, UiCommand } from '../../shared/types'
 import { isFolderPath, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
+import { getDroppedPaths } from './utils/dropPaths'
 import { hasDisplayableIcon, needsIconUpdate } from './utils/iconUtils'
 import { deduplicateAppsByPath, filterStillEmptyCategories, findEmptyCategories } from './utils/maintenance'
 import { useUpdate } from './hooks/useUpdate'
@@ -746,7 +747,7 @@ function App() {
     return null
   }
 
-  const parseFilesToApps = async (files: File[], categoryId: string): Promise<AppItem[]> => {
+  const parsePathsToApps = async (filePaths: string[], categoryId: string): Promise<AppItem[]> => {
     const currentApps = appsRef.current
     const newApps: AppItem[] = []
 
@@ -756,17 +757,13 @@ function App() {
     const mediaExts = ['.mp3', '.mp4', '.wav', '.avi', '.mkv', '.flv', '.wmv', '.mov', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg']
     const allFileExts = [...execExts, ...docExts, ...archiveExts, ...mediaExts]
 
-    const filePaths = files
-      .map(file => (file as DroppedFile).path)
-      .filter((filePath): filePath is string => !!filePath)
+    if (filePaths.length === 0) return newApps
     const pathInfoByPath = new Map(
       (await window.electronAPI.classifyPaths(filePaths)).map(info => [info.path, info])
     )
+    const knownPaths = new Set(currentApps.map(app => app.path))
 
-    for (const file of files) {
-      const filePath = (file as DroppedFile).path
-      if (!filePath) continue
-
+    for (const filePath of filePaths) {
       const info = pathInfoByPath.get(filePath)
       const ext = info?.extension || filePath.toLowerCase().substring(filePath.lastIndexOf('.'))
       const isKnownFile = allFileExts.includes(ext)
@@ -774,7 +771,7 @@ function App() {
 
       if (info?.isFile && isKnownFile) {
         const name = getFileNameFromPath(filePath)
-        if (!currentApps.find(app => app.name === name)) {
+        if (!knownPaths.has(filePath)) {
           newApps.push({
             id: crypto.randomUUID(),
             name,
@@ -786,11 +783,12 @@ function App() {
             firstLetter: getFirstLetter(name),
             type: 'app'
           })
+          knownPaths.add(filePath)
         }
       } else if (isDirectory) {
         const parts = filePath.replace(/\\/g, '/').split('/')
         const folderName = parts[parts.length - 1] || '文件夹'
-        if (!currentApps.find(app => app.name === folderName)) {
+        if (!knownPaths.has(filePath)) {
           newApps.push({
             id: crypto.randomUUID(),
             name: folderName,
@@ -802,12 +800,19 @@ function App() {
             firstLetter: getFirstLetter(folderName),
             type: 'folder'
           })
+          knownPaths.add(filePath)
         }
       }
     }
 
     return newApps
   }
+
+  const getDroppedPathsFromEvent = (dataTransfer: DataTransfer): string[] => getDroppedPaths(
+    Array.from(dataTransfer.files) as DroppedFile[],
+    dataTransfer.getData('text/uri-list'),
+    dataTransfer.getData('text/plain')
+  )
 
   const extractIconsForApps = async (newApps: AppItem[]) => {
     const appsWithIcons: AppItem[] = []
@@ -1114,8 +1119,8 @@ function App() {
       return
     }
 
-    const files = Array.from(e.dataTransfer.files)
-    if (files.length === 0) return
+    const filePaths = getDroppedPathsFromEvent(e.dataTransfer)
+    if (filePaths.length === 0) return
 
     if (categoriesRef.current.length === 0) {
       alert('请先创建一个分类，然后再添加应用。')
@@ -1123,7 +1128,7 @@ function App() {
     }
 
     const targetCategory = activeCategoryRef.current || (categoriesRef.current.length > 0 ? categoriesRef.current[0].id : '')
-    const newApps = await parseFilesToApps(files, targetCategory)
+    const newApps = await parsePathsToApps(filePaths, targetCategory)
 
     if (newApps.length > 0) {
       const updatedApps = [...appsRef.current, ...newApps]
@@ -1764,9 +1769,9 @@ function App() {
                 return
               }
 
-              const files = Array.from(e.dataTransfer.files)
-              if (files.length > 0) {
-                const newApps = await parseFilesToApps(files, cat.id)
+              const filePaths = getDroppedPathsFromEvent(e.dataTransfer)
+              if (filePaths.length > 0) {
+                const newApps = await parsePathsToApps(filePaths, cat.id)
                 if (newApps.length > 0) {
                   const updatedApps = [...appsRef.current, ...newApps]
                   appsRef.current = updatedApps
