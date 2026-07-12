@@ -92,6 +92,7 @@ async function getInstallerAsset(
 
 async function resolveLatestUpdate(): Promise<ResolvedUpdate | null> {
   const errors: string[] = []
+  let validSourceCount = 0
   const sources: Array<{ name: UpdateChannel; apiUrl: string }> = [
     { name: 'gitee', apiUrl: GITEE_API },
     { name: 'github', apiUrl: GITHUB_API }
@@ -101,7 +102,14 @@ async function resolveLatestUpdate(): Promise<ResolvedUpdate | null> {
     try {
       const release = await fetchJson<any>(source.apiUrl)
       const version = (release.tag_name || '').replace(/^v/i, '')
-      if (!version || compareVersions(version, app.getVersion()) <= 0) continue
+      if (!version) {
+        errors.push(`${source.name} release is missing a version`)
+        continue
+      }
+      if (compareVersions(version, app.getVersion()) <= 0) {
+        validSourceCount += 1
+        continue
+      }
 
       const installer = await getInstallerAsset(release, source.name)
       if (!installer) {
@@ -110,11 +118,15 @@ async function resolveLatestUpdate(): Promise<ResolvedUpdate | null> {
       }
       return { version, installer, releaseNotes: release.body || '', source: source.name }
     } catch (error: any) {
-      errors.push(`${source.name}: ${error.message || 'request failed'}`)
+      const message = error.message || 'request failed'
+      // A mirror may not have published any Releases yet. Treat that as an
+      // unavailable channel and continue with the next source.
+      if (message === 'HTTP 404') continue
+      errors.push(`${source.name}: ${message}`)
     }
   }
 
-  if (errors.length === sources.length) {
+  if (errors.length > 0 && validSourceCount === 0) {
     throw new Error(errors.join('; '))
   }
   return null
