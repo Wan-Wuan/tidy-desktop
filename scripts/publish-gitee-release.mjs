@@ -4,6 +4,7 @@ import path from 'node:path'
 const owner = 'wanwuan'
 const repo = 'tidy_desktop'
 const apiBase = `https://gitee.com/api/v5/repos/${owner}/${repo}`
+const MAX_RELEASE_ASSET_SIZE = 100 * 1024 * 1024
 const root = process.cwd()
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const version = process.argv[2] || pkg.version
@@ -25,6 +26,10 @@ const assets = [
 for (const file of assets) {
   if (!fs.existsSync(file)) {
     console.error(`Missing release asset: ${file}`)
+    process.exit(1)
+  }
+  if (fs.statSync(file).size > MAX_RELEASE_ASSET_SIZE) {
+    console.error(`Gitee Release attachments are limited to 100 MB: ${path.basename(file)}`)
     process.exit(1)
   }
 }
