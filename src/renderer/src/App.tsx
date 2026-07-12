@@ -3,6 +3,7 @@ import { AppItem, Category, Subcategory, Config, ShortcutImportItem, UiCommand }
 import { isFolderPath, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { getDroppedPaths } from './utils/dropPaths'
+import { filterNewShortcutItems } from './utils/shortcutImport'
 import { hasDisplayableIcon, needsIconUpdate } from './utils/iconUtils'
 import { deduplicateAppsByPath, filterStillEmptyCategories, findEmptyCategories } from './utils/maintenance'
 import { useUpdate } from './hooks/useUpdate'
@@ -1434,10 +1435,7 @@ function App() {
       return false
     }
 
-    const existingPaths = new Set(appsRef.current.map(app => app.path.toLowerCase()))
-    const importableItems = items
-      .filter(item => item.targetPath && !existingPaths.has(item.targetPath.toLowerCase()))
-      .slice(0, 120)
+    const importableItems = filterNewShortcutItems(items, appsRef.current).slice(0, 120)
 
     if (importableItems.length === 0) {
       alert('扫描到的快捷方式已经在列表中。')
