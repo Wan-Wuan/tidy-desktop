@@ -6,14 +6,21 @@ import { buildShortcutTargetMap, getDroppedPathIdentities, getDroppedPaths, norm
 import { filterNewShortcutItems } from './utils/shortcutImport'
 import { hasDisplayableIcon, needsIconUpdate } from './utils/iconUtils'
 import { deduplicateAppsByPath, filterStillEmptyCategories, findEmptyCategories } from './utils/maintenance'
+import {
+  countCategoryApps,
+  countSubcategoryApps,
+  removeCategoryFromApps,
+  removeSubcategoryFromApps
+} from './utils/categoryDeletion'
 import { useUpdate } from './hooks/useUpdate'
 import { UpdateButton, UpdateDialog } from './components/UpdateButton'
 import {
   CategoryContextMenuOverlay,
+  CategoryDeleteDialogOverlay,
   CategoryEditDialogOverlay,
   UndoToast
 } from './components/CategoryOverlays'
-import type { CategoryContextMenu, CategoryContextMenuTarget, CategoryEditDialog } from './components/CategoryOverlays'
+import type { CategoryContextMenu, CategoryContextMenuTarget, CategoryDeleteDialog, CategoryEditDialog } from './components/CategoryOverlays'
 import {
   AddAppModal,
   EditAppModal,
@@ -274,6 +281,7 @@ function App() {
   const [dragOverSubId, setDragOverSubId] = useState<string | null>(null)
   const [categoryContextMenu, setCategoryContextMenu] = useState<CategoryContextMenu | null>(null)
   const [categoryEditDialog, setCategoryEditDialog] = useState<CategoryEditDialog | null>(null)
+  const [categoryDeleteDialog, setCategoryDeleteDialog] = useState<CategoryDeleteDialog | null>(null)
 
   useEffect(() => {
     // 右键自定义拖拽：图片/文档文件的右键拖拽排序分类（HTML5 draggable 不支持右键）
@@ -900,26 +908,52 @@ function App() {
     await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories })
   }
 
-  const handleDeleteCategory = async (id: string) => {
+  const persistCategoryDeletion = async (
+    nextApps: AppItem[],
+    nextCategories: Category[],
+    nextSubcategories: Subcategory[]
+  ): Promise<boolean> => {
+    const previousApps = appsRef.current
+    const previousCategories = categoriesRef.current
+    const previousSubcategories = subcategories
+
+    try {
+      const [categoriesSaved, appsSaved] = await Promise.all([
+        window.electronAPI.saveCategories({ categories: nextCategories, subcategories: nextSubcategories }),
+        window.electronAPI.saveApps({ apps: nextApps })
+      ])
+      if (categoriesSaved && appsSaved) return true
+    } catch {
+      // Roll back both files below because either write may already have completed.
+    }
+
+    await Promise.allSettled([
+      window.electronAPI.saveCategories({ categories: previousCategories, subcategories: previousSubcategories }),
+      window.electronAPI.saveApps({ apps: previousApps })
+    ])
+    alert('删除操作保存失败，原数据已恢复，请重试。')
+    return false
+  }
+
+  const handleDeleteCategory = async (id: string, keepApps: boolean) => {
+    const deletedSubcategoryIds = subcategories.filter(sub => sub.parentId === id).map(sub => sub.id)
     const updatedCategories = categories.filter(cat => cat.id !== id)
     const updatedSubcategories = subcategories.filter(sub => sub.parentId !== id)
+    const updatedApps = removeCategoryFromApps(appsRef.current, id, deletedSubcategoryIds, keepApps)
+    if (!await persistCategoryDeletion(updatedApps, updatedCategories, updatedSubcategories)) return
+
+    captureUndoSnapshot('删除分类')
     categoriesRef.current = updatedCategories
+    appsRef.current = updatedApps
     setCategories(updatedCategories)
     setSubcategories(updatedSubcategories)
-    await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories: updatedSubcategories })
+    setApps(updatedApps)
     
     if (activeCategory === id) {
       setActiveCategory(null)
       activeCategoryRef.current = null
     }
 
-    const currentApps = appsRef.current
-    const updatedApps = currentApps.map(app =>
-      app.categoryId === id ? { ...app, categoryId: null, subcategoryId: null } : app
-    )
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
   }
 
   const handleUpdateCategory = async (id: string, name: string, icon: string) => {
@@ -938,15 +972,15 @@ function App() {
     await window.electronAPI.saveCategories({ categories, subcategories: updated })
   }
 
-  const handleDeleteSubcategory = async (id: string) => {
+  const handleDeleteSubcategory = async (id: string, keepApps: boolean) => {
     const updated = subcategories.filter(s => s.id !== id)
-    setSubcategories(updated)
-    await window.electronAPI.saveCategories({ categories, subcategories: updated })
-    const currentApps = appsRef.current
-    const updatedApps = currentApps.map(a => a.subcategoryId === id ? { ...a, subcategoryId: null } : a)
+    const updatedApps = removeSubcategoryFromApps(appsRef.current, id, keepApps)
+    if (!await persistCategoryDeletion(updatedApps, categories, updated)) return
+
+    captureUndoSnapshot('删除子分类')
     appsRef.current = updatedApps
+    setSubcategories(updated)
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
   }
 
   const handleUpdateSubcategory = async (id: string, name: string, icon: string) => {
@@ -1002,11 +1036,15 @@ function App() {
     setCategoryEditDialog({ type: 'add-subcategory', title: '添加子分类', parentId: category.id, name: '', icon: '•' })
   }
 
-  const deleteCategoryFromMenu = async (category: Category) => {
-    const confirmed = await window.electronAPI.confirm(`确定删除分类"${category.name}"吗？该分类下的项目将移到未分类。`)
-    if (!confirmed) return
-    await handleDeleteCategory(category.id)
+  const deleteCategoryFromMenu = (category: Category) => {
+    const childIds = subcategories.filter(sub => sub.parentId === category.id).map(sub => sub.id)
     setCategoryContextMenu(null)
+    setCategoryDeleteDialog({
+      type: 'category',
+      id: category.id,
+      name: category.name,
+      appCount: countCategoryApps(appsRef.current, category.id, childIds)
+    })
   }
 
   const renameSubcategoryFromMenu = (subcategory: Subcategory) => {
@@ -1014,11 +1052,14 @@ function App() {
     setCategoryEditDialog({ type: 'rename-subcategory', title: '重命名子分类', id: subcategory.id, name: subcategory.name, icon: subcategory.icon })
   }
 
-  const deleteSubcategoryFromMenu = async (subcategory: Subcategory) => {
-    const confirmed = await window.electronAPI.confirm(`确定删除子分类"${subcategory.name}"吗？该子分类下的项目将移到当前分类下。`)
-    if (!confirmed) return
-    await handleDeleteSubcategory(subcategory.id)
+  const deleteSubcategoryFromMenu = (subcategory: Subcategory) => {
     setCategoryContextMenu(null)
+    setCategoryDeleteDialog({
+      type: 'subcategory',
+      id: subcategory.id,
+      name: subcategory.name,
+      appCount: countSubcategoryApps(appsRef.current, subcategory.id)
+    })
   }
 
   const submitCategoryEditDialog = async () => {
@@ -2279,6 +2320,22 @@ function App() {
           onChange={setCategoryEditDialog}
           onClose={() => setCategoryEditDialog(null)}
           onSubmit={submitCategoryEditDialog}
+        />
+      )}
+
+      {categoryDeleteDialog && (
+        <CategoryDeleteDialogOverlay
+          dialog={categoryDeleteDialog}
+          onClose={() => setCategoryDeleteDialog(null)}
+          onConfirm={async keepApps => {
+            const dialog = categoryDeleteDialog
+            setCategoryDeleteDialog(null)
+            if (dialog.type === 'category') {
+              await handleDeleteCategory(dialog.id, keepApps)
+            } else {
+              await handleDeleteSubcategory(dialog.id, keepApps)
+            }
+          }}
         />
       )}
 

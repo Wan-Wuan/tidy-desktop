@@ -157,6 +157,21 @@ body {
   background-color: rgba(51, 65, 85, 0.95);
 }
 
+.theme-dark button.bg-red-50 {
+  background-color: rgba(127, 29, 29, 0.22);
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.theme-dark button.bg-red-50:hover {
+  background-color: rgba(153, 27, 27, 0.34);
+  border-color: rgba(248, 113, 113, 0.68);
+}
+
+.theme-dark .text-red-600,
+.theme-dark .text-red-700 {
+  color: #FCA5A5;
+}
+
 .theme-dark .shadow-brand-500\/5,
 .theme-dark .shadow-brand-500\/20,
 .theme-dark .shadow-brand-500\/25,
@@ -241,6 +256,21 @@ body {
   .theme-system option {
     background-color: #111827;
     color: #E5E7EB;
+  }
+
+  .theme-system button.bg-red-50 {
+    background-color: rgba(127, 29, 29, 0.22);
+    border-color: rgba(248, 113, 113, 0.4);
+  }
+
+  .theme-system button.bg-red-50:hover {
+    background-color: rgba(153, 27, 27, 0.34);
+    border-color: rgba(248, 113, 113, 0.68);
+  }
+
+  .theme-system .text-red-600,
+  .theme-system .text-red-700 {
+    color: #FCA5A5;
   }
 }
 
