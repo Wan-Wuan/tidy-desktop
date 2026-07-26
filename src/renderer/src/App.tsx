@@ -1,4 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import {
+  AppWindow,
+  FolderPlus,
+  GearSix,
+  MagnifyingGlass,
+  MagicWand,
+  Plus,
+  SquaresFour
+} from '@phosphor-icons/react'
 import { AppItem, Category, Subcategory, Config, ShortcutImportItem, UiCommand } from '../../shared/types'
 import { isFolderPath, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
@@ -14,6 +23,8 @@ import {
 } from './utils/categoryDeletion'
 import { useUpdate } from './hooks/useUpdate'
 import { UpdateButton, UpdateDialog } from './components/UpdateButton'
+import { SidebarResizeHandle } from './components/SidebarResizeHandle'
+import { WindowResizeHandles } from './components/WindowResizeHandles'
 import {
   CategoryContextMenuOverlay,
   CategoryDeleteDialogOverlay,
@@ -279,6 +290,8 @@ function App() {
 
   const [draggedSubId, setDraggedSubId] = useState<string | null>(null)
   const [dragOverSubId, setDragOverSubId] = useState<string | null>(null)
+  const [activeSubcategoryId, setActiveSubcategoryId] = useState<string | null>(null)
+  const [sidebarWidthDraft, setSidebarWidthDraft] = useState<number | null>(null)
   const [categoryContextMenu, setCategoryContextMenu] = useState<CategoryContextMenu | null>(null)
   const [categoryEditDialog, setCategoryEditDialog] = useState<CategoryEditDialog | null>(null)
   const [categoryDeleteDialog, setCategoryDeleteDialog] = useState<CategoryDeleteDialog | null>(null)
@@ -1086,6 +1099,10 @@ function App() {
   const visibleSubcategories = subcategories.filter(s => s.parentId === activeCategory)
   const displaySubcategories = activeCategory ? visibleSubcategories : subcategories
 
+  useEffect(() => {
+    setActiveSubcategoryId(null)
+  }, [activeCategory])
+
   const handleSubcategoryWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     const el = e.currentTarget
     const maxScrollLeft = el.scrollWidth - el.clientWidth
@@ -1100,6 +1117,20 @@ function App() {
     e.preventDefault()
     el.scrollLeft = nextScrollLeft
   }, [])
+
+  const handleContentScroll = useCallback(() => {
+    const container = dropZoneRef.current
+    if (!container || displaySubcategories.length === 0) return
+    const threshold = container.getBoundingClientRect().top + 88
+    let current: string | null = null
+    for (const subcategory of displaySubcategories) {
+      const section = document.getElementById(`subcat-${subcategory.id}`)
+      if (section && section.getBoundingClientRect().top <= threshold) {
+        current = subcategory.id
+      }
+    }
+    setActiveSubcategoryId(previous => previous === current ? previous : current)
+  }, [displaySubcategories])
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -1687,9 +1718,33 @@ function App() {
     })
   }, [runUiCommand])
 
+  const activeLayout = config?.ui?.layout || 'horizon-workspace'
+  const sidebarWidth = sidebarWidthDraft ?? config?.ui?.sidebarWidth ?? 240
+  const shellStyle = { '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties
+  const commitSidebarWidth = async (width: number) => {
+    if (!config) return
+    const currentUi = config.ui || {
+      gridColumns: 6,
+      cardSize: 'medium' as const,
+      showIcon: true,
+      showName: true,
+      borderRadius: 8,
+      theme: 'aurora' as const,
+      layout: 'horizon-workspace' as const,
+      sidebarWidth: 240
+    }
+    const success = await handleUpdateConfig({
+      ...config,
+      ui: { ...currentUi, sidebarWidth: width }
+    })
+    setSidebarWidthDraft(null)
+    return success
+  }
+
   return (
     <div
-      className={`flex flex-col h-screen relative theme-${config?.ui?.theme || 'aurora'}`}
+      className={`app-shell layout-${activeLayout} flex flex-col h-screen relative theme-${config?.ui?.theme || 'aurora'}`}
+      style={shellStyle}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -1702,21 +1757,32 @@ function App() {
         <div className="aurora-orb aurora-orb--frost" />
         <div className="aurora-orb aurora-orb--violet" />
       </div>
+      <WindowResizeHandles />
+      <SidebarResizeHandle
+        value={sidebarWidth}
+        onChange={setSidebarWidthDraft}
+        onCommit={(width) => void commitSidebarWidth(width)}
+      />
 
-      <header className="glass mx-4 mt-3 px-5 py-3 sticky top-3 z-20 rounded-2xl">
-        <div className="flex items-center justify-between gap-3">
-        <div className="flex shrink-0 items-center gap-3">
+      <header className="app-header glass mx-4 mt-3 px-5 py-3 sticky top-3 z-20 rounded-2xl">
+        <div className="app-header-primary flex items-center justify-between gap-3">
+        <div className="app-brand flex shrink-0 items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-md shadow-brand-500/20">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7" rx="1.5"/>
-              <rect x="14" y="3" width="7" height="7" rx="1.5"/>
-              <rect x="3" y="14" width="7" height="7" rx="1.5"/>
-              <rect x="14" y="14" width="7" height="7" rx="1.5"/>
-            </svg>
+            <SquaresFour size={18} color="white" weight="fill" aria-hidden="true" />
           </div>
           <h1 className="text-lg font-display font-bold text-brand-700 tracking-tight">Tidy Desktop</h1>
         </div>
-        <div className="flex min-w-0 items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => void window.electronAPI.showSearchWindow()}
+          className="app-search-trigger focus-ring hidden min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-xl border border-brand-100/80 bg-white/82 px-3.5 py-2 text-left text-sm text-slate-500 transition-colors hover:border-brand-300 hover:bg-white min-[760px]:flex"
+          aria-label="打开快速搜索"
+        >
+          <MagnifyingGlass size={17} aria-hidden="true" />
+          <span className="truncate">搜索应用、文件或命令</span>
+          <kbd className="ml-auto rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-500">{config?.searchHotkey || 'Ctrl+K'}</kbd>
+        </button>
+        <div className="app-header-actions flex min-w-0 items-center justify-end gap-2">
           <button
             onClick={() => setShowAddApp(true)}
             aria-label="添加应用"
@@ -1724,7 +1790,7 @@ function App() {
             className="focus-ring cursor-pointer px-2.5 min-[900px]:px-3.5 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 text-sm font-medium transition-colors duration-200 shadow-sm shadow-brand-500/20 hover:shadow-md hover:shadow-brand-500/30"
           >
             <span className="flex items-center gap-1.5">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <Plus size={15} weight="bold" aria-hidden="true" />
               <span className="max-[899px]:hidden">添加应用</span>
             </span>
           </button>
@@ -1735,7 +1801,7 @@ function App() {
             className="focus-ring cursor-pointer px-2.5 min-[900px]:px-3.5 py-2 bg-frost-500 text-white rounded-lg hover:bg-frost-600 text-sm font-medium transition-colors duration-200 shadow-sm shadow-frost-400/20"
           >
             <span className="flex items-center gap-1.5">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <FolderPlus size={15} weight="bold" aria-hidden="true" />
               <span className="max-[899px]:hidden">添加文件夹</span>
             </span>
           </button>
@@ -1746,7 +1812,7 @@ function App() {
             className="focus-ring cursor-pointer px-2.5 min-[900px]:px-3.5 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-sm font-medium transition-colors duration-200 shadow-sm shadow-emerald-500/20 hover:shadow-md hover:shadow-emerald-500/25"
           >
             <span className="flex items-center gap-1.5">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.6 4.7L18 9.3l-4.4 1.6L12 15.6l-1.6-4.7L6 9.3l4.4-1.6L12 3z"/><path d="M19 14l.9 2.6 2.1.8-2.1.8L19 21l-.9-2.8-2.1-.8 2.1-.8L19 14z"/><path d="M5 13l.8 2.2 1.7.6-1.7.7L5 19l-.8-2.5-1.7-.7 1.7-.6L5 13z"/></svg>
+              <MagicWand size={15} weight="bold" aria-hidden="true" />
               <span className="max-[899px]:hidden">整理中心</span>
             </span>
           </button>
@@ -1757,14 +1823,14 @@ function App() {
             className="focus-ring cursor-pointer px-2.5 min-[900px]:px-3.5 py-2 bg-white/80 text-slate-700 rounded-lg hover:bg-slate-900 hover:text-white text-sm font-medium transition-colors duration-200 border border-slate-200/80"
           >
             <span className="flex items-center gap-1.5">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              <GearSix size={15} weight="bold" aria-hidden="true" />
               <span className="max-[899px]:hidden">设置</span>
             </span>
           </button>
           <UpdateButton state={updateState} version={updateVersion} progress={updateProgress ?? undefined} />
         </div>
         </div>
-        <div className="mt-3 border-t border-brand-100/70 pt-3 flex items-center justify-between gap-4">
+        <div className="app-overview mt-3 border-t border-brand-100/70 pt-3 flex items-center justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-900 text-[11px] font-bold text-white shadow-sm shadow-slate-900/20">2.0</span>
@@ -1812,7 +1878,9 @@ function App() {
                       {hasDisplayableIcon(app.icon) ? (
                         <img src={app.icon} alt="" className="h-4 w-4" draggable={false} />
                       ) : (
-                        <span className="text-[10px]">{app.type === 'folder' ? '📁' : app.type === 'steam' ? '🎮' : '📦'}</span>
+                        app.type === 'folder'
+                          ? <FolderPlus size={14} weight="duotone" aria-hidden="true" />
+                          : <AppWindow size={14} weight="duotone" aria-hidden="true" />
                       )}
                     </span>
                     <span className="truncate">{app.name}</span>
@@ -1829,8 +1897,10 @@ function App() {
         </div>
       </header>
 
-      <div ref={categoryBarRef} className="px-5 pt-3 pb-2 flex gap-2 overflow-x-auto">
+      <div ref={categoryBarRef} className="category-nav px-5 pt-3 pb-2 flex gap-2 overflow-x-auto">
         <button
+          data-active={activeCategory === null}
+          aria-current={activeCategory === null ? 'page' : undefined}
           onClick={() => { setActiveCategory(null) }}
           onContextMenu={(e) => openCategoryContextMenu(e, { type: 'all' })}
           className={`focus-ring cursor-pointer px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${
@@ -1845,6 +1915,8 @@ function App() {
           <button
             key={cat.id}
             data-category-id={cat.id}
+            data-active={activeCategory === cat.id}
+            aria-current={activeCategory === cat.id ? 'page' : undefined}
             onClick={() => { setActiveCategory(cat.id) }}
             onContextMenu={(e) => openCategoryContextMenu(e, { type: 'category', id: cat.id })}
             onDragOver={(e) => {
@@ -1907,7 +1979,7 @@ function App() {
       <div
         ref={subcategoryBarRef}
         onWheel={handleSubcategoryWheel}
-        className="subcategory-scroll px-5 pb-3 flex gap-2 overflow-x-auto"
+        className="subcategory-nav subcategory-scroll px-5 pb-3 flex gap-2 overflow-x-auto"
       >
         {displaySubcategories.map(sub => (
           <button
@@ -1916,9 +1988,12 @@ function App() {
             draggable
             onContextMenu={(e) => openCategoryContextMenu(e, { type: 'subcategory', id: sub.id })}
             onClick={() => {
+              setActiveSubcategoryId(sub.id)
               const el = document.getElementById(`subcat-${sub.id}`)
               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }}
+            data-active={activeSubcategoryId === sub.id}
+            aria-current={activeSubcategoryId === sub.id ? 'location' : undefined}
             onDragStart={(e) => {
               setDraggedSubId(sub.id)
               e.dataTransfer.effectAllowed = 'move'
@@ -1965,7 +2040,9 @@ function App() {
                 ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
                 : draggedSubId === sub.id
                   ? 'opacity-40 scale-95'
-                  : 'bg-white/50 text-slate-700 hover:bg-brand-500 hover:text-white hover:border-brand-500 border border-brand-100/40'
+                  : activeSubcategoryId === sub.id
+                    ? 'bg-brand-600 text-white border border-brand-600 shadow-sm shadow-brand-500/20'
+                    : 'bg-white/50 text-slate-700 hover:bg-brand-500 hover:text-white hover:border-brand-500 border border-brand-100/40'
             }`}
           >
             {sub.icon} {sub.name}
@@ -1994,7 +2071,8 @@ function App() {
 
       <main
         ref={dropZoneRef}
-        className="relative flex-1 overflow-y-scroll px-5 py-4"
+        onScroll={handleContentScroll}
+        className="app-content relative flex-1 overflow-y-scroll px-5 py-4"
         style={{ scrollbarGutter: 'stable', willChange: 'scroll-position', backdropFilter: 'blur(40px) saturate(1.2)', WebkitBackdropFilter: 'blur(40px) saturate(1.2)' }}
       >
         <div key={activeCategory} className="tab-fade-enter" style={{ contain: 'content' }}>
@@ -2017,7 +2095,7 @@ function App() {
 
             <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
               {smartLaunchApps.length > 0 && (
-                <div className="hidden min-w-0 items-center gap-2 lg:flex">
+                <div className="smart-launch-list hidden min-w-0 items-center gap-2 lg:flex">
                   <span className="shrink-0 text-[11px] font-semibold text-slate-400">智能启动</span>
                   {smartLaunchApps.map(app => (
                     <button
@@ -2030,7 +2108,9 @@ function App() {
                         {hasDisplayableIcon(app.icon) ? (
                           <img src={app.icon} alt="" className="h-4 w-4" draggable={false} />
                         ) : (
-                          <span className="text-[10px]">{app.type === 'folder' ? '📁' : app.type === 'steam' ? '🎮' : '📦'}</span>
+                          app.type === 'folder'
+                            ? <FolderPlus size={14} weight="duotone" aria-hidden="true" />
+                            : <AppWindow size={14} weight="duotone" aria-hidden="true" />
                         )}
                       </span>
                       <span className="truncate">{app.name}</span>
@@ -2148,7 +2228,7 @@ function App() {
                           }, 100)
                         }}
                         style={{ borderRadius: br }}
-                        className={`glass-card ${pSize} card-hover cursor-pointer group relative select-none ${
+                        className={`app-tile glass-card ${pSize} card-hover cursor-pointer group relative select-none ${
                           draggedAppId === app.id ? 'opacity-30 scale-95 blur-[2px]' : ''
                         } ${dragOverAppId === app.id ? 'scale-[1.03] ring-2 ring-brand-500 ring-offset-2 shadow-xl shadow-brand-500/20 bg-brand-50/50' : ''}`}
                         onClick={() => handleOpenApp(app)}
@@ -2207,7 +2287,9 @@ function App() {
                             {hasDisplayableIcon(app.icon) ? (
                               <img src={app.icon} alt={app.name} className={iconInner} draggable={false} />
                             ) : (
-<span className={ui?.cardSize === 'small' ? 'text-xl' : ui?.cardSize === 'large' ? 'text-3xl' : 'text-2xl'}>{app.type === 'folder' ? '📁' : app.type === 'steam' ? '🎮' : '📦'}</span>
+                              app.type === 'folder'
+                                ? <FolderPlus size={ui?.cardSize === 'small' ? 24 : ui?.cardSize === 'large' ? 34 : 30} weight="duotone" aria-hidden="true" />
+                                : <AppWindow size={ui?.cardSize === 'small' ? 24 : ui?.cardSize === 'large' ? 34 : 30} weight="duotone" aria-hidden="true" />
                             )}
                           </div>
                         )}
@@ -2241,7 +2323,7 @@ function App() {
         </div>
       </main>
 
-      <footer className="glass px-6 py-2 text-xs text-slate-400 flex justify-between border-t border-brand-100/30">
+      <footer className="app-footer glass px-6 py-2 text-xs text-slate-400 flex justify-between border-t border-brand-100/30">
         <span>Esc 关闭窗口</span>
         <span className="flex items-center gap-3">
           <span className="flex items-center gap-1">
@@ -2306,6 +2388,7 @@ function App() {
           onAddSubcategory={addSubcategoryFromMenu}
           onDeleteCategory={deleteCategoryFromMenu}
           onLocateSubcategory={subcategory => {
+            setActiveSubcategoryId(subcategory.id)
             document.getElementById(`subcat-${subcategory.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             setCategoryContextMenu(null)
           }}

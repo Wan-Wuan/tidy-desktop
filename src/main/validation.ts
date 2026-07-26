@@ -14,6 +14,7 @@ import type {
 const APP_TYPES = new Set(['app', 'folder', 'steam'])
 const CARD_SIZES = new Set(['small', 'medium', 'large'])
 const THEMES = new Set(['aurora', 'light', 'dark', 'system'])
+const LAYOUTS = new Set(['command-rail', 'horizon-workspace', 'studio-split'])
 const QUICK_ACTIONS = new Set(['shutdown', 'restart', 'lock', 'settings', 'calculator', 'notepad', 'clipboard'])
 const MAX_ITEMS = 5000
 const MAX_STRING_LENGTH = 8192
@@ -61,13 +62,16 @@ function sanitizeUiSettings(value: unknown, defaults: UISettings): UISettings {
   if (!isRecord(value)) return defaults
   const cardSize = asString(value.cardSize, defaults.cardSize)
   const theme = asString(value.theme, defaults.theme || 'aurora')
+  const layout = asString(value.layout, defaults.layout || 'horizon-workspace')
   return {
     gridColumns: Math.min(12, Math.max(1, Math.round(asFiniteNumber(value.gridColumns, defaults.gridColumns)))),
     cardSize: CARD_SIZES.has(cardSize) ? cardSize as UISettings['cardSize'] : defaults.cardSize,
     showIcon: asBoolean(value.showIcon, defaults.showIcon),
     showName: asBoolean(value.showName, defaults.showName),
     borderRadius: Math.min(32, Math.max(0, Math.round(asFiniteNumber(value.borderRadius, defaults.borderRadius)))),
-    theme: THEMES.has(theme) ? theme as UISettings['theme'] : defaults.theme
+    theme: THEMES.has(theme) ? theme as UISettings['theme'] : defaults.theme,
+    layout: LAYOUTS.has(layout) ? layout as UISettings['layout'] : defaults.layout,
+    sidebarWidth: Math.min(420, Math.max(180, Math.round(asFiniteNumber(value.sidebarWidth, defaults.sidebarWidth || 240))))
   }
 }
 
@@ -131,7 +135,9 @@ export function sanitizeConfig(input: unknown, defaults: Config): Config | null 
       showIcon: true,
       showName: true,
       borderRadius: 8,
-      theme: 'aurora'
+      theme: 'aurora',
+      layout: 'horizon-workspace',
+      sidebarWidth: 240
     }),
     defaultEngine: searchEngines[asString(input.defaultEngine, defaults.defaultEngine, 40)]
       ? asString(input.defaultEngine, defaults.defaultEngine, 40)

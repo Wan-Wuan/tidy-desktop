@@ -8,6 +8,13 @@ import { sanitizeAppsData, sanitizeCategoriesData, sanitizeConfig } from '../val
 let mainWindowRef: { current: BrowserWindow | null } = { current: null }
 let searchWindowRef: { current: BrowserWindow | null } = { current: null }
 let shortcutScanCache: { createdAt: number; items: ShortcutImportItem[] } | null = null
+type ResizeEdge = 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
+let mainWindowResizeSession: {
+  edge: ResizeEdge
+  startX: number
+  startY: number
+  bounds: Electron.Rectangle
+} | null = null
 
 const SHORTCUT_SCAN_LIMIT = 500
 const SHORTCUT_RESULT_LIMIT = 300
@@ -87,11 +94,109 @@ function collectShortcutFiles(root: string, limit = 600): string[] {
 }
 
 export function registerSystemHandlers() {
+  ipcMain.handle('begin-main-window-resize', (event, edge: unknown, screenX: unknown, screenY: unknown) => {
+    const w = mainWindowRef.current
+    const validEdges = new Set<ResizeEdge>(['n', 'e', 's', 'w', 'ne', 'nw', 'se', 'sw'])
+    if (
+      !w ||
+      w.isDestroyed() ||
+      w.isMaximized() ||
+      w.isFullScreen() ||
+      !w.isResizable() ||
+      event.sender !== w.webContents ||
+      typeof edge !== 'string' ||
+      !validEdges.has(edge as ResizeEdge) ||
+      typeof screenX !== 'number' ||
+      !Number.isFinite(screenX) ||
+      typeof screenY !== 'number' ||
+      !Number.isFinite(screenY)
+    ) {
+      return false
+    }
+    mainWindowResizeSession = {
+      edge: edge as ResizeEdge,
+      startX: screenX,
+      startY: screenY,
+      bounds: w.getBounds()
+    }
+    return true
+  })
+
+  ipcMain.on('update-main-window-resize', (event, screenX: unknown, screenY: unknown) => {
+    const w = mainWindowRef.current
+    const session = mainWindowResizeSession
+    if (
+      !w ||
+      w.isDestroyed() ||
+      event.sender !== w.webContents ||
+      !session ||
+      typeof screenX !== 'number' ||
+      !Number.isFinite(screenX) ||
+      typeof screenY !== 'number' ||
+      !Number.isFinite(screenY)
+    ) {
+      return
+    }
+
+    const [minimumWidth, minimumHeight] = w.getMinimumSize()
+    const dx = screenX - session.startX
+    const dy = screenY - session.startY
+    let { x, y, width, height } = session.bounds
+
+    if (session.edge.includes('e')) width = Math.max(minimumWidth, session.bounds.width + dx)
+    if (session.edge.includes('s')) height = Math.max(minimumHeight, session.bounds.height + dy)
+    if (session.edge.includes('w')) {
+      width = Math.max(minimumWidth, session.bounds.width - dx)
+      x = session.bounds.x + session.bounds.width - width
+    }
+    if (session.edge.includes('n')) {
+      height = Math.max(minimumHeight, session.bounds.height - dy)
+      y = session.bounds.y + session.bounds.height - height
+    }
+
+    const display = screen.getDisplayMatching(session.bounds)
+    width = Math.min(width, display.workArea.width)
+    height = Math.min(height, display.workArea.height)
+    if (session.edge.includes('w')) x = session.bounds.x + session.bounds.width - width
+    if (session.edge.includes('n')) y = session.bounds.y + session.bounds.height - height
+    w.setBounds({
+      x: Math.round(x),
+      y: Math.round(y),
+      width: Math.round(width),
+      height: Math.round(height)
+    })
+  })
+
+  ipcMain.on('end-main-window-resize', (event) => {
+    const w = mainWindowRef.current
+    if (w && !w.isDestroyed() && event.sender === w.webContents) {
+      mainWindowResizeSession = null
+    }
+  })
+
   ipcMain.handle('hide-main-window', () => {
     const w = mainWindowRef.current
     if (w && !w.isDestroyed()) {
       w.hide()
     }
+  })
+
+  ipcMain.handle('show-search-window', () => {
+    const w = searchWindowRef.current
+    if (!w || w.isDestroyed()) return false
+    const point = screen.getCursorScreenPoint()
+    const display = screen.getDisplayNearestPoint(point)
+    const bounds = w.getBounds()
+    w.setBounds({
+      x: Math.round(display.workArea.x + (display.workArea.width - bounds.width) / 2),
+      y: Math.round(display.workArea.y + display.workArea.height * 0.3),
+      width: bounds.width,
+      height: bounds.height
+    })
+    w.webContents.send('reset-search')
+    w.show()
+    w.focus()
+    return true
   })
 
   ipcMain.handle('hide-search-window', () => {

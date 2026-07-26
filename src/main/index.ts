@@ -1,7 +1,7 @@
 import { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen, dialog, shell, ipcMain } from 'electron'
 import path from 'path'
 import type { Config, UiCommand } from '../shared/types'
-import { ensureDataDir, readJsonFile, getDefaultConfig, CONFIG_FILE } from './config'
+import { ensureDataDir, readJsonFile, writeJsonFile, getDefaultConfig, CONFIG_FILE } from './config'
 import { registerAppHandlers } from './handlers/appHandlers'
 import { registerFileHandlers } from './handlers/fileHandlers'
 import { registerIconHandlers } from './handlers/iconHandlers'
@@ -95,6 +95,25 @@ function createWindow() {
     }
   })
 
+  let windowSizeSaveTimer: NodeJS.Timeout | null = null
+  const persistWindowSize = () => {
+    if (win.isDestroyed()) return
+    const [currentWidth, currentHeight] = win.getSize()
+    const latestConfig = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
+    writeJsonFile(CONFIG_FILE, {
+      ...latestConfig,
+      windowSize: { width: currentWidth, height: currentHeight }
+    })
+  }
+
+  win.on('resize', () => {
+    if (windowSizeSaveTimer) clearTimeout(windowSizeSaveTimer)
+    windowSizeSaveTimer = setTimeout(() => {
+      windowSizeSaveTimer = null
+      persistWindowSize()
+    }, 300)
+  })
+
   attachWindowSecurity(win)
 
   win.setMenu(null)
@@ -127,6 +146,10 @@ function createWindow() {
   })
 
   win.on('closed', () => {
+    if (windowSizeSaveTimer) {
+      clearTimeout(windowSizeSaveTimer)
+      windowSizeSaveTimer = null
+    }
     mainWindowRef.current = null
   })
 

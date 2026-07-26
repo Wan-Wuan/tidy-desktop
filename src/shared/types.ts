@@ -40,6 +40,8 @@ export interface UISettings {
   showName: boolean
   borderRadius: number
   theme?: 'aurora' | 'light' | 'dark' | 'system'
+  layout?: 'command-rail' | 'horizon-workspace' | 'studio-split'
+  sidebarWidth?: number
 }
 
 export interface AutoCategoryRule {

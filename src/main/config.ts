@@ -81,7 +81,9 @@ export function getDefaultConfig() {
       showIcon: true,
       showName: true,
       borderRadius: 8,
-      theme: 'aurora' as const
+      theme: 'aurora' as const,
+      layout: 'horizon-workspace' as const,
+      sidebarWidth: 240
     },
     defaultEngine: 'b',
     onboardingCompleted: false,

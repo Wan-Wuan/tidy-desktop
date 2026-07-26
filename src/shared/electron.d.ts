@@ -44,6 +44,9 @@ declare global {
       runUiCommand: (command: UiCommand) => Promise<boolean>
       selectFolder: () => Promise<string | null>
       hideMainWindow: () => Promise<void>
+      beginMainWindowResize: (edge: 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw', screenX: number, screenY: number) => Promise<boolean>
+      updateMainWindowResize: (screenX: number, screenY: number) => void
+      endMainWindowResize: () => void
       confirm: (message: string) => Promise<boolean>
       extractIcon: (filePath: string) => Promise<string | null>
       extractSteamIcon: (steamUrl: string) => Promise<string | null>
@@ -64,6 +67,7 @@ declare global {
       openDataDirectory: () => Promise<boolean>
       clearIconCache: () => Promise<{ success: boolean; count: number }>
       openUpdateLog: () => Promise<boolean>
+      showSearchWindow: () => Promise<boolean>
       hideSearchWindow: () => Promise<void>
       resizeSearchWindow: (height: number) => Promise<void>
       moveSearchWindowToCursorDisplay: () => Promise<boolean>

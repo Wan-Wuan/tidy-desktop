@@ -1,4 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react'
+import {
+  CheckCircle,
+  Keyboard,
+  MagnifyingGlass,
+  Palette,
+  RocketLaunch,
+  Wrench
+} from '@phosphor-icons/react'
 import type { Config, UISettings } from '../../../../shared/types'
 import type { HealthReport, IconRefreshProgress } from './types'
 
@@ -56,7 +64,7 @@ export const SettingsModal = React.memo(function SettingsModal({
   const [autoStart, setAutoStart] = useState(false)
   const [defaultEngine, setDefaultEngine] = useState(config.defaultEngine || 'b')
   const [ui, setUi] = useState<UISettings>(config.ui || {
-    gridColumns: 6, cardSize: 'medium', showIcon: true, showName: true, borderRadius: 8, theme: 'aurora'
+    gridColumns: 6, cardSize: 'medium', showIcon: true, showName: true, borderRadius: 8, theme: 'aurora', layout: 'horizon-workspace', sidebarWidth: 240
   })
   const [recording, setRecording] = useState<'main' | 'search' | null>(null)
   const engines = config.searchEngines
@@ -82,7 +90,7 @@ export const SettingsModal = React.memo(function SettingsModal({
       setAutoStart(config.autoStart === true)
       setDefaultEngine(config.defaultEngine || 'b')
       setUi(config.ui || {
-        gridColumns: 6, cardSize: 'medium', showIcon: true, showName: true, borderRadius: 8, theme: 'aurora'
+        gridColumns: 6, cardSize: 'medium', showIcon: true, showName: true, borderRadius: 8, theme: 'aurora', layout: 'horizon-workspace', sidebarWidth: 240
       })
       if (overrides.autoStart !== undefined) {
         await window.electronAPI.setAutoStart(config.autoStart === true)
@@ -123,6 +131,26 @@ export const SettingsModal = React.memo(function SettingsModal({
   }, [recording])
 
   const cardSizeLabels: Record<string, string> = { small: '小', medium: '中', large: '大' }
+  const layoutTemplates = [
+    {
+      id: 'command-rail' as const,
+      name: '指挥侧栏',
+      description: '侧边分类常驻，主区域更专注，适合频繁切换分类。',
+      image: '/layout-previews/command-rail.png'
+    },
+    {
+      id: 'horizon-workspace' as const,
+      name: '横向工作区',
+      description: '顶部分类配合最近使用，适合大屏快速浏览。',
+      image: '/layout-previews/horizon-workspace.png'
+    },
+    {
+      id: 'studio-split' as const,
+      name: '分栏工作室',
+      description: '分类与子分类分层展开，适合内容较多的工作库。',
+      image: '/layout-previews/studio-split.png'
+    }
+  ]
 
   return (
     <div
@@ -131,12 +159,12 @@ export const SettingsModal = React.memo(function SettingsModal({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="glass rounded-2xl p-6 w-[480px] max-h-[85vh] overflow-auto shadow-xl shadow-brand-500/5 modal-enter">
+      <div className="glass rounded-2xl p-6 w-[760px] max-w-[calc(100vw-32px)] max-h-[88vh] overflow-auto shadow-xl shadow-brand-500/5 modal-enter">
         <h2 className="text-lg font-display font-bold text-slate-800 mb-5">设置</h2>
 
         <div className="mb-5">
           <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-            <span>🚀</span> 常规
+            <RocketLaunch size={17} weight="duotone" aria-hidden="true" /> 常规
           </h3>
           <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
             <div>
@@ -159,7 +187,7 @@ export const SettingsModal = React.memo(function SettingsModal({
 
         <div className="mb-5">
           <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-            <span>⌨️</span> 快捷键
+            <Keyboard size={17} weight="duotone" aria-hidden="true" /> 快捷键
           </h3>
           <div className="space-y-2">
             <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
@@ -199,7 +227,7 @@ export const SettingsModal = React.memo(function SettingsModal({
 
         <div className="mb-5">
           <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-            <span>🔍</span> 搜索引擎
+            <MagnifyingGlass size={17} weight="duotone" aria-hidden="true" /> 搜索引擎
           </h3>
           <div className="mb-3">
             <label className="text-xs text-slate-500 mb-1 block">默认搜索引擎</label>
@@ -229,9 +257,58 @@ export const SettingsModal = React.memo(function SettingsModal({
 
         <div className="mb-5">
           <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-            <span>🎨</span> 界面
+            <Palette size={17} weight="duotone" aria-hidden="true" /> 界面
           </h3>
           <div className="space-y-3">
+            <div>
+              <div className="mb-2 flex items-end justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-slate-700">界面模板</div>
+                  <div className="mt-0.5 text-xs text-slate-500">只调整排版，分类、应用和个性化设置保持不变。</div>
+                </div>
+                <span className="shrink-0 text-[11px] text-slate-400">即时生效</span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 min-[680px]:grid-cols-3">
+                {layoutTemplates.map(template => {
+                  const selected = (ui.layout || 'horizon-workspace') === template.id
+                  return (
+                    <button
+                      key={template.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => {
+                        const next = { ...ui, layout: template.id }
+                        setUi(next)
+                        saveConfig({ ui: next })
+                      }}
+                      className={`group focus-ring relative overflow-hidden rounded-xl border bg-white/80 text-left transition-all duration-200 ${
+                        selected
+                          ? 'border-brand-500 shadow-md shadow-brand-500/10'
+                          : 'border-slate-200 hover:border-brand-300 hover:shadow-sm'
+                      }`}
+                    >
+                      <div className="relative aspect-[1.4/1] overflow-hidden border-b border-slate-100 bg-slate-50">
+                        <img
+                          src={template.image}
+                          alt={`${template.name}界面预览`}
+                          className="h-full w-full object-cover object-top transition-transform duration-300 group-hover:scale-[1.02]"
+                        />
+                        {selected && (
+                          <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-brand-600 px-2 py-1 text-[10px] font-semibold text-white shadow-sm">
+                            <CheckCircle size={12} weight="fill" aria-hidden="true" />
+                            使用中
+                          </span>
+                        )}
+                      </div>
+                      <span className="block p-3">
+                        <span className="block text-sm font-semibold text-slate-800">{template.name}</span>
+                        <span className="mt-1 block text-xs leading-5 text-slate-500">{template.description}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
             <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
               <span className="text-sm text-slate-700">每行显示数量</span>
               <div className="flex gap-1">
@@ -324,7 +401,7 @@ export const SettingsModal = React.memo(function SettingsModal({
 
         <div className="mb-5">
           <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-            <span>工具</span>
+            <Wrench size={17} weight="duotone" aria-hidden="true" /> 工具
           </h3>
           <div className="grid grid-cols-2 gap-2">
             <button onClick={onRefreshIcons} disabled={!!iconRefreshProgress} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300 disabled:opacity-60">
