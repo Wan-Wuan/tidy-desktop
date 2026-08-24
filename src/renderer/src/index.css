@@ -718,10 +718,6 @@ body {
   min-height: 38px;
 }
 
-.app-search-trigger {
-  max-width: 580px;
-}
-
 .category-nav {
   grid-column: 1;
   grid-row: 2;

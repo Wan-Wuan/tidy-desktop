@@ -3,7 +3,6 @@ import {
   AppWindow,
   FolderPlus,
   GearSix,
-  MagnifyingGlass,
   MagicWand,
   Plus,
   SquaresFour
@@ -1772,16 +1771,6 @@ function App() {
           </div>
           <h1 className="text-lg font-display font-bold text-brand-700 tracking-tight">Tidy Desktop</h1>
         </div>
-        <button
-          type="button"
-          onClick={() => void window.electronAPI.showSearchWindow()}
-          className="app-search-trigger focus-ring hidden min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-xl border border-brand-100/80 bg-white/82 px-3.5 py-2 text-left text-sm text-slate-500 transition-colors hover:border-brand-300 hover:bg-white min-[760px]:flex"
-          aria-label="打开快速搜索"
-        >
-          <MagnifyingGlass size={17} aria-hidden="true" />
-          <span className="truncate">搜索应用、文件或命令</span>
-          <kbd className="ml-auto rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-500">{config?.searchHotkey || 'Ctrl+K'}</kbd>
-        </button>
         <div className="app-header-actions flex min-w-0 items-center justify-end gap-2">
           <button
             onClick={() => setShowAddApp(true)}
