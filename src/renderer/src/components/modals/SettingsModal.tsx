@@ -136,19 +136,19 @@ export const SettingsModal = React.memo(function SettingsModal({
       id: 'command-rail' as const,
       name: '指挥侧栏',
       description: '侧边分类常驻，主区域更专注，适合频繁切换分类。',
-      image: '/layout-previews/command-rail.png'
+      image: './layout-previews/command-rail.png'
     },
     {
       id: 'horizon-workspace' as const,
       name: '横向工作区',
       description: '顶部分类配合最近使用，适合大屏快速浏览。',
-      image: '/layout-previews/horizon-workspace.png'
+      image: './layout-previews/horizon-workspace.png'
     },
     {
       id: 'studio-split' as const,
       name: '分栏工作室',
       description: '分类与子分类分层展开，适合内容较多的工作库。',
-      image: '/layout-previews/studio-split.png'
+      image: './layout-previews/studio-split.png'
     }
   ]
 
