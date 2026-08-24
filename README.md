@@ -1,5 +1,7 @@
 # Tidy Desktop（桌面整理）
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 一个简洁高效的桌面应用整理工具，帮助您快速启动、分类和管理应用程序。
 
 ## 功能特性
