@@ -1886,7 +1886,7 @@ function App() {
         </div>
       </header>
 
-      <div ref={categoryBarRef} className="category-nav px-5 pt-3 pb-2 flex gap-2 overflow-x-auto">
+      <div ref={categoryBarRef} className="category-nav px-5 pt-3 pb-2 flex gap-2 items-start overflow-x-auto">
         <button
           data-active={activeCategory === null}
           aria-current={activeCategory === null ? 'page' : undefined}
@@ -1900,69 +1900,149 @@ function App() {
         >
           全部
         </button>
-        {categories.map(cat => (
-          <button
-            key={cat.id}
-            data-category-id={cat.id}
-            data-active={activeCategory === cat.id}
-            aria-current={activeCategory === cat.id ? 'page' : undefined}
-            onClick={() => { setActiveCategory(cat.id) }}
-            onContextMenu={(e) => openCategoryContextMenu(e, { type: 'category', id: cat.id })}
-            onDragOver={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              moveDragGhost(e.clientX, e.clientY)
-              const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-              const hasFiles = e.dataTransfer.types.includes('Files')
-              if (appId || hasFiles) {
-                e.dataTransfer.dropEffect = appId ? 'move' : 'copy'
-                setDragOverCategory(cat.id)
-              }
-            }}
-            onDragLeave={() => setDragOverCategory(null)}
-            onDrop={async (e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              setDragOverCategory(null)
-
-              // 优先处理内部拖拽（包括原生拖拽放回应用内的情况）
-              if (draggedAppIdRef.current) {
-                await handleMoveAppToCategory(draggedAppIdRef.current, cat.id)
-                draggedAppIdRef.current = null
-                setDraggedAppId(null)
-                return
-              }
-
-              const filePaths = getDroppedPathsFromEvent(e.dataTransfer)
-              if (filePaths.length > 0) {
-                const result = await parsePathsToApps(filePaths, cat.id)
-                const newApps = result.apps
-                if (newApps.length > 0) {
-                  const updatedApps = [...appsRef.current, ...newApps]
-                  appsRef.current = updatedApps
-                  setApps(updatedApps)
-                  await window.electronAPI.saveApps({ apps: updatedApps })
-                  await extractIconsForApps(newApps)
+        {categories.map(cat => {
+          const catSubs = subcategories.filter(s => s.parentId === cat.id)
+          const isCatActive = activeCategory === cat.id
+          return (
+          <div key={cat.id} className="flex flex-col items-stretch gap-1.5 flex-shrink-0">
+            <button
+              data-category-id={cat.id}
+              data-active={isCatActive}
+              aria-current={isCatActive ? 'page' : undefined}
+              onClick={() => { setActiveCategory(cat.id) }}
+              onContextMenu={(e) => openCategoryContextMenu(e, { type: 'category', id: cat.id })}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                moveDragGhost(e.clientX, e.clientY)
+                const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
+                const hasFiles = e.dataTransfer.types.includes('Files')
+                if (appId || hasFiles) {
+                  e.dataTransfer.dropEffect = appId ? 'move' : 'copy'
+                  setDragOverCategory(cat.id)
                 }
-                showDropResult(result)
-              } else {
-                const appId = e.dataTransfer.getData('text/plain')
-                if (appId) {
-                  await handleMoveAppToCategory(appId, cat.id)
+              }}
+              onDragLeave={() => setDragOverCategory(null)}
+              onDrop={async (e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setDragOverCategory(null)
+
+                // 优先处理内部拖拽（包括原生拖拽放回应用内的情况）
+                if (draggedAppIdRef.current) {
+                  await handleMoveAppToCategory(draggedAppIdRef.current, cat.id)
+                  draggedAppIdRef.current = null
+                  setDraggedAppId(null)
+                  return
                 }
-              }
-            }}
-            className={`focus-ring cursor-pointer px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${
-              activeCategory === cat.id
-                ? 'bg-brand-600 text-white shadow-md shadow-brand-500/25'
-                : dragOverCategory === cat.id
-                  ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
-                  : 'bg-white/60 text-slate-700 hover:bg-brand-600 hover:text-white hover:border-brand-600 border border-brand-100/50'
-            }`}
-          >
-            {cat.icon} {cat.name}
-          </button>
-        ))}
+
+                const filePaths = getDroppedPathsFromEvent(e.dataTransfer)
+                if (filePaths.length > 0) {
+                  const result = await parsePathsToApps(filePaths, cat.id)
+                  const newApps = result.apps
+                  if (newApps.length > 0) {
+                    const updatedApps = [...appsRef.current, ...newApps]
+                    appsRef.current = updatedApps
+                    setApps(updatedApps)
+                    await window.electronAPI.saveApps({ apps: updatedApps })
+                    await extractIconsForApps(newApps)
+                  }
+                  showDropResult(result)
+                } else {
+                  const appId = e.dataTransfer.getData('text/plain')
+                  if (appId) {
+                    await handleMoveAppToCategory(appId, cat.id)
+                  }
+                }
+              }}
+              className={`focus-ring cursor-pointer px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${
+                isCatActive
+                  ? 'bg-brand-600 text-white shadow-md shadow-brand-500/25'
+                  : dragOverCategory === cat.id
+                    ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
+                    : 'bg-white/60 text-slate-700 hover:bg-brand-600 hover:text-white hover:border-brand-600 border border-brand-100/50'
+              }`}
+            >
+              {cat.icon} {cat.name}
+            </button>
+            {/* 点击主分类后，子分类列表直接在该主分类下方展开 */}
+            {isCatActive && (
+              <div className="subcategory-dropdown flex flex-col gap-1">
+                {catSubs.map(sub => (
+                  <button
+                    key={sub.id}
+                    data-subcategory-id={sub.id}
+                    draggable
+                    onContextMenu={(e) => openCategoryContextMenu(e, { type: 'subcategory', id: sub.id })}
+                    onClick={() => {
+                      setActiveSubcategoryId(sub.id)
+                      const el = document.getElementById(`subcat-${sub.id}`)
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    }}
+                    data-active={activeSubcategoryId === sub.id}
+                    aria-current={activeSubcategoryId === sub.id ? 'location' : undefined}
+                    onDragStart={(e) => {
+                      setDraggedSubId(sub.id)
+                      e.dataTransfer.effectAllowed = 'move'
+                      e.dataTransfer.setData('text/plain', sub.id)
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      moveDragGhost(e.clientX, e.clientY)
+                      if (draggedSubId && draggedSubId !== sub.id) {
+                        e.dataTransfer.dropEffect = 'move'
+                        setDragOverSubId(sub.id)
+                      } else {
+                        const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
+                        if (appId) {
+                          e.dataTransfer.dropEffect = 'move'
+                        }
+                      }
+                    }}
+                    onDragLeave={() => setDragOverSubId(null)}
+                    onDrop={async (e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setDragOverSubId(null)
+                      if (draggedSubId && draggedSubId !== sub.id) {
+                        await handleReorderSubcategory(draggedSubId, sub.id)
+                        setDraggedSubId(null)
+                      } else {
+                        const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
+                        if (appId) {
+                          await handleMoveAppToSubcategory(appId, sub.id)
+                          draggedAppIdRef.current = null
+                          setDraggedAppId(null)
+                        }
+                      }
+                    }}
+                    onDragEnd={() => {
+                      removeDragGhost()
+                      setDraggedSubId(null)
+                      setDragOverSubId(null)
+                    }}
+                    className={`subcategory-dropdown-item focus-ring cursor-pointer px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap text-left transition-colors duration-200 ${
+                      dragOverSubId === sub.id
+                        ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
+                        : draggedSubId === sub.id
+                          ? 'opacity-40 scale-95'
+                          : activeSubcategoryId === sub.id
+                            ? 'bg-brand-600 text-white border border-brand-600 shadow-sm shadow-brand-500/20'
+                            : 'bg-white/50 text-slate-700 hover:bg-brand-500 hover:text-white hover:border-brand-500 border border-brand-100/40'
+                    }`}
+                  >
+                    {sub.icon} {sub.name}
+                  </button>
+                ))}
+                {catSubs.length === 0 && (
+                  <span className="px-3 py-1 text-[11px] text-slate-400 whitespace-nowrap">暂无子分类</span>
+                )}
+              </div>
+            )}
+          </div>
+          )
+        })}
         <button
           onClick={createCategoryFromMenu}
           className="focus-ring cursor-pointer px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
@@ -1983,89 +2063,6 @@ function App() {
           + 子分类
         </button>
       </div>
-
-      {/* 子分类面板：点击主分类后自动展开，带列表动画效果 */}
-      {activeCategory !== null && (
-        <div
-          ref={subcategoryBarRef}
-          onWheel={handleSubcategoryWheel}
-          className="subcategory-panel subcategory-nav subcategory-scroll mx-5 mb-3 rounded-2xl border border-brand-100/60 bg-white/40 backdrop-blur-sm px-3 py-2 flex gap-2 overflow-x-auto"
-        >
-          <span className="flex-shrink-0 self-center text-[11px] font-semibold text-slate-400 pr-1 border-r border-brand-100/70">
-            子分类
-          </span>
-          {displaySubcategories.map(sub => (
-            <button
-              key={sub.id}
-              data-subcategory-id={sub.id}
-              draggable
-              onContextMenu={(e) => openCategoryContextMenu(e, { type: 'subcategory', id: sub.id })}
-              onClick={() => {
-                setActiveSubcategoryId(sub.id)
-                const el = document.getElementById(`subcat-${sub.id}`)
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              }}
-              data-active={activeSubcategoryId === sub.id}
-              aria-current={activeSubcategoryId === sub.id ? 'location' : undefined}
-              onDragStart={(e) => {
-                setDraggedSubId(sub.id)
-                e.dataTransfer.effectAllowed = 'move'
-                e.dataTransfer.setData('text/plain', sub.id)
-              }}
-              onDragOver={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                moveDragGhost(e.clientX, e.clientY)
-                if (draggedSubId && draggedSubId !== sub.id) {
-                  e.dataTransfer.dropEffect = 'move'
-                  setDragOverSubId(sub.id)
-                } else {
-                  const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-                  if (appId) {
-                    e.dataTransfer.dropEffect = 'move'
-                  }
-                }
-              }}
-              onDragLeave={() => setDragOverSubId(null)}
-              onDrop={async (e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setDragOverSubId(null)
-                if (draggedSubId && draggedSubId !== sub.id) {
-                  await handleReorderSubcategory(draggedSubId, sub.id)
-                  setDraggedSubId(null)
-                } else {
-                  const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-                  if (appId) {
-                    await handleMoveAppToSubcategory(appId, sub.id)
-                    draggedAppIdRef.current = null
-                    setDraggedAppId(null)
-                  }
-                }
-              }}
-              onDragEnd={() => {
-                removeDragGhost()
-                setDraggedSubId(null)
-                setDragOverSubId(null)
-              }}
-              className={`focus-ring cursor-pointer px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors duration-200 ${
-                dragOverSubId === sub.id
-                  ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
-                  : draggedSubId === sub.id
-                    ? 'opacity-40 scale-95'
-                    : activeSubcategoryId === sub.id
-                      ? 'bg-brand-600 text-white border border-brand-600 shadow-sm shadow-brand-500/20'
-                      : 'bg-white/50 text-slate-700 hover:bg-brand-500 hover:text-white hover:border-brand-500 border border-brand-100/40'
-              }`}
-            >
-              {sub.icon} {sub.name}
-            </button>
-          ))}
-          {displaySubcategories.length === 0 && (
-            <span className="self-center text-xs text-slate-400">当前分类暂无子分类，点击上方「+ 子分类」创建</span>
-          )}
-        </div>
-      )}
 
       <main
         ref={dropZoneRef}

@@ -730,23 +730,27 @@ body {
   scrollbar-width: thin;
 }
 
-/* 子分类面板：点击主分类后展开的列表动画效果 */
-@keyframes subcategory-panel-in {
+/* 子分类下拉列表：点击主分类后在该分类下方展开的动画效果 */
+@keyframes subcategory-dropdown-in {
   from {
     opacity: 0;
-    transform: translateY(-8px) scaleY(0.9);
-    max-height: 0;
+    transform: translateY(-6px) scaleY(0.85);
   }
   to {
     opacity: 1;
     transform: translateY(0) scaleY(1);
-    max-height: 80px;
   }
 }
 
-.subcategory-panel {
-  animation: subcategory-panel-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+.subcategory-dropdown {
+  animation: subcategory-dropdown-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
   transform-origin: top center;
+  padding: 4px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(59, 130, 246, 0.12);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(8px);
 }
 
 .app-content {
