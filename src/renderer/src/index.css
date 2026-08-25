@@ -932,44 +932,21 @@ body {
   background: rgba(255, 255, 255, 0.82);
 }
 
-/* Template 2: broad top navigation and a horizontal scanning rhythm. */
+/* Template 2: broad top navigation and a horizontal scanning rhythm.
+   分类栏与子分类栏统一为药丸（pill）风格：白色半透明底、圆角全圆、选中实心品牌色 */
 .layout-horizon-workspace .category-nav {
   margin: 8px 16px 0;
   padding: 0 8px;
-  border-bottom: 1px solid rgba(199, 210, 254, 0.58);
   gap: 8px;
 }
 
 .layout-horizon-workspace .category-nav > button {
-  position: relative;
-  min-height: 42px;
-  border: 0;
-  border-radius: 11px;
-  background: transparent;
-  box-shadow: none;
-  color: #475569;
-}
-
-.layout-horizon-workspace .category-nav > button:hover {
-  background: rgba(238, 242, 255, 0.72);
-  color: #4338ca;
+  min-height: 36px;
+  border-radius: 9999px;
 }
 
 .layout-horizon-workspace .category-nav > button[data-active="true"] {
-  background: transparent;
-  color: #4338ca;
   font-weight: 650;
-}
-
-.layout-horizon-workspace .category-nav > button[data-active="true"]::after {
-  content: "";
-  position: absolute;
-  right: 12px;
-  bottom: 0;
-  left: 12px;
-  height: 2px;
-  border-radius: 2px;
-  background: #4f46e5;
 }
 
 .subcategory-nav > button[data-active="true"] {
@@ -982,7 +959,7 @@ body {
 }
 
 .layout-horizon-workspace .subcategory-nav {
-  padding: 10px 24px 4px;
+  padding: 6px 24px 4px;
   justify-content: center;
 }
 
@@ -1081,8 +1058,25 @@ body {
   border-color: rgba(129, 140, 248, 0.22);
 }
 
-.theme-dark.layout-horizon-workspace .category-nav > button {
+/* 深色模式：横向工作区分类/子分类药丸按钮统一深色底 */
+.theme-dark.layout-horizon-workspace .category-nav > button,
+.theme-dark.layout-horizon-workspace .subcategory-nav > button {
+  background: rgba(30, 41, 59, 0.72);
+  border-color: rgba(129, 140, 248, 0.24);
   color: #cbd5e1;
+}
+
+.theme-dark.layout-horizon-workspace .category-nav > button:hover,
+.theme-dark.layout-horizon-workspace .subcategory-nav > button:hover {
+  background: rgba(30, 41, 59, 0.92);
+  color: #a5b4fc;
+}
+
+.theme-dark.layout-horizon-workspace .category-nav > button[data-active="true"],
+.theme-dark.layout-horizon-workspace .subcategory-nav > button[data-active="true"] {
+  background: #4f46e5;
+  border-color: transparent;
+  color: #ffffff;
 }
 
 .theme-dark.layout-command-rail .app-tile:hover,
@@ -1105,6 +1099,26 @@ body {
   .theme-system.layout-studio-split .app-tile:hover {
     background: rgba(30, 41, 59, 0.84);
     border-color: rgba(129, 140, 248, 0.32);
+  }
+
+  .theme-system.layout-horizon-workspace .category-nav > button,
+  .theme-system.layout-horizon-workspace .subcategory-nav > button {
+    background: rgba(30, 41, 59, 0.72);
+    border-color: rgba(129, 140, 248, 0.24);
+    color: #cbd5e1;
+  }
+
+  .theme-system.layout-horizon-workspace .category-nav > button:hover,
+  .theme-system.layout-horizon-workspace .subcategory-nav > button:hover {
+    background: rgba(30, 41, 59, 0.92);
+    color: #a5b4fc;
+  }
+
+  .theme-system.layout-horizon-workspace .category-nav > button[data-active="true"],
+  .theme-system.layout-horizon-workspace .subcategory-nav > button[data-active="true"] {
+    background: #4f46e5;
+    border-color: transparent;
+    color: #ffffff;
   }
 }
 
