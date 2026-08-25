@@ -2046,25 +2046,27 @@ function App() {
           </div>
           )
         })}
-        <button
-          onClick={createCategoryFromMenu}
-          className="focus-ring cursor-pointer px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
-        >
-          + 分类
-        </button>
-        <button
-          onClick={() => {
-            if (categories.length === 0) {
-              alert('请先创建一个主分类，然后再添加子分类。')
-              return
-            }
-            const parentCategory = categories.find(category => category.id === activeCategory) || categories[0]
-            addSubcategoryFromMenu(parentCategory)
-          }}
-          className="focus-ring cursor-pointer px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
-        >
-          + 子分类
-        </button>
+        <div className="category-bar-add-buttons flex gap-2 items-center">
+          <button
+            onClick={createCategoryFromMenu}
+            className="focus-ring cursor-pointer px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
+          >
+            + 分类
+          </button>
+          <button
+            onClick={() => {
+              if (categories.length === 0) {
+                alert('请先创建一个主分类，然后再添加子分类。')
+                return
+              }
+              const parentCategory = categories.find(category => category.id === activeCategory) || categories[0]
+              addSubcategoryFromMenu(parentCategory)
+            }}
+            className="focus-ring cursor-pointer px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
+          >
+            + 子分类
+          </button>
+        </div>
       </div>
 
       {/* 独立子分类栏：横向工作区布局使用，保持原有样式 */}
@@ -2077,6 +2079,27 @@ function App() {
         {activeCategory !== null && displaySubcategories.length === 0 && (
           <span className="self-center text-xs text-slate-400">当前分类暂无子分类，点击上方「+ 子分类」创建</span>
         )}
+        <div className="subcategory-bar-add-buttons flex gap-2 items-center ml-1">
+          <button
+            onClick={createCategoryFromMenu}
+            className="focus-ring cursor-pointer px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
+          >
+            + 分类
+          </button>
+          <button
+            onClick={() => {
+              if (categories.length === 0) {
+                alert('请先创建一个主分类，然后再添加子分类。')
+                return
+              }
+              const parentCategory = categories.find(category => category.id === activeCategory) || categories[0]
+              addSubcategoryFromMenu(parentCategory)
+            }}
+            className="focus-ring cursor-pointer px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
+          >
+            + 子分类
+          </button>
+        </div>
       </div>
 
       <main
