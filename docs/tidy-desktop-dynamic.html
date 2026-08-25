@@ -1,0 +1,1274 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Tidy Desktop 动态介绍网站，包含桌面整理、分类管理、搜索演示和 GitHub 最新发布信息。" />
+  <title>Tidy Desktop 动态网站</title>
+  <link rel="icon" href="../public/favicon.svg" type="image/svg+xml" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+
+    :root {
+      --bg: #020617;
+      --panel: rgba(15, 23, 42, .72);
+      --panel-strong: rgba(15, 23, 42, .92);
+      --line: rgba(148, 163, 184, .18);
+      --line-hot: rgba(34, 197, 94, .52);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --green: #22c55e;
+      --cyan: #38bdf8;
+      --amber: #f59e0b;
+      --rose: #fb7185;
+      --violet: #a78bfa;
+      --shadow: 0 24px 90px rgba(0, 0, 0, .42);
+      --page-gutter: clamp(24px, 4vw, 64px);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-height: 100%;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+      color: var(--text);
+      background:
+        radial-gradient(circle at var(--mx, 50%) var(--my, 20%), rgba(34, 197, 94, .22), transparent 18rem),
+        radial-gradient(circle at 10% 10%, rgba(56, 189, 248, .18), transparent 24rem),
+        radial-gradient(circle at 90% 0%, rgba(167, 139, 250, .12), transparent 26rem),
+        linear-gradient(180deg, #020617 0%, #050b18 48%, #020617 100%);
+      font-family: "Noto Sans SC", "Outfit", system-ui, sans-serif;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      background:
+        linear-gradient(rgba(148, 163, 184, .06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, .05) 1px, transparent 1px);
+      background-size: 54px 54px;
+      mask-image: radial-gradient(circle at center, black, transparent 78%);
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background-image:
+        radial-gradient(circle, rgba(248, 250, 252, .55) 0 1px, transparent 1.5px),
+        radial-gradient(circle, rgba(56, 189, 248, .5) 0 1px, transparent 1.5px);
+      background-size: 150px 150px, 230px 230px;
+      background-position: 0 0, 60px 90px;
+      opacity: .22;
+      animation: starDrift 24s linear infinite;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button,
+    .chip,
+    .feature,
+    .app-tile {
+      cursor: pointer;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .nav {
+      position: fixed;
+      z-index: 40;
+      top: max(18px, env(safe-area-inset-top));
+      left: max(var(--page-gutter), env(safe-area-inset-left));
+      right: max(var(--page-gutter), env(safe-area-inset-right));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      min-height: 64px;
+      margin: 0 auto;
+      padding: 10px 12px 10px 16px;
+      border: 1px solid rgba(148, 163, 184, .18);
+      border-radius: 24px;
+      background: rgba(2, 6, 23, .62);
+      box-shadow: 0 18px 60px rgba(0, 0, 0, .22);
+      backdrop-filter: blur(22px) saturate(150%);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 44px;
+      font-family: "Outfit", sans-serif;
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      outline: none;
+    }
+
+    .brand img {
+      width: 40px;
+      height: 40px;
+      border-radius: 14px;
+      box-shadow: 0 0 24px rgba(34, 197, 94, .20);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .nav-links a {
+      min-height: 42px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 14px;
+      border-radius: 14px;
+      transition: color .2s ease, background .2s ease;
+    }
+
+    .nav-links a:hover {
+      color: var(--text);
+      background: rgba(148, 163, 184, .10);
+    }
+
+    .focusable:focus-visible,
+    button:focus-visible,
+    input:focus-visible,
+    a:focus-visible {
+      outline: 2px solid var(--green);
+      outline-offset: 3px;
+    }
+
+    .btn {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 0 18px;
+      border: 1px solid transparent;
+      border-radius: 16px;
+      color: #04100a;
+      background: linear-gradient(135deg, #34d399, #22c55e);
+      box-shadow: 0 14px 36px rgba(34, 197, 94, .22);
+      font-weight: 800;
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 18px 44px rgba(34, 197, 94, .32);
+    }
+
+    .btn.secondary {
+      color: var(--text);
+      background: rgba(15, 23, 42, .76);
+      border-color: rgba(148, 163, 184, .22);
+      box-shadow: none;
+    }
+
+    .hero {
+      width: 100%;
+      min-height: 100svh;
+      margin: 0 auto;
+      padding: 112px var(--page-gutter) var(--page-gutter);
+      display: flex;
+      align-items: stretch;
+    }
+
+    .hero-grid {
+      width: 100%;
+      min-height: calc(100svh - 132px);
+      display: grid;
+      grid-template-columns: minmax(340px, .72fr) minmax(0, 1.28fr);
+      gap: clamp(18px, 2.6vw, 34px);
+      align-items: center;
+    }
+
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 36px;
+      padding: 0 13px;
+      border: 1px solid rgba(34, 197, 94, .24);
+      border-radius: 999px;
+      color: #bbf7d0;
+      background: rgba(34, 197, 94, .08);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, .48);
+      animation: pulse 1.7s ease-out infinite;
+    }
+
+    h1 {
+      max-width: 680px;
+      margin: 24px 0 0;
+      font-family: "Outfit", sans-serif;
+      font-size: clamp(44px, 6.2vw, 96px);
+      line-height: .96;
+      letter-spacing: -.045em;
+    }
+
+    .hero p {
+      max-width: 570px;
+      margin: 24px 0 0;
+      color: #cbd5e1;
+      font-size: 18px;
+      line-height: 1.75;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 34px;
+    }
+
+    .release-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 20px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .release-pill strong {
+      color: var(--text);
+    }
+
+    .console {
+      position: relative;
+      min-height: min(720px, calc(100svh - 150px));
+      height: min(760px, calc(100svh - 150px));
+      border: 1px solid rgba(148, 163, 184, .18);
+      border-radius: 34px;
+      background:
+        radial-gradient(circle at 82% 8%, rgba(56, 189, 248, .14), transparent 22rem),
+        linear-gradient(145deg, rgba(15, 23, 42, .82), rgba(2, 6, 23, .92));
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .06);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .console::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, transparent 0 49%, rgba(34,197,94,.07) 50%, transparent 51%),
+        linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 44px;
+      opacity: .5;
+    }
+
+    .console-top {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 18px;
+      border-bottom: 1px solid rgba(148, 163, 184, .14);
+    }
+
+    .traffic {
+      display: flex;
+      gap: 8px;
+    }
+
+    .traffic span {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--green);
+      opacity: .8;
+    }
+
+    .traffic span:nth-child(2) {
+      background: var(--amber);
+    }
+
+    .traffic span:nth-child(3) {
+      background: var(--rose);
+    }
+
+    .console-title {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .demo {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 170px 1fr 210px;
+      gap: 14px;
+      padding: 18px;
+    }
+
+    .panel {
+      position: relative;
+      border: 1px solid rgba(148, 163, 184, .14);
+      border-radius: 24px;
+      background: rgba(2, 6, 23, .50);
+      backdrop-filter: blur(16px);
+      min-width: 0;
+    }
+
+    .sidebar {
+      padding: 12px;
+      overflow: auto;
+    }
+
+    .chip {
+      width: 100%;
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 0;
+      border-radius: 14px;
+      color: var(--muted);
+      background: transparent;
+      padding: 0 12px;
+      text-align: left;
+      font-weight: 800;
+      transition: color .2s ease, background .2s ease;
+    }
+
+    .chip.active {
+      color: #dcfce7;
+      background: rgba(34, 197, 94, .14);
+    }
+
+    .chip-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .workspace {
+      padding: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .workspace-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .workspace-head h2 {
+      margin: 0;
+      font-family: "Outfit", sans-serif;
+      font-size: 22px;
+      letter-spacing: -.02em;
+    }
+
+    .workspace-head span {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .app-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .app-tile {
+      min-height: clamp(94px, 14vh, 126px);
+      border: 1px solid rgba(148, 163, 184, .14);
+      border-radius: 22px;
+      background: rgba(15, 23, 42, .62);
+      padding: 14px;
+      transition: transform .22s ease, border-color .22s ease, background .22s ease;
+    }
+
+    .app-tile:hover,
+    .app-tile.highlight {
+      transform: translateY(-4px);
+      border-color: var(--line-hot);
+      background: rgba(34, 197, 94, .12);
+    }
+
+    .app-icon {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 15px;
+      background: linear-gradient(135deg, rgba(56,189,248,.22), rgba(34,197,94,.18));
+      color: var(--text);
+      font-weight: 900;
+    }
+
+    .app-tile strong {
+      display: block;
+      margin-top: 12px;
+      font-size: 14px;
+    }
+
+    .app-tile span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .search-demo {
+      padding: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 46px;
+      border: 1px solid rgba(148, 163, 184, .16);
+      border-radius: 16px;
+      background: rgba(15, 23, 42, .70);
+      padding: 0 13px;
+      color: var(--muted);
+    }
+
+    .search-box input {
+      min-width: 0;
+      width: 100%;
+      border: 0;
+      outline: 0;
+      color: var(--text);
+      background: transparent;
+      font-weight: 800;
+    }
+
+    .search-box input::placeholder {
+      color: #64748b;
+    }
+
+    .result-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+      overflow: auto;
+    }
+
+    .result {
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid rgba(148, 163, 184, .12);
+      border-radius: 17px;
+      background: rgba(2, 6, 23, .42);
+      padding: 9px;
+    }
+
+    .result.active {
+      border-color: rgba(34, 197, 94, .46);
+      background: rgba(34, 197, 94, .12);
+    }
+
+    .result small {
+      color: var(--muted);
+      display: block;
+      margin-top: 2px;
+    }
+
+    .live-bar {
+      position: relative;
+      margin: 14px 18px 18px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      flex: 0 0 auto;
+    }
+
+    .metric {
+      border: 1px solid rgba(148, 163, 184, .14);
+      border-radius: 20px;
+      background: rgba(2, 6, 23, .36);
+      padding: 13px;
+    }
+
+    .metric strong {
+      display: block;
+      font-family: "Outfit", sans-serif;
+      font-size: 22px;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .section {
+      width: min(1180px, calc(100% - (var(--page-gutter) * 2)));
+      margin: 0 auto;
+      padding: 78px 0;
+    }
+
+    .section-title {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .section-title h2 {
+      margin: 0;
+      font-family: "Outfit", sans-serif;
+      font-size: clamp(34px, 5vw, 58px);
+      line-height: 1;
+      letter-spacing: -.04em;
+    }
+
+    .section-title p {
+      max-width: 660px;
+      margin: 0;
+      color: #cbd5e1;
+      line-height: 1.7;
+      font-size: 17px;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .feature {
+      min-height: 230px;
+      border: 1px solid rgba(148, 163, 184, .16);
+      border-radius: 28px;
+      background:
+        radial-gradient(circle at 80% 0%, rgba(34, 197, 94, .12), transparent 12rem),
+        rgba(15, 23, 42, .62);
+      padding: 22px;
+      transition: transform .22s ease, border-color .22s ease;
+    }
+
+    .feature:hover {
+      transform: translateY(-5px);
+      border-color: rgba(34, 197, 94, .40);
+    }
+
+    .feature svg {
+      width: 34px;
+      height: 34px;
+      color: var(--green);
+      stroke-width: 1.8;
+    }
+
+    .feature h3 {
+      margin: 20px 0 10px;
+      font-size: 21px;
+    }
+
+    .feature p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .step {
+      position: relative;
+      border: 1px solid rgba(148, 163, 184, .16);
+      border-radius: 30px;
+      background: rgba(15, 23, 42, .66);
+      padding: 26px;
+      overflow: hidden;
+    }
+
+    .step::before {
+      content: attr(data-step);
+      position: absolute;
+      right: 22px;
+      top: 10px;
+      color: rgba(34, 197, 94, .18);
+      font-family: "Outfit", sans-serif;
+      font-size: 86px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .step h3 {
+      position: relative;
+      margin: 0 0 12px;
+      font-size: 24px;
+    }
+
+    .step p {
+      position: relative;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.68;
+    }
+
+    .download {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 28px;
+      align-items: center;
+      border: 1px solid rgba(34, 197, 94, .24);
+      border-radius: 34px;
+      background:
+        radial-gradient(circle at 90% 0%, rgba(34, 197, 94, .18), transparent 20rem),
+        rgba(15, 23, 42, .72);
+      padding: 34px;
+      box-shadow: var(--shadow);
+    }
+
+    .download h2 {
+      margin: 0;
+      font-family: "Outfit", sans-serif;
+      font-size: clamp(32px, 5vw, 54px);
+      letter-spacing: -.04em;
+    }
+
+    .download p {
+      margin: 12px 0 0;
+      color: #cbd5e1;
+      line-height: 1.65;
+    }
+
+    .download-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    footer {
+      width: min(1180px, calc(100% - (var(--page-gutter) * 2)));
+      margin: 0 auto;
+      padding: 36px 0 50px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      border-top: 1px solid rgba(148, 163, 184, .12);
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity .7s ease, transform .7s ease;
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @keyframes pulse {
+      to {
+        box-shadow: 0 0 0 12px rgba(34, 197, 94, 0);
+      }
+    }
+
+    @keyframes starDrift {
+      from {
+        transform: translateY(0);
+      }
+      to {
+        transform: translateY(-140px);
+      }
+    }
+
+    @media (min-width: 1280px) {
+      .hero-grid {
+        grid-template-columns: minmax(390px, .68fr) minmax(0, 1.32fr);
+      }
+
+      .demo {
+        grid-template-columns: 190px 1fr 240px;
+      }
+    }
+
+    @media (max-width: 1080px) {
+      .hero {
+        min-height: auto;
+        padding-top: 104px;
+      }
+
+      .hero-grid,
+      .download {
+        grid-template-columns: 1fr;
+      }
+
+      .console {
+        height: auto;
+        min-height: 720px;
+      }
+
+      .demo {
+        grid-template-columns: 160px 1fr;
+      }
+
+      .search-demo {
+        grid-column: 1 / -1;
+      }
+
+      .result-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .feature-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 720px) {
+      :root {
+        --page-gutter: 16px;
+      }
+
+      .nav {
+        position: fixed;
+        top: max(10px, env(safe-area-inset-top));
+        left: max(var(--page-gutter), env(safe-area-inset-left));
+        right: max(var(--page-gutter), env(safe-area-inset-right));
+        min-height: 58px;
+        border-radius: 20px;
+        padding: 8px 9px 8px 12px;
+        gap: 10px;
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .brand {
+        min-width: 0;
+        gap: 9px;
+        font-size: 15px;
+      }
+
+      .brand img {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+      }
+
+      .nav > .btn {
+        min-height: 40px;
+        width: auto;
+        padding: 0 12px;
+        border-radius: 14px;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+
+      .hero {
+        width: 100%;
+        min-height: auto;
+        padding: 86px var(--page-gutter) 40px;
+      }
+
+      .hero-grid {
+        min-height: auto;
+        gap: 22px;
+      }
+
+      h1 {
+        font-size: clamp(42px, 13vw, 58px);
+      }
+
+      .hero p {
+        font-size: 16px;
+        line-height: 1.68;
+      }
+
+      .hero-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+
+      .release-pill {
+        align-items: flex-start;
+        line-height: 1.5;
+      }
+
+      .console {
+        min-height: auto;
+        height: auto;
+        border-radius: 26px;
+      }
+
+      .console-top {
+        padding: 14px;
+      }
+
+      .demo {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 12px;
+      }
+
+      .sidebar {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        padding: 10px;
+      }
+
+      .chip {
+        min-height: 40px;
+        justify-content: center;
+        padding: 0 10px;
+        font-size: 13px;
+      }
+
+      .chip-dot {
+        display: none;
+      }
+
+      .workspace,
+      .search-demo {
+        padding: 12px;
+      }
+
+      .workspace-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .app-grid,
+      .live-bar,
+      .feature-grid,
+      .timeline {
+        grid-template-columns: 1fr;
+      }
+
+      .app-tile {
+        min-height: 92px;
+      }
+
+      .result-list {
+        grid-template-columns: 1fr;
+      }
+
+      .live-bar {
+        margin: 12px;
+      }
+
+      .section {
+        width: calc(100% - (var(--page-gutter) * 2));
+        padding: 52px 0;
+      }
+
+      .section-title h2,
+      .download h2 {
+        font-size: clamp(34px, 11vw, 46px);
+      }
+
+      .feature,
+      .step,
+      .download {
+        border-radius: 24px;
+        padding: 20px;
+      }
+
+      .download-actions,
+      footer {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .btn {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 420px) {
+      :root {
+        --page-gutter: 14px;
+      }
+
+      .brand span {
+        max-width: 126px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .nav > .btn {
+        font-size: 12px;
+        padding: 0 10px;
+      }
+
+      .sidebar {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      *,
+      *::before,
+      *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+      }
+
+      .reveal {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav" aria-label="主导航">
+    <a class="brand" href="#top">
+      <img src="../public/icon-256.png" alt="Tidy Desktop 图标" />
+      <span>Tidy Desktop</span>
+    </a>
+    <div class="nav-links">
+      <a href="#demo">动态演示</a>
+      <a href="#features">功能</a>
+      <a href="#workflow">流程</a>
+      <a href="#download">下载</a>
+    </div>
+    <a class="btn" href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest">获取新版</a>
+  </nav>
+
+  <header id="top" class="hero">
+    <div class="hero-grid">
+      <div class="reveal">
+        <div class="kicker"><span class="pulse"></span>桌面任务控制台已上线</div>
+        <h1>让桌面从混乱变成可操作的系统</h1>
+        <p>Tidy Desktop 把应用、文件夹、文档、Steam 游戏和网页搜索收进一个动态启动台。页面里的控制台可以直接交互，体验分类切换、搜索匹配和下载状态。</p>
+        <div class="hero-actions">
+          <a class="btn" href="#demo">开始体验</a>
+          <a class="btn secondary" href="https://github.com/Wan-Wuan/tidy-desktop">查看项目</a>
+        </div>
+        <div class="release-pill" id="releaseStatus">正在读取 GitHub 最新发布...</div>
+      </div>
+
+      <section id="demo" class="console reveal" aria-label="Tidy Desktop 动态演示">
+        <div class="console-top">
+          <div class="traffic" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="console-title">实时桌面整理演示</div>
+        </div>
+        <div class="demo">
+          <aside class="panel sidebar" aria-label="分类切换">
+            <button class="chip active" data-category="常用工具"><span class="chip-dot"></span>常用工具</button>
+            <button class="chip" data-category="设计软件"><span class="chip-dot"></span>设计软件</button>
+            <button class="chip" data-category="文档资料"><span class="chip-dot"></span>文档资料</button>
+            <button class="chip" data-category="娱乐游戏"><span class="chip-dot"></span>娱乐游戏</button>
+          </aside>
+          <div class="panel workspace">
+            <div class="workspace-head">
+              <h2 id="workspaceTitle">常用工具</h2>
+              <span id="workspaceCount">6 个入口</span>
+            </div>
+            <div class="app-grid" id="appGrid"></div>
+          </div>
+          <aside class="panel search-demo">
+            <div class="search-box">
+              <span aria-hidden="true">⌕</span>
+              <input id="demoSearch" type="text" value="wx" aria-label="模拟搜索" placeholder="输入 wx / ps / pdf" />
+            </div>
+            <div class="result-list" id="resultList"></div>
+          </aside>
+        </div>
+        <div class="live-bar">
+          <div class="metric"><strong id="metricApps">42</strong><span>已整理入口</span></div>
+          <div class="metric"><strong id="metricSearch">0.18s</strong><span>平均打开速度</span></div>
+          <div class="metric"><strong id="metricMode">实时</strong><span>当前演示模式</span></div>
+        </div>
+      </section>
+    </div>
+  </header>
+
+  <main>
+    <section id="features" class="section">
+      <div class="section-title reveal">
+        <h2>动态功能，不止展示</h2>
+        <p>页面保留介绍能力，同时加入真实可感知的交互：切换分类、输入搜索、读取 Release、跟随鼠标的背景光和滚动出现动画。</p>
+      </div>
+      <div class="feature-grid">
+        <article class="feature reveal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+          <h3>即时搜索演示</h3>
+          <p>输入关键词会动态过滤右侧结果，模拟应用内快速搜索的使用方式。</p>
+        </article>
+        <article class="feature reveal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h16"/></svg>
+          <h3>分类切换</h3>
+          <p>点击分类会刷新中央应用网格，展示桌面启动台的核心整理体验。</p>
+        </article>
+        <article class="feature reveal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 3v18"/><path d="M5 10h14"/><path d="M7 21h10a2 2 0 0 0 2-2V7H5v12a2 2 0 0 0 2 2Z"/></svg>
+          <h3>更新状态</h3>
+          <p>自动读取 GitHub 最新发布信息，下载按钮始终指向最新安装包。</p>
+        </article>
+        <article class="feature reveal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M8 8h8v8H8z"/></svg>
+          <h3>响应式界面</h3>
+          <p>桌面端是完整控制台，移动端自动堆叠，避免横向滚动和内容遮挡。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="workflow" class="section">
+      <div class="section-title reveal">
+        <h2>从混乱到稳定，只走三步</h2>
+        <p>真正的动态网站应该让人知道下一步做什么。这套流程对应 Tidy Desktop 的实际上手路径。</p>
+      </div>
+      <div class="timeline">
+        <article class="step reveal" data-step="01">
+          <h3>扫描导入</h3>
+          <p>扫描桌面和开始菜单，自动收集快捷方式、文件夹和常用入口。</p>
+        </article>
+        <article class="step reveal" data-step="02">
+          <h3>自动归类</h3>
+          <p>按来源或规则创建分类，把分散入口放进更容易理解的区域。</p>
+        </article>
+        <article class="step reveal" data-step="03">
+          <h3>快捷启动</h3>
+          <p>通过主窗口浏览分类，通过搜索窗口输入关键词快速打开目标。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="download" class="section">
+      <div class="download reveal">
+        <div>
+          <h2>下载最新安装包</h2>
+          <p id="downloadCopy">页面会自动查找最新 GitHub Release。若网络无法访问 GitHub，可进入发布页手动选择安装包。</p>
+        </div>
+        <div class="download-actions">
+          <a class="btn" id="downloadButton" href="https://github.com/Wan-Wuan/tidy-desktop/releases/latest">下载最新版</a>
+          <a class="btn secondary" href="https://github.com/Wan-Wuan/tidy-desktop">查看源码</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Tidy Desktop 动态网站</span>
+    <span>为 Windows 桌面整理、搜索和快速启动而设计。</span>
+  </footer>
+
+  <script>
+    const data = {
+      常用工具: [
+        ['WX', '微信', '聊天与文件发送'],
+        ['VS', 'VS Code', '开发工具'],
+        ['NP', '记事本', '快速记录'],
+        ['CL', '计算器', '系统工具'],
+        ['PS', 'PowerShell', '命令终端'],
+        ['ST', '设置', '系统入口']
+      ],
+      设计软件: [
+        ['PS', 'Photoshop', '图片处理'],
+        ['AI', 'Illustrator', '矢量设计'],
+        ['FG', 'Figma', '界面设计'],
+        ['PR', 'Premiere', '视频剪辑'],
+        ['AE', 'After Effects', '动效制作'],
+        ['BL', 'Blender', '三维工具']
+      ],
+      文档资料: [
+        ['PDF', '项目文档', '常用资料'],
+        ['XLS', '数据表格', '工作文件'],
+        ['DOC', '说明文档', '文字资料'],
+        ['IMG', '图片素材', '视觉文件'],
+        ['ZIP', '压缩包', '归档文件'],
+        ['DIR', '资料目录', '文件夹']
+      ],
+      娱乐游戏: [
+        ['STM', 'Steam', '游戏平台'],
+        ['MC', 'Minecraft', '游戏入口'],
+        ['MU', '音乐播放器', '媒体应用'],
+        ['VD', '视频工具', '本地播放'],
+        ['REC', '录屏工具', '创作辅助'],
+        ['PAD', '手柄配置', '设备工具']
+      ]
+    };
+
+    const aliases = {
+      wx: '微信',
+      weixin: '微信',
+      ps: 'Photoshop',
+      pdf: '项目文档',
+      vscode: 'VS Code',
+      vs: 'VS Code',
+      steam: 'Steam'
+    };
+
+    const appGrid = document.getElementById('appGrid');
+    const workspaceTitle = document.getElementById('workspaceTitle');
+    const workspaceCount = document.getElementById('workspaceCount');
+    const resultList = document.getElementById('resultList');
+    const searchInput = document.getElementById('demoSearch');
+    const metricApps = document.getElementById('metricApps');
+    const metricMode = document.getElementById('metricMode');
+    const releaseStatus = document.getElementById('releaseStatus');
+    const downloadButton = document.getElementById('downloadButton');
+    const downloadCopy = document.getElementById('downloadCopy');
+
+    let currentCategory = '常用工具';
+
+    function allApps() {
+      return Object.values(data).flat();
+    }
+
+    function renderApps() {
+      const apps = data[currentCategory];
+      workspaceTitle.textContent = currentCategory;
+      workspaceCount.textContent = `${apps.length} 个入口`;
+      metricApps.textContent = String(allApps().length);
+      metricMode.textContent = currentCategory.slice(0, 2);
+      appGrid.innerHTML = apps.map(([abbr, name, desc]) => `
+        <div class="app-tile ${name === aliases[searchInput.value.trim().toLowerCase()] ? 'highlight' : ''}">
+          <div class="app-icon">${abbr}</div>
+          <strong>${name}</strong>
+          <span>${desc}</span>
+        </div>
+      `).join('');
+    }
+
+    function renderSearch() {
+      const query = searchInput.value.trim().toLowerCase();
+      const aliasTarget = aliases[query] || '';
+      const results = allApps()
+        .filter(([, name, desc]) => {
+          const text = `${name} ${desc}`.toLowerCase();
+          return !query || text.includes(query) || name === aliasTarget;
+        })
+        .slice(0, 4);
+
+      resultList.innerHTML = results.length
+        ? results.map(([abbr, name, desc], index) => `
+          <div class="result ${index === 0 ? 'active' : ''}">
+            <div class="app-icon">${abbr}</div>
+            <div><strong>${name}</strong><small>${desc}</small></div>
+          </div>
+        `).join('')
+        : '<div class="result"><div><strong>没有匹配结果</strong><small>试试 wx、ps、pdf、steam</small></div></div>';
+
+      renderApps();
+    }
+
+    document.querySelectorAll('.chip').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.chip').forEach((item) => item.classList.remove('active'));
+        button.classList.add('active');
+        currentCategory = button.dataset.category;
+        renderApps();
+      });
+    });
+
+    searchInput.addEventListener('input', renderSearch);
+
+    document.addEventListener('pointermove', (event) => {
+      const x = Math.round((event.clientX / window.innerWidth) * 100);
+      const y = Math.round((event.clientY / window.innerHeight) * 100);
+      document.body.style.setProperty('--mx', `${x}%`);
+      document.body.style.setProperty('--my', `${y}%`);
+    }, { passive: true });
+
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.14 });
+
+    document.querySelectorAll('.reveal').forEach((node) => revealObserver.observe(node));
+
+    fetch('https://api.github.com/repos/Wan-Wuan/tidy-desktop/releases/latest')
+      .then((response) => {
+        if (!response.ok) throw new Error('release request failed');
+        return response.json();
+      })
+      .then((release) => {
+        const asset = (release.assets || []).find((item) => /tidy-desktop-Setup-.*\.exe$/i.test(item.name));
+        releaseStatus.innerHTML = `<strong>${release.tag_name || '最新版本'}</strong> 已连接到 GitHub Release`;
+        if (asset) {
+          downloadButton.href = asset.browser_download_url;
+          downloadCopy.textContent = `已找到安装包：${asset.name}`;
+        } else if (release.html_url) {
+          downloadButton.href = release.html_url;
+          downloadCopy.textContent = '已获取最新发布页，请进入 GitHub 手动选择安装包。';
+        }
+      })
+      .catch(() => {
+        releaseStatus.textContent = '暂时无法读取 GitHub 发布信息';
+        downloadCopy.textContent = '网络不可用时，可以稍后再试，或直接打开 GitHub Releases 页面。';
+      });
+
+    renderApps();
+    renderSearch();
+  </script>
+</body>
+</html>
