@@ -1117,6 +1117,75 @@ function App() {
     el.scrollLeft = nextScrollLeft
   }, [])
 
+  // 渲染子分类按钮（内联下拉与独立栏共用）
+  const renderSubcategoryButton = (sub: Subcategory) => (
+    <button
+      key={sub.id}
+      data-subcategory-id={sub.id}
+      draggable
+      onContextMenu={(e) => openCategoryContextMenu(e, { type: 'subcategory', id: sub.id })}
+      onClick={() => {
+        setActiveSubcategoryId(sub.id)
+        const el = document.getElementById(`subcat-${sub.id}`)
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }}
+      data-active={activeSubcategoryId === sub.id}
+      aria-current={activeSubcategoryId === sub.id ? 'location' : undefined}
+      onDragStart={(e) => {
+        setDraggedSubId(sub.id)
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/plain', sub.id)
+      }}
+      onDragOver={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        moveDragGhost(e.clientX, e.clientY)
+        if (draggedSubId && draggedSubId !== sub.id) {
+          e.dataTransfer.dropEffect = 'move'
+          setDragOverSubId(sub.id)
+        } else {
+          const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
+          if (appId) {
+            e.dataTransfer.dropEffect = 'move'
+          }
+        }
+      }}
+      onDragLeave={() => setDragOverSubId(null)}
+      onDrop={async (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setDragOverSubId(null)
+        if (draggedSubId && draggedSubId !== sub.id) {
+          await handleReorderSubcategory(draggedSubId, sub.id)
+          setDraggedSubId(null)
+        } else {
+          const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
+          if (appId) {
+            await handleMoveAppToSubcategory(appId, sub.id)
+            draggedAppIdRef.current = null
+            setDraggedAppId(null)
+          }
+        }
+      }}
+      onDragEnd={() => {
+        removeDragGhost()
+        setDraggedSubId(null)
+        setDragOverSubId(null)
+      }}
+      className={`focus-ring cursor-pointer px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors duration-200 ${
+        dragOverSubId === sub.id
+          ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
+          : draggedSubId === sub.id
+            ? 'opacity-40 scale-95'
+            : activeSubcategoryId === sub.id
+              ? 'bg-brand-600 text-white border border-brand-600 shadow-sm shadow-brand-500/20'
+              : 'bg-white/50 text-slate-700 hover:bg-brand-500 hover:text-white hover:border-brand-500 border border-brand-100/40'
+      }`}
+    >
+      {sub.icon} {sub.name}
+    </button>
+  )
+
   const handleContentScroll = useCallback(() => {
     const container = dropZoneRef.current
     if (!container || displaySubcategories.length === 0) return
@@ -1968,73 +2037,7 @@ function App() {
             {/* 点击主分类后，子分类列表直接在该主分类下方展开 */}
             {isCatActive && (
               <div className="subcategory-dropdown flex flex-col gap-1">
-                {catSubs.map(sub => (
-                  <button
-                    key={sub.id}
-                    data-subcategory-id={sub.id}
-                    draggable
-                    onContextMenu={(e) => openCategoryContextMenu(e, { type: 'subcategory', id: sub.id })}
-                    onClick={() => {
-                      setActiveSubcategoryId(sub.id)
-                      const el = document.getElementById(`subcat-${sub.id}`)
-                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                    }}
-                    data-active={activeSubcategoryId === sub.id}
-                    aria-current={activeSubcategoryId === sub.id ? 'location' : undefined}
-                    onDragStart={(e) => {
-                      setDraggedSubId(sub.id)
-                      e.dataTransfer.effectAllowed = 'move'
-                      e.dataTransfer.setData('text/plain', sub.id)
-                    }}
-                    onDragOver={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      moveDragGhost(e.clientX, e.clientY)
-                      if (draggedSubId && draggedSubId !== sub.id) {
-                        e.dataTransfer.dropEffect = 'move'
-                        setDragOverSubId(sub.id)
-                      } else {
-                        const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-                        if (appId) {
-                          e.dataTransfer.dropEffect = 'move'
-                        }
-                      }
-                    }}
-                    onDragLeave={() => setDragOverSubId(null)}
-                    onDrop={async (e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      setDragOverSubId(null)
-                      if (draggedSubId && draggedSubId !== sub.id) {
-                        await handleReorderSubcategory(draggedSubId, sub.id)
-                        setDraggedSubId(null)
-                      } else {
-                        const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-                        if (appId) {
-                          await handleMoveAppToSubcategory(appId, sub.id)
-                          draggedAppIdRef.current = null
-                          setDraggedAppId(null)
-                        }
-                      }
-                    }}
-                    onDragEnd={() => {
-                      removeDragGhost()
-                      setDraggedSubId(null)
-                      setDragOverSubId(null)
-                    }}
-                    className={`subcategory-dropdown-item focus-ring cursor-pointer px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap text-left transition-colors duration-200 ${
-                      dragOverSubId === sub.id
-                        ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
-                        : draggedSubId === sub.id
-                          ? 'opacity-40 scale-95'
-                          : activeSubcategoryId === sub.id
-                            ? 'bg-brand-600 text-white border border-brand-600 shadow-sm shadow-brand-500/20'
-                            : 'bg-white/50 text-slate-700 hover:bg-brand-500 hover:text-white hover:border-brand-500 border border-brand-100/40'
-                    }`}
-                  >
-                    {sub.icon} {sub.name}
-                  </button>
-                ))}
+                {catSubs.map(sub => renderSubcategoryButton(sub))}
                 {catSubs.length === 0 && (
                   <span className="px-3 py-1 text-[11px] text-slate-400 whitespace-nowrap">暂无子分类</span>
                 )}
@@ -2062,6 +2065,18 @@ function App() {
         >
           + 子分类
         </button>
+      </div>
+
+      {/* 独立子分类栏：横向工作区布局使用，保持原有样式 */}
+      <div
+        ref={subcategoryBarRef}
+        onWheel={handleSubcategoryWheel}
+        className="subcategory-bar-standalone subcategory-nav subcategory-scroll px-5 pb-3 flex gap-2 overflow-x-auto"
+      >
+        {displaySubcategories.map(sub => renderSubcategoryButton(sub))}
+        {activeCategory !== null && displaySubcategories.length === 0 && (
+          <span className="self-center text-xs text-slate-400">当前分类暂无子分类，点击上方「+ 子分类」创建</span>
+        )}
       </div>
 
       <main

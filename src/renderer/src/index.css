@@ -730,6 +730,21 @@ body {
   scrollbar-width: thin;
 }
 
+/* 子分类双形态切换：
+   - 默认（非横向工作区布局）：主分类下方内联下拉展开，独立栏隐藏
+   - 横向工作区布局：保持原有独立横向子分类栏，内联下拉隐藏 */
+.subcategory-bar-standalone {
+  display: none;
+}
+
+.layout-horizon-workspace .subcategory-dropdown {
+  display: none;
+}
+
+.layout-horizon-workspace .subcategory-bar-standalone {
+  display: flex;
+}
+
 /* 子分类下拉列表：点击主分类后在该分类下方展开的动画效果 */
 @keyframes subcategory-dropdown-in {
   from {
