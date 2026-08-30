@@ -65,6 +65,8 @@ declare global {
       scanShortcuts: () => Promise<ShortcutImportItem[]>
       resolveShortcutTargets: (filePaths: string[]) => Promise<Array<{ filePath: string; targetPath: string }>>
       openDataDirectory: () => Promise<boolean>
+      openBackupsDirectory: () => Promise<boolean>
+      copyTextToClipboard: (text: string) => Promise<boolean>
       clearIconCache: () => Promise<{ success: boolean; count: number }>
       openUpdateLog: () => Promise<boolean>
       showSearchWindow: () => Promise<boolean>

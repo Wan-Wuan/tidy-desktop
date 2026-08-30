@@ -28,6 +28,9 @@ export function registerFileHandlers(applyGlobalShortcuts?: (config: Config) => 
     if (!config.autoCategoryRules) config.autoCategoryRules = defaults.autoCategoryRules
     if (!config.quickActions) config.quickActions = defaults.quickActions
     if (config.onboardingCompleted === undefined) config.onboardingCompleted = defaults.onboardingCompleted
+    if (!config.closeAction) config.closeAction = defaults.closeAction
+    if (config.lastActiveCategoryId === undefined) config.lastActiveCategoryId = defaults.lastActiveCategoryId ?? null
+    if (config.trayNotified === undefined) config.trayNotified = false
     return config
   })
 

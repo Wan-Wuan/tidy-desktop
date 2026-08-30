@@ -2,12 +2,13 @@ import React, { useEffect, useRef, useState } from 'react'
 import {
   CheckCircle,
   Keyboard,
+  Lightning,
   MagnifyingGlass,
   Palette,
   RocketLaunch,
   Wrench
 } from '@phosphor-icons/react'
-import type { Config, UISettings } from '../../../../shared/types'
+import type { Config, QuickAction, UISettings } from '../../../../shared/types'
 import type { HealthReport, IconRefreshProgress } from './types'
 
 export const SettingsModal = React.memo(function SettingsModal({
@@ -32,6 +33,7 @@ export const SettingsModal = React.memo(function SettingsModal({
   onFixHealthIssues,
   onExportDiagnostics,
   onOpenDataDirectory,
+  onOpenBackupsDirectory,
   healthReport,
   onOpenUpdateLog
 }: {
@@ -56,12 +58,15 @@ export const SettingsModal = React.memo(function SettingsModal({
   onFixHealthIssues: () => Promise<void>
   onExportDiagnostics: () => Promise<void>
   onOpenDataDirectory: () => Promise<boolean>
+  onOpenBackupsDirectory: () => Promise<boolean>
   healthReport: HealthReport | null
   onOpenUpdateLog: () => Promise<boolean>
 }) {
   const [hotkey, setHotkey] = useState(config.hotkey)
   const [searchHotkey, setSearchHotkey] = useState(config.searchHotkey || 'Ctrl+K')
   const [autoStart, setAutoStart] = useState(false)
+  const [closeAction, setCloseAction] = useState<'tray' | 'quit'>(config.closeAction || 'tray')
+  const [quickActions, setQuickActions] = useState<QuickAction[]>(config.quickActions || [])
   const [defaultEngine, setDefaultEngine] = useState(config.defaultEngine || 'b')
   const [ui, setUi] = useState<UISettings>(config.ui || {
     gridColumns: 6, cardSize: 'medium', showIcon: true, showName: true, borderRadius: 8, theme: 'aurora', layout: 'horizon-workspace', sidebarWidth: 240
@@ -80,6 +85,8 @@ export const SettingsModal = React.memo(function SettingsModal({
       searchHotkey: overrides.searchHotkey ?? searchHotkey,
       searchEngines: engines,
       autoStart: overrides.autoStart ?? autoStart,
+      closeAction: overrides.closeAction ?? closeAction,
+      quickActions: overrides.quickActions ?? quickActions,
       ui: overrides.ui ?? ui,
       defaultEngine: overrides.defaultEngine ?? defaultEngine
     }
@@ -88,6 +95,8 @@ export const SettingsModal = React.memo(function SettingsModal({
       setHotkey(config.hotkey)
       setSearchHotkey(config.searchHotkey || 'Ctrl+K')
       setAutoStart(config.autoStart === true)
+      setCloseAction(config.closeAction || 'tray')
+      setQuickActions(config.quickActions || [])
       setDefaultEngine(config.defaultEngine || 'b')
       setUi(config.ui || {
         gridColumns: 6, cardSize: 'medium', showIcon: true, showName: true, borderRadius: 8, theme: 'aurora', layout: 'horizon-workspace', sidebarWidth: 240
@@ -183,6 +192,26 @@ export const SettingsModal = React.memo(function SettingsModal({
               <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${autoStart ? 'translate-x-5' : 'translate-x-0.5'}`} />
             </button>
           </div>
+          <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl mt-2">
+            <div>
+              <div className="text-sm font-medium text-slate-700">点击关闭按钮时</div>
+              <div className="text-xs text-slate-500">最小化到托盘可保留快速启动和全局快捷键</div>
+            </div>
+            <div className="flex gap-1">
+              {(['tray', 'quit'] as const).map(action => (
+                <button
+                  key={action}
+                  onClick={() => {
+                    setCloseAction(action)
+                    saveConfig({ closeAction: action })
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs ${closeAction === action ? 'bg-brand-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-brand-400'}`}
+                >
+                  {action === 'tray' ? '最小化到托盘' : '退出程序'}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="mb-5">
@@ -253,6 +282,36 @@ export const SettingsModal = React.memo(function SettingsModal({
             ))}
           </div>
           <p className="text-xs text-slate-400 mt-2">输入 关键词 + 空格 调用搜索引擎</p>
+        </div>
+
+        <div className="mb-5">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+            <Lightning size={17} weight="duotone" aria-hidden="true" /> 快捷命令
+          </h3>
+          <p className="text-xs text-slate-500 mb-2">在搜索框输入 <kbd className="px-1 py-0.5 rounded bg-white border border-slate-200 font-mono text-[10px]">&gt;</kbd> 后调用，可按需关闭不需要的系统命令。</p>
+          <div className="grid grid-cols-2 gap-2">
+            {quickActions.map((action, index) => (
+              <div key={action.command} className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-slate-700 truncate">{action.name}</div>
+                  <div className="text-xs text-slate-500 font-mono">{action.key}</div>
+                </div>
+                <button
+                  onClick={() => {
+                    const next = quickActions.map((item, i) =>
+                      i === index ? { ...item, enabled: !item.enabled } : item
+                    )
+                    setQuickActions(next)
+                    saveConfig({ quickActions: next })
+                  }}
+                  aria-label={`${action.enabled ? '关闭' : '开启'}${action.name}`}
+                  className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${action.enabled ? 'bg-brand-500' : 'bg-slate-300'}`}
+                >
+                  <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${action.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="mb-5">
@@ -414,7 +473,9 @@ export const SettingsModal = React.memo(function SettingsModal({
             <button onClick={onRunHealthCheck} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">数据健康检查</button>
             <button onClick={onExportBackup} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">导出备份</button>
             <button onClick={onImportBackup} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">导入备份</button>
+            <button onClick={() => void onOpenBackupsDirectory()} className="px-3 py-2 bg-white/70 border border-brand-100 rounded-xl text-xs text-slate-700 hover:border-brand-300">打开自动备份目录</button>
           </div>
+          <p className="text-xs text-slate-400 mt-2">应用每天首次启动时自动备份配置、项目和分类，每类保留最近 7 份。</p>
           {iconRefreshProgress && (
             <div className="mt-3 p-3 bg-brand-50/50 rounded-xl text-xs text-slate-600 space-y-2">
               <div className="h-2 bg-white/70 rounded-full overflow-hidden border border-brand-100">

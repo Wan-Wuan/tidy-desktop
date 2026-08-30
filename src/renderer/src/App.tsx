@@ -7,7 +7,7 @@ import {
   Plus,
   SquaresFour
 } from '@phosphor-icons/react'
-import { AppItem, Category, Subcategory, Config, ShortcutImportItem, UiCommand } from '../../shared/types'
+import { AppItem, AutoCategoryRule, Category, Subcategory, Config, ShortcutImportItem, UiCommand } from '../../shared/types'
 import { isFolderPath, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { buildShortcutTargetMap, getDroppedPathIdentities, getDroppedPaths, normalizeDroppedPath } from './utils/dropPaths'
@@ -31,6 +31,8 @@ import {
   UndoToast
 } from './components/CategoryOverlays'
 import type { CategoryContextMenu, CategoryContextMenuTarget, CategoryDeleteDialog, CategoryEditDialog } from './components/CategoryOverlays'
+import { AppContextMenuOverlay } from './components/AppContextMenuOverlay'
+import type { AppContextMenuState, MoveTarget } from './components/AppContextMenuOverlay'
 import {
   AddAppModal,
   EditAppModal,
@@ -194,10 +196,15 @@ function App() {
     const key = 'tidy-desktop:last-version'
     const lastVersion = localStorage.getItem(key)
     if (lastVersion && lastVersion !== currentVersion) {
-      setTimeout(() => alert(`已更新到 v${currentVersion}`), 400)
+      setTimeout(() => {
+        showMaintenanceSummary({
+          title: `已更新到 v${currentVersion}`,
+          items: ['数据已自动保留备份，如遇问题可在设置中导出诊断信息。']
+        })
+      }, 400)
     }
     localStorage.setItem(key, currentVersion)
-  }, [currentVersion])
+  }, [currentVersion, showMaintenanceSummary])
 
   useEffect(() => {
     appsRef.current = apps
@@ -209,6 +216,17 @@ function App() {
 
   useEffect(() => {
     activeCategoryRef.current = activeCategory
+  }, [activeCategory])
+
+  // 记住上次浏览的分类，跳过首次挂载（loadData 已按持久化值恢复）
+  useEffect(() => {
+    if (skipActiveCategoryPersistRef.current) {
+      skipActiveCategoryPersistRef.current = false
+      return
+    }
+    window.electronAPI.getConfig().then(latest => {
+      window.electronAPI.saveConfig({ ...latest, lastActiveCategoryId: activeCategory })
+    })
   }, [activeCategory])
 
   useEffect(() => {
@@ -256,16 +274,6 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !showSettings && !showAddApp && !showEditApp && !showSmartOrganize) {
-        window.electronAPI.hideMainWindow()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showSettings, showAddApp, showEditApp, showSmartOrganize])
-
-  useEffect(() => {
     // 左键拖拽图片/文档文件：第一次 mousemove 时启动 Electron 原生拖拽（用于复制/发送到外部应用）
     let moveFired = false
     const handleMouseMove = (e: MouseEvent) => {
@@ -294,9 +302,25 @@ function App() {
   const [categoryContextMenu, setCategoryContextMenu] = useState<CategoryContextMenu | null>(null)
   const [categoryEditDialog, setCategoryEditDialog] = useState<CategoryEditDialog | null>(null)
   const [categoryDeleteDialog, setCategoryDeleteDialog] = useState<CategoryDeleteDialog | null>(null)
+  const [appContextMenu, setAppContextMenu] = useState<AppContextMenuState | null>(null)
+  const suppressAppContextMenuRef = useRef(false)
+  const skipActiveCategoryPersistRef = useRef(true)
 
   useEffect(() => {
-    // 右键自定义拖拽：图片/文档文件的右键拖拽排序分类（HTML5 draggable 不支持右键）
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const overlayOpen = showSettings || showAddApp || showEditApp || showSmartOrganize
+        || !!appContextMenu || !!categoryContextMenu || !!categoryEditDialog || !!categoryDeleteDialog
+      if (overlayOpen) return
+      window.electronAPI.hideMainWindow()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showSettings, showAddApp, showEditApp, showSmartOrganize, appContextMenu, categoryContextMenu, categoryEditDialog, categoryDeleteDialog])
+
+  useEffect(() => {
+    // 右键自定义拖拽（HTML5 draggable 不支持右键）：普通应用右键拖到应用/分类/子分类上完成排序或归类；
+    // 图片/文档的右键拖拽走系统原生拖拽（发送到外部应用），不经过这里
     const findDropTarget = (el: Element | null): { type: 'app' | 'category' | 'subcategory'; id: string } | null => {
       if (!el) return null
       let node: Element | null = el
@@ -352,6 +376,9 @@ function App() {
       const { appId, active } = rightDragRef.current
       rightDragRef.current = null
       if (!active) return
+      // 右键拖拽释放后 Windows 仍会派发 contextmenu，先标记跳过，避免拖完又弹出菜单
+      suppressAppContextMenuRef.current = true
+      setTimeout(() => { suppressAppContextMenuRef.current = false }, 700)
       const el = document.elementFromPoint(e.clientX, e.clientY)
       const target = findDropTarget(el)
       if (target) {
@@ -396,6 +423,24 @@ function App() {
       window.removeEventListener('blur', closeMenu)
     }
   }, [categoryContextMenu])
+
+  useEffect(() => {
+    if (!appContextMenu) return
+    const closeMenu = () => setAppContextMenu(null)
+    const closeOnKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeMenu()
+    }
+    window.addEventListener('click', closeMenu)
+    window.addEventListener('contextmenu', closeMenu)
+    window.addEventListener('keydown', closeOnKey)
+    window.addEventListener('blur', closeMenu)
+    return () => {
+      window.removeEventListener('click', closeMenu)
+      window.removeEventListener('contextmenu', closeMenu)
+      window.removeEventListener('keydown', closeOnKey)
+      window.removeEventListener('blur', closeMenu)
+    }
+  }, [appContextMenu])
 
   const backfillMissingIcons = async (sourceApps: AppItem[]) => {
     const BATCH_SIZE = 3
@@ -473,8 +518,11 @@ function App() {
     setSubcategories(categoriesData.subcategories || [])
 
     if (!activeCategoryRef.current && sortedCats.length > 0) {
-      setActiveCategory(sortedCats[0].id)
-      activeCategoryRef.current = sortedCats[0].id
+      const savedId = configData.lastActiveCategoryId
+      const saved = savedId ? sortedCats.find(cat => cat.id === savedId) : null
+      const initialCategory = saved ? saved.id : sortedCats[0].id
+      setActiveCategory(initialCategory)
+      activeCategoryRef.current = initialCategory
     }
 
     const appsNeedingIconUpdate = loadedApps.filter(appNeedsIconUpdate)
@@ -597,6 +645,12 @@ function App() {
       return
     }
 
+    const duplicatePath = currentApps.find(app => normalizeDroppedPath(app.path) === normalizeDroppedPath(path))
+    if (duplicatePath) {
+      alert(`路径"${path}"已作为"${duplicatePath.name}"存在，无需重复添加。`)
+      return
+    }
+
     const newApp: AppItem = {
       id: crypto.randomUUID(),
       name,
@@ -701,6 +755,12 @@ function App() {
     const duplicate = currentApps.find(app => app.name === folderName)
     if (duplicate) {
       alert(`已存在同名文件夹"${folderName}"，请使用其他名称。`)
+      return
+    }
+
+    const duplicatePath = currentApps.find(app => normalizeDroppedPath(app.path) === normalizeDroppedPath(folderPath))
+    if (duplicatePath) {
+      alert(`该文件夹已作为"${duplicatePath.name}"存在，无需重复添加。`)
       return
     }
 
@@ -1021,6 +1081,89 @@ function App() {
     await window.electronAPI.saveCategories({ categories, subcategories: updated })
   }
 
+  const openAppContextMenu = (e: React.MouseEvent, app: AppItem) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const menuWidth = 208
+    const menuHeight = 380
+    setAppContextMenu({
+      app,
+      x: Math.max(8, Math.min(e.clientX, window.innerWidth - menuWidth - 8)),
+      y: Math.max(8, Math.min(e.clientY, window.innerHeight - menuHeight - 8))
+    })
+  }
+
+  const handleContextMenuOpenAsAdmin = (app: AppItem) => {
+    if (app.type !== 'app') return
+    void window.electronAPI.openAppAsAdmin(app.path)
+  }
+
+  const handleContextMenuCopyPath = async (app: AppItem) => {
+    const success = await window.electronAPI.copyTextToClipboard(app.path)
+    showMaintenanceSummary({
+      title: success ? '路径已复制' : '复制失败',
+      items: [success ? app.path : '无法写入剪贴板，请重试。']
+    })
+  }
+
+  const handleContextMenuMove = async (app: AppItem, target: MoveTarget) => {
+    if (target.type === 'subcategory') {
+      await handleMoveAppToSubcategory(app.id, target.id)
+      return
+    }
+    if (target.type === 'none') {
+      const updatedApps = appsRef.current.map(a =>
+        a.id === app.id ? { ...a, categoryId: null, subcategoryId: null } : a
+      )
+      appsRef.current = updatedApps
+      setApps(updatedApps)
+      await window.electronAPI.saveApps({ apps: updatedApps })
+      return
+    }
+    await handleMoveAppToCategory(app.id, target.id)
+  }
+
+  const handleContextMenuHide = async (app: AppItem) => {
+    const updatedApps = appsRef.current.map(a => a.id === app.id ? { ...a, hidden: true } : a)
+    appsRef.current = updatedApps
+    setApps(updatedApps)
+    await window.electronAPI.saveApps({ apps: updatedApps })
+  }
+
+  // 键盘导航：方向键按网格移动焦点（左右 ±1，上下 ±每行列数），Enter/Space 打开，F2 编辑
+  const moveCardFocus = (appId: string, key: string) => {
+    const flat = groupedApps.flatMap(group => group.apps)
+    const index = flat.findIndex(item => item.id === appId)
+    if (index === -1) return
+    const columns = config?.ui?.gridColumns || 6
+    let next = index
+    if (key === 'ArrowRight') next = index + 1
+    else if (key === 'ArrowLeft') next = index - 1
+    else if (key === 'ArrowDown') next = index + columns
+    else if (key === 'ArrowUp') next = index - columns
+    if (next === index || next < 0 || next >= flat.length) return
+    document.querySelector<HTMLElement>(`[data-app-id="${flat[next].id}"]`)?.focus()
+  }
+
+  const handleCardKeyDown = (e: React.KeyboardEvent, app: AppItem) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      void handleOpenApp(app)
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault()
+      moveCardFocus(app.id, e.key)
+    } else if (e.key === 'F2') {
+      e.preventDefault()
+      setEditingApp(app)
+      setShowEditApp(true)
+    }
+  }
+
+  const handleSaveAutoCategoryRules = async (rules: AutoCategoryRule[]) => {
+    if (!config) return false
+    return handleUpdateConfig({ ...config, autoCategoryRules: rules })
+  }
+
   const openCategoryContextMenu = (e: React.MouseEvent, menu: CategoryContextMenuTarget) => {
     e.preventDefault()
     e.stopPropagation()
@@ -1095,8 +1238,22 @@ function App() {
     setCategoryEditDialog(null)
   }
 
-  const visibleSubcategories = subcategories.filter(s => s.parentId === activeCategory)
-  const displaySubcategories = activeCategory ? visibleSubcategories : subcategories
+  const displaySubcategories = useMemo(
+    () => (activeCategory ? subcategories.filter(s => s.parentId === activeCategory) : subcategories),
+    [activeCategory, subcategories]
+  )
+
+  // 与主区域渲染共用同一份分组数据：键盘导航按此顺序在卡片间移动焦点
+  const groupedApps = useMemo(() => {
+    const groups: { sub: Subcategory | null; apps: AppItem[] }[] = []
+    const noSub = filteredApps.filter(a => !a.subcategoryId)
+    if (noSub.length > 0) groups.push({ sub: null, apps: noSub })
+    for (const s of displaySubcategories) {
+      const sApps = filteredApps.filter(a => a.subcategoryId === s.id)
+      if (sApps.length > 0) groups.push({ sub: s, apps: sApps })
+    }
+    return groups
+  }, [filteredApps, displaySubcategories])
 
   useEffect(() => {
     setActiveSubcategoryId(null)
@@ -1395,7 +1552,6 @@ function App() {
         ...(failedCount > 0 ? [`${failedCount} 个图标提取失败，已保留原图标。`] : [])
       ]
     })
-    alert(`已清理 ${cleared.count} 个图标缓存，成功刷新 ${successCount} 个图标。文件夹使用默认图标，不参与补全。${failedCount > 0 ? `有 ${failedCount} 个图标提取失败，已保留原图标。` : ''}`)
   }
 
   const handleAutoCategorize = async () => {
@@ -1891,7 +2047,7 @@ function App() {
         <div className="app-overview mt-3 border-t border-brand-100/70 pt-3 flex items-center justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-900 text-[11px] font-bold text-white shadow-sm shadow-slate-900/20">2.0</span>
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-900 text-[11px] font-bold text-white shadow-sm shadow-slate-900/20">{currentVersion ? `v${currentVersion.split('.').slice(0, 2).join('.')}` : '✦'}</span>
               <div>
                 <h2 className="text-sm font-display font-bold text-slate-900 truncate">{activeCategoryLabel}</h2>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
@@ -2112,7 +2268,7 @@ function App() {
           <section className="hidden">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-xs font-bold text-white shadow-sm shadow-slate-900/20">2.0</span>
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-xs font-bold text-white shadow-sm shadow-slate-900/20">{currentVersion ? `v${currentVersion.split('.').slice(0, 2).join('.')}` : '✦'}</span>
                 <div>
                   <h2 className="text-sm font-display font-bold text-slate-900 truncate">{activeCategoryLabel}</h2>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
@@ -2160,17 +2316,9 @@ function App() {
             </div>
           </section>
         {(() => {
-          const groups: { sub: Subcategory | null; apps: typeof filteredApps }[] = []
-          const noSub = filteredApps.filter(a => !a.subcategoryId)
-          if (noSub.length > 0) groups.push({ sub: null, apps: noSub })
-          for (const s of displaySubcategories) {
-            const sApps = filteredApps.filter(a => a.subcategoryId === s.id)
-            if (sApps.length > 0) groups.push({ sub: s, apps: sApps })
-          }
-
           return (
             <div>
-              {groups.map((group, gi) => (
+              {groupedApps.map((group, gi) => (
                 <div key={group.sub?.id || '__none__'} id={group.sub ? `subcat-${group.sub.id}` : undefined} className={gi > 0 ? 'mt-6' : ''}>
                   {group.sub && (
                     <div className="flex items-center gap-2.5 mb-3 px-1">
@@ -2199,16 +2347,29 @@ function App() {
                         key={app.id}
                         data-app-id={app.id}
                         draggable
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`打开 ${app.name}`}
+                        onKeyDown={(e) => handleCardKeyDown(e, app)}
                         onMouseDown={(e) => {
-                          // 右键图片/文档：准备原生拖拽（复制发送到外部应用）
-                          if (e.button === 2 && canNativeDrag(app)) {
+                          if (e.button !== 2) return
+                          if (canNativeDrag(app)) {
+                            // 右键图片/文档：准备原生拖拽（复制发送到外部应用）
                             e.preventDefault()
                             nativeDragPathRef.current = app.path
+                          } else {
+                            // 其他类型：记录起点，移动超过阈值后进入内部右键拖拽（排序/移动分类）
+                            rightDragRef.current = { appId: app.id, active: false, startX: e.clientX, startY: e.clientY }
                           }
                         }}
                         onContextMenu={(e) => {
-                          // 图片/文档文件：阻止右键菜单（右键用于原生拖拽复制发送）
-                          if (canNativeDrag(app)) e.preventDefault()
+                          // 右键拖拽释放后派发的 contextmenu 已被消费；其余情况为所有类型应用打开操作菜单
+                          e.preventDefault()
+                          if (suppressAppContextMenuRef.current) {
+                            suppressAppContextMenuRef.current = false
+                            return
+                          }
+                          openAppContextMenu(e, app)
                         }}
                         onDragStart={(e) => {
                           // 清理上一次拖拽可能残留的状态
@@ -2261,7 +2422,7 @@ function App() {
                           }, 100)
                         }}
                         style={{ borderRadius: br }}
-                        className={`app-tile glass-card ${pSize} card-hover cursor-pointer group relative select-none ${
+                        className={`app-tile glass-card focus-ring ${pSize} card-hover cursor-pointer group relative select-none ${
                           draggedAppId === app.id ? 'opacity-30 scale-95 blur-[2px]' : ''
                         } ${dragOverAppId === app.id ? 'scale-[1.03] ring-2 ring-brand-500 ring-offset-2 shadow-xl shadow-brand-500/20 bg-brand-50/50' : ''}`}
                         onClick={() => handleOpenApp(app)}
@@ -2357,7 +2518,7 @@ function App() {
       </main>
 
       <footer className="app-footer glass px-6 py-2 text-xs text-slate-400 flex justify-between border-t border-brand-100/30">
-        <span>Esc 关闭窗口</span>
+        <span>Esc 关闭窗口 · 方向键选择 · Enter 打开 · 右键更多操作</span>
         <span className="flex items-center gap-3">
           <span className="flex items-center gap-1">
             <kbd className="px-1.5 py-0.5 rounded bg-white/60 text-slate-500 font-mono text-[10px] border border-brand-100/40">{config?.hotkey || 'Alt+Space'}</kbd>
@@ -2430,6 +2591,23 @@ function App() {
         />
       )}
 
+      {appContextMenu && (
+        <AppContextMenuOverlay
+          menu={appContextMenu}
+          categories={categories}
+          subcategories={subcategories}
+          onOpen={app => void handleOpenApp(app)}
+          onOpenAsAdmin={handleContextMenuOpenAsAdmin}
+          onLocate={app => { void window.electronAPI.showItemInFolder(app.path) }}
+          onCopyPath={app => void handleContextMenuCopyPath(app)}
+          onMoveTo={(app, target) => void handleContextMenuMove(app, target)}
+          onHide={app => void handleContextMenuHide(app)}
+          onEdit={app => { setEditingApp(app); setShowEditApp(true) }}
+          onDelete={app => void handleDeleteApp(app.id)}
+          onClose={() => setAppContextMenu(null)}
+        />
+      )}
+
       {categoryEditDialog && (
         <CategoryEditDialogOverlay
           dialog={categoryEditDialog}
@@ -2459,6 +2637,8 @@ function App() {
         <SmartOrganizeModal
           apps={apps}
           categories={categories}
+          autoCategoryRules={config?.autoCategoryRules || []}
+          onSaveRules={handleSaveAutoCategoryRules}
           healthReport={healthReport}
           iconRefreshProgress={iconRefreshProgress}
           maintenanceSummary={maintenanceSummary}
@@ -2498,6 +2678,7 @@ function App() {
           onFixHealthIssues={handleFixHealthIssues}
           onExportDiagnostics={handleExportDiagnostics}
           onOpenDataDirectory={() => window.electronAPI.openDataDirectory()}
+          onOpenBackupsDirectory={() => window.electronAPI.openBackupsDirectory()}
           healthReport={healthReport}
           onOpenUpdateLog={() => window.electronAPI.openUpdateLog()}
         />

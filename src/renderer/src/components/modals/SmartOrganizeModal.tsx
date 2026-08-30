@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import type { AppItem, Category } from '../../../../shared/types'
+import type { AppItem, AutoCategoryRule, Category } from '../../../../shared/types'
 import type { HealthReport, IconRefreshProgress } from './types'
 
 type ActionKey =
@@ -17,6 +17,8 @@ type ActionKey =
 interface SmartOrganizeModalProps {
   apps: AppItem[]
   categories: Category[]
+  autoCategoryRules: AutoCategoryRule[]
+  onSaveRules: (rules: AutoCategoryRule[]) => Promise<boolean>
   healthReport: HealthReport | null
   iconRefreshProgress: IconRefreshProgress | null
   maintenanceSummary: { title: string; items: string[] } | null
@@ -51,6 +53,8 @@ const panelClass = 'smart-panel rounded-xl shadow-sm shadow-brand-500/5'
 export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
   apps,
   categories,
+  autoCategoryRules,
+  onSaveRules,
   healthReport,
   iconRefreshProgress,
   maintenanceSummary,
@@ -66,7 +70,14 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
   onImportBackup
 }: SmartOrganizeModalProps) {
   const [busyAction, setBusyAction] = useState<ActionKey | null>(null)
+  const [ruleMatch, setRuleMatch] = useState('')
+  const [ruleCategoryId, setRuleCategoryId] = useState('')
   const initialScanRef = useRef(false)
+
+  useEffect(() => {
+    if (ruleCategoryId || categories.length === 0) return
+    setRuleCategoryId(categories[0].id)
+  }, [categories, ruleCategoryId])
 
   useEffect(() => {
     if (initialScanRef.current || healthReport) return
@@ -253,6 +264,26 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
     onExportBackup
   ])
 
+  const addRule = async () => {
+    const match = ruleMatch.trim()
+    if (!match || !ruleCategoryId) return
+    const rule: AutoCategoryRule = {
+      id: crypto.randomUUID(),
+      name: match,
+      categoryId: ruleCategoryId,
+      match
+    }
+    const success = await onSaveRules([...autoCategoryRules, rule])
+    if (success) setRuleMatch('')
+  }
+
+  const removeRule = async (id: string) => {
+    await onSaveRules(autoCategoryRules.filter(rule => rule.id !== id))
+  }
+
+  const ruleCategoryName = (rule: AutoCategoryRule) =>
+    categories.find(category => category.id === rule.categoryId)?.name || null
+
   const scoreTone = stats.score >= 90
     ? 'text-emerald-600'
     : stats.score >= 70
@@ -321,7 +352,7 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
         <div className="smart-organize-header px-6 py-5 border-b border-brand-100/50 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="smart-organize-badge w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20 font-bold">
-              2.0
+              ✦
             </div>
             <div>
               <h2 className="text-lg font-display font-bold text-slate-800">整理中心</h2>
@@ -470,6 +501,75 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
                   </div>
                 </button>
               ))}
+            </div>
+
+            <div className={`${panelClass} p-4`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-slate-800">自动分类规则</div>
+                  <div className="text-xs text-slate-500 mt-1">名称、路径或别名命中关键词时归入对应分类，点击「自动分类」立即生效。</div>
+                </div>
+                <span className="smart-status-pill text-[11px] px-2 py-1 rounded-full bg-brand-50 text-brand-600 border border-brand-100">
+                  {autoCategoryRules.length} 条规则
+                </span>
+              </div>
+
+              {autoCategoryRules.length > 0 && (
+                <div className="mt-3 space-y-1.5">
+                  {autoCategoryRules.map(rule => {
+                    const categoryName = ruleCategoryName(rule)
+                    return (
+                      <div key={rule.id} className="flex items-center gap-2 rounded-lg border border-slate-200/80 bg-white/82 px-3 py-2">
+                        <span className="font-mono text-xs bg-brand-50 text-brand-700 border border-brand-100 rounded px-1.5 py-0.5 truncate max-w-[180px]">{rule.match}</span>
+                        <span className="text-xs text-slate-400">→</span>
+                        <span className={`text-xs font-medium truncate ${categoryName ? 'text-slate-700' : 'text-red-500'}`}>
+                          {categoryName || '分类已删除'}
+                        </span>
+                        <button
+                          onClick={() => void removeRule(rule.id)}
+                          className="focus-ring ml-auto shrink-0 rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                          aria-label={`删除规则 ${rule.match}`}
+                          title="删除规则"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {categories.length === 0 ? (
+                <div className="mt-3 text-xs text-slate-400">先创建至少一个分类，再添加规则。</div>
+              ) : (
+                <div className="mt-3 flex gap-2">
+                  <input
+                    value={ruleMatch}
+                    onChange={event => setRuleMatch(event.target.value)}
+                    onKeyDown={event => { if (event.key === 'Enter') void addRule() }}
+                    placeholder="关键词，如 wechat、微信"
+                    aria-label="规则关键词"
+                    className="focus-ring flex-1 min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-400"
+                  />
+                  <select
+                    value={ruleCategoryId}
+                    onChange={event => setRuleCategoryId(event.target.value)}
+                    aria-label="目标分类"
+                    className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 outline-none focus:border-brand-400 max-w-[140px]"
+                  >
+                    {categories.map(category => (
+                      <option key={category.id} value={category.id}>{category.icon} {category.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => void addRule()}
+                    disabled={!ruleMatch.trim()}
+                    className={`${actionButton} smart-button-neutral shrink-0 bg-white text-slate-700 border-slate-200 hover:bg-slate-900 hover:text-white hover:border-slate-900 disabled:opacity-60 disabled:cursor-not-allowed`}
+                  >
+                    添加
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className={`${panelClass} p-4 flex items-center justify-between gap-3`}>

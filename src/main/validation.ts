@@ -16,6 +16,7 @@ const CARD_SIZES = new Set(['small', 'medium', 'large'])
 const THEMES = new Set(['aurora', 'light', 'dark', 'system'])
 const LAYOUTS = new Set(['command-rail', 'horizon-workspace', 'studio-split'])
 const QUICK_ACTIONS = new Set(['shutdown', 'restart', 'lock', 'settings', 'calculator', 'notepad', 'clipboard'])
+const CLOSE_ACTIONS = new Set(['tray', 'quit'])
 const MAX_ITEMS = 5000
 const MAX_STRING_LENGTH = 8192
 const MAX_ICON_LENGTH = 2_000_000
@@ -113,6 +114,8 @@ export function sanitizeConfig(input: unknown, defaults: Config): Config | null 
   }
 
   const windowSizeValue = isRecord(input.windowSize) ? input.windowSize : {}
+  const closeAction = asString(input.closeAction, defaults.closeAction || 'tray', 10)
+  const lastActiveCategoryId = asStringOrNull(input.lastActiveCategoryId)
   const quickActions = Array.isArray(input.quickActions)
     ? input.quickActions.slice(0, 100).map(sanitizeQuickAction).filter((item): item is QuickAction => !!item)
     : defaults.quickActions
@@ -144,7 +147,10 @@ export function sanitizeConfig(input: unknown, defaults: Config): Config | null 
       : defaults.defaultEngine,
     autoCategoryRules,
     quickActions,
-    onboardingCompleted: asBoolean(input.onboardingCompleted, defaults.onboardingCompleted)
+    onboardingCompleted: asBoolean(input.onboardingCompleted, defaults.onboardingCompleted),
+    closeAction: CLOSE_ACTIONS.has(closeAction) ? closeAction as Config['closeAction'] : 'tray',
+    lastActiveCategoryId: lastActiveCategoryId ? lastActiveCategoryId.slice(0, 160) : null,
+    trayNotified: asBoolean(input.trayNotified, defaults.trayNotified === true)
   }
 }
 

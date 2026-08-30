@@ -59,10 +59,10 @@
 
 ## 技术栈
 
-- Electron 28
+- Electron 43
 - React 18
 - TypeScript
-- Vite 5
+- Vite 8
 - Tailwind CSS 3
 - pinyin-pro（拼音搜索）
 

@@ -1,7 +1,8 @@
-import { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen, dialog, shell, ipcMain } from 'electron'
+import { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen, dialog, shell, ipcMain, Notification } from 'electron'
 import path from 'path'
 import type { Config, UiCommand } from '../shared/types'
 import { ensureDataDir, readJsonFile, writeJsonFile, getDefaultConfig, CONFIG_FILE } from './config'
+import { runStartupBackup } from './backup'
 import { registerAppHandlers } from './handlers/appHandlers'
 import { registerFileHandlers } from './handlers/fileHandlers'
 import { registerIconHandlers } from './handlers/iconHandlers'
@@ -24,6 +25,24 @@ const SHORTCUT_RETRY_DELAY_MS = 1200
 
 function getAppIcon() {
   return nativeImage.createFromPath(path.join(__dirname, '../../../build/icon-256.png'))
+}
+
+/** 第一次把窗口关到托盘时给一条系统通知，避免用户以为程序已经退出 */
+function notifyTrayOnce() {
+  const config = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
+  if (config.trayNotified) return
+  writeJsonFile(CONFIG_FILE, { ...config, trayNotified: true })
+  try {
+    const notification = new Notification({
+      title: 'Tidy Desktop 仍在运行',
+      body: '窗口已最小化到系统托盘，双击托盘图标可重新打开。',
+      icon: getAppIcon()
+    })
+    notification.on('click', () => showMainWindow())
+    notification.show()
+  } catch (error) {
+    console.error('Failed to show tray notification:', error)
+  }
 }
 
 function isAllowedInternalUrl(rawUrl: string): boolean {
@@ -139,10 +158,12 @@ function createWindow() {
   })
 
   win.on('close', (event) => {
-    if (!(app as any).isQuitting) {
-      event.preventDefault()
-      win.hide()
-    }
+    if ((app as any).isQuitting) return
+    const config = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
+    if (config.closeAction === 'quit') return
+    event.preventDefault()
+    win.hide()
+    notifyTrayOnce()
   })
 
   win.on('closed', () => {
@@ -449,6 +470,8 @@ app.on('ready', () => {
 
   Menu.setApplicationMenu(null)
   ensureDataDir()
+  app.setAppUserModelId('com.tidy-desktop.app')
+  runStartupBackup()
 
   // Set up window refs for system handlers before registration
   setWindowRefs(mainWindowRef, searchWindowRef)

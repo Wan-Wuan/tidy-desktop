@@ -83,6 +83,9 @@ export interface Config {
   autoCategoryRules?: AutoCategoryRule[]
   quickActions?: QuickAction[]
   onboardingCompleted?: boolean
+  closeAction?: 'tray' | 'quit'
+  lastActiveCategoryId?: string | null
+  trayNotified?: boolean
 }
 
 export interface AppsData {

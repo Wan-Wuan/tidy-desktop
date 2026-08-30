@@ -30,15 +30,24 @@ export function ensureDataDir() {
 }
 
 export function readJsonFile<T>(filePath: string, defaultValue: T): T {
+  if (!fs.existsSync(filePath)) return defaultValue
+  let raw: string
   try {
-    if (fs.existsSync(filePath)) {
-      const data = fs.readFileSync(filePath, 'utf-8')
-      return JSON.parse(data) as T
-    }
+    raw = fs.readFileSync(filePath, 'utf-8')
   } catch (error) {
     console.error(`Error reading ${filePath}:`, error)
+    return defaultValue
   }
-  return defaultValue
+  try {
+    return JSON.parse(raw) as T
+  } catch (error) {
+    // 解析失败说明文件已损坏：先把原始内容留档，避免后续写入覆盖后无法恢复
+    console.error(`Error parsing ${filePath}:`, error)
+    try {
+      fs.writeFileSync(`${filePath}.corrupt-${Date.now()}`, raw, 'utf-8')
+    } catch { /* ignore */ }
+    return defaultValue
+  }
 }
 
 export function writeJsonFile(filePath: string, data: unknown): boolean {
@@ -75,6 +84,9 @@ export function getDefaultConfig() {
       bilibili: { name: 'B站', url: 'https://search.bilibili.com/all?keyword=' }
     },
     autoStart: false,
+    closeAction: 'tray' as const,
+    lastActiveCategoryId: null,
+    trayNotified: false,
     ui: {
       gridColumns: 6,
       cardSize: 'medium' as const,

@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scanShortcuts: () => ipcRenderer.invoke('scan-shortcuts'),
   resolveShortcutTargets: (filePaths: string[]) => ipcRenderer.invoke('resolve-shortcut-targets', filePaths),
   openDataDirectory: () => ipcRenderer.invoke('open-data-directory'),
+  openBackupsDirectory: () => ipcRenderer.invoke('open-backups-directory'),
+  copyTextToClipboard: (text: string) => ipcRenderer.invoke('copy-text-to-clipboard', text),
   clearIconCache: () => ipcRenderer.invoke('clear-icon-cache'),
   openUpdateLog: () => ipcRenderer.invoke('open-update-log'),
   moveSearchWindowToCursorDisplay: () => ipcRenderer.invoke('move-search-window-to-cursor-display'),

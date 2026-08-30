@@ -1,6 +1,7 @@
-import { ipcMain, BrowserWindow, dialog, screen, app, nativeImage, shell } from 'electron'
+import { ipcMain, BrowserWindow, dialog, screen, app, nativeImage, shell, clipboard } from 'electron'
 import fs from 'fs'
 import path from 'path'
+import { BACKUP_DIR } from '../backup'
 import { APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, CONFIG_DIR, ICONS_DIR, getDefaultConfig, readJsonFile, writeJsonFilesAtomically } from '../config'
 import type { AppsData, CategoriesData, Config, ShortcutImportItem } from '../../shared/types'
 import { sanitizeAppsData, sanitizeCategoriesData, sanitizeConfig } from '../validation'
@@ -469,6 +470,20 @@ export function registerSystemHandlers() {
   ipcMain.handle('open-data-directory', async () => {
     const error = await shell.openPath(CONFIG_DIR)
     return !error
+  })
+
+  ipcMain.handle('open-backups-directory', async () => {
+    if (!fs.existsSync(BACKUP_DIR)) {
+      fs.mkdirSync(BACKUP_DIR, { recursive: true })
+    }
+    const error = await shell.openPath(BACKUP_DIR)
+    return !error
+  })
+
+  ipcMain.handle('copy-text-to-clipboard', (_, text: unknown) => {
+    if (typeof text !== 'string' || text.length === 0 || text.length > 8192) return false
+    clipboard.writeText(text)
+    return true
   })
 
   ipcMain.handle('clear-icon-cache', async () => {
