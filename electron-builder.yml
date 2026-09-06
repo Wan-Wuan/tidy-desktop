@@ -18,6 +18,9 @@ win:
       arch:
         - x64
 nsis:
+  # 更新器为完整下载 + SHA256 校验，不使用 blockmap 增量下载；
+  # 关闭差分包以解锁 maximum 压缩（差分模式会强制 normal 压缩）
+  differentialPackage: false
   artifactName: ${productName}-Setup-${version}.${ext}
   include: build/installer.nsh
   oneClick: false

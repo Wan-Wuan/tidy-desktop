@@ -17,10 +17,10 @@ if (!token) {
 }
 
 const installerName = `tidy-desktop-Setup-${tag.slice(1)}.exe`
+// 更新器不使用 blockmap 增量下载，Gitee 只需安装包与校验文件
 const requestedAssets = [
   installerName,
-  `${installerName}.sha256`,
-  `${installerName}.blockmap`
+  `${installerName}.sha256`
 ].map((name) => path.join(root, 'release', name))
 
 const assets = []
