@@ -66,6 +66,8 @@ export const SettingsModal = React.memo(function SettingsModal({
   const [searchHotkey, setSearchHotkey] = useState(config.searchHotkey || 'Ctrl+K')
   const [autoStart, setAutoStart] = useState(false)
   const [closeAction, setCloseAction] = useState<'tray' | 'quit'>(config.closeAction || 'tray')
+  const [searchAutoHideOnBlur, setSearchAutoHideOnBlur] = useState(config.searchAutoHideOnBlur === true)
+  const [startMinimized, setStartMinimized] = useState(config.startMinimizedToTray === true)
   const [quickActions, setQuickActions] = useState<QuickAction[]>(config.quickActions || [])
   const [defaultEngine, setDefaultEngine] = useState(config.defaultEngine || 'b')
   const [ui, setUi] = useState<UISettings>(config.ui || {
@@ -73,6 +75,10 @@ export const SettingsModal = React.memo(function SettingsModal({
   })
   const [recording, setRecording] = useState<'main' | 'search' | null>(null)
   const engines = config.searchEngines
+  const DEFAULT_HOTKEY = 'Alt+Space'
+  const DEFAULT_SEARCH_HOTKEY = 'Ctrl+K'
+  const DEFAULT_SEARCH_WIDTH = 600
+  const DEFAULT_SEARCH_VERTICAL_RATIO = 0.3
 
   useEffect(() => {
     window.electronAPI.getAutoStart().then(setAutoStart)
@@ -86,6 +92,8 @@ export const SettingsModal = React.memo(function SettingsModal({
       searchEngines: engines,
       autoStart: overrides.autoStart ?? autoStart,
       closeAction: overrides.closeAction ?? closeAction,
+      searchAutoHideOnBlur: overrides.searchAutoHideOnBlur ?? searchAutoHideOnBlur,
+      startMinimizedToTray: overrides.startMinimizedToTray ?? startMinimized,
       quickActions: overrides.quickActions ?? quickActions,
       ui: overrides.ui ?? ui,
       defaultEngine: overrides.defaultEngine ?? defaultEngine
@@ -96,6 +104,8 @@ export const SettingsModal = React.memo(function SettingsModal({
       setSearchHotkey(config.searchHotkey || 'Ctrl+K')
       setAutoStart(config.autoStart === true)
       setCloseAction(config.closeAction || 'tray')
+      setSearchAutoHideOnBlur(config.searchAutoHideOnBlur === true)
+      setStartMinimized(config.startMinimizedToTray === true)
       setQuickActions(config.quickActions || [])
       setDefaultEngine(config.defaultEngine || 'b')
       setUi(config.ui || {
@@ -140,6 +150,14 @@ export const SettingsModal = React.memo(function SettingsModal({
   }, [recording])
 
   const cardSizeLabels: Record<string, string> = { small: '小', medium: '中', large: '大' }
+  const accentPresets = [
+    { name: '靛蓝', value: '' },
+    { name: '蓝', value: '#3B82F6' },
+    { name: '翠绿', value: '#10B981' },
+    { name: '紫罗兰', value: '#8B5CF6' },
+    { name: '玫红', value: '#F43F5E' },
+    { name: '琥珀', value: '#F59E0B' }
+  ]
   const layoutTemplates = [
     {
       id: 'command-rail' as const,
@@ -194,6 +212,22 @@ export const SettingsModal = React.memo(function SettingsModal({
           </div>
           <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl mt-2">
             <div>
+              <div className="text-sm font-medium text-slate-700">启动时最小化到托盘</div>
+              <div className="text-xs text-slate-500">开机自启动或手动打开时不弹窗，仅驻留托盘</div>
+            </div>
+            <button
+              onClick={() => {
+                const next = !startMinimized
+                setStartMinimized(next)
+                saveConfig({ startMinimizedToTray: next })
+              }}
+              className={`relative w-11 h-6 rounded-full transition-colors ${startMinimized ? 'bg-brand-500' : 'bg-slate-300'}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${startMinimized ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+          <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl mt-2">
+            <div>
               <div className="text-sm font-medium text-slate-700">点击关闭按钮时</div>
               <div className="text-xs text-slate-500">最小化到托盘可保留快速启动和全局快捷键</div>
             </div>
@@ -224,32 +258,62 @@ export const SettingsModal = React.memo(function SettingsModal({
                 <div className="text-sm font-medium text-slate-700">显示/隐藏主窗口</div>
                 <div className="text-xs text-slate-500">全局快捷键</div>
               </div>
-              <button
-                onClick={() => setRecording(recording === 'main' ? null : 'main')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-mono min-w-[120px] text-center transition-colors ${
-                  recording === 'main'
-                    ? 'bg-brand-500 text-white animate-pulse'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-400'
-                }`}
-              >
-                {recording === 'main' ? '请按下快捷键...' : hotkey}
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setRecording(recording === 'main' ? null : 'main')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-mono min-w-[120px] text-center transition-colors ${
+                    recording === 'main'
+                      ? 'bg-brand-500 text-white animate-pulse'
+                      : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-400'
+                  }`}
+                >
+                  {recording === 'main' ? '请按下快捷键...' : hotkey}
+                </button>
+                {hotkey !== DEFAULT_HOTKEY && (
+                  <button
+                    onClick={() => {
+                      setHotkey(DEFAULT_HOTKEY)
+                      saveConfig({ hotkey: DEFAULT_HOTKEY })
+                    }}
+                    aria-label="恢复默认快捷键"
+                    title="恢复默认"
+                    className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-500 transition-colors hover:border-brand-400 hover:text-brand-600"
+                  >
+                    ↺
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
               <div>
                 <div className="text-sm font-medium text-slate-700">快速搜索框</div>
                 <div className="text-xs text-slate-500">仅弹出搜索框</div>
               </div>
-              <button
-                onClick={() => setRecording(recording === 'search' ? null : 'search')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-mono min-w-[120px] text-center transition-colors ${
-                  recording === 'search'
-                    ? 'bg-brand-500 text-white animate-pulse'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-400'
-                }`}
-              >
-                {recording === 'search' ? '请按下快捷键...' : searchHotkey}
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setRecording(recording === 'search' ? null : 'search')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-mono min-w-[120px] text-center transition-colors ${
+                    recording === 'search'
+                      ? 'bg-brand-500 text-white animate-pulse'
+                      : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-400'
+                  }`}
+                >
+                  {recording === 'search' ? '请按下快捷键...' : searchHotkey}
+                </button>
+                {searchHotkey !== DEFAULT_SEARCH_HOTKEY && (
+                  <button
+                    onClick={() => {
+                      setSearchHotkey(DEFAULT_SEARCH_HOTKEY)
+                      saveConfig({ searchHotkey: DEFAULT_SEARCH_HOTKEY })
+                    }}
+                    aria-label="恢复默认快捷键"
+                    title="恢复默认"
+                    className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-500 transition-colors hover:border-brand-400 hover:text-brand-600"
+                  >
+                    ↺
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -282,6 +346,115 @@ export const SettingsModal = React.memo(function SettingsModal({
             ))}
           </div>
           <p className="text-xs text-slate-400 mt-2">输入 关键词 + 空格 调用搜索引擎</p>
+        </div>
+
+        <div className="mb-5">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+            <MagnifyingGlass size={17} weight="duotone" aria-hidden="true" /> 搜索框
+          </h3>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
+              <div>
+                <div className="text-sm font-medium text-slate-700">失焦自动隐藏</div>
+                <div className="text-xs text-slate-500">点击其它窗口时自动收起搜索框（类 Spotlight 行为）</div>
+              </div>
+              <button
+                onClick={() => {
+                  const next = !searchAutoHideOnBlur
+                  setSearchAutoHideOnBlur(next)
+                  saveConfig({ searchAutoHideOnBlur: next })
+                }}
+                className={`relative w-11 h-6 rounded-full transition-colors ${searchAutoHideOnBlur ? 'bg-brand-500' : 'bg-slate-300'}`}
+              >
+                <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${searchAutoHideOnBlur ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
+              <span className="text-sm text-slate-700">搜索框宽度</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="380"
+                  max="900"
+                  step="20"
+                  value={ui.searchWidth ?? 600}
+                  onChange={(e) => {
+                    const next = { ...ui, searchWidth: Number(e.target.value) }
+                    setUi(next)
+                    saveConfig({ ui: next })
+                  }}
+                  className="w-32"
+                />
+                <span className="text-sm text-slate-500 w-12">{ui.searchWidth ?? 600}px</span>
+                {(ui.searchWidth ?? 600) !== DEFAULT_SEARCH_WIDTH && (
+                  <button
+                    onClick={() => {
+                      const next = { ...ui, searchWidth: DEFAULT_SEARCH_WIDTH }
+                      setUi(next)
+                      saveConfig({ ui: next })
+                    }}
+                    aria-label="恢复默认宽度"
+                    title="恢复默认"
+                    className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500 transition-colors hover:border-brand-400 hover:text-brand-600"
+                  >
+                    ↺
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
+              <span className="text-sm text-slate-700">垂直位置</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="0.1"
+                  max="0.8"
+                  step="0.05"
+                  value={ui.searchVerticalRatio ?? 0.3}
+                  onChange={(e) => {
+                    const next = { ...ui, searchVerticalRatio: Number(e.target.value) }
+                    setUi(next)
+                    saveConfig({ ui: next })
+                  }}
+                  className="w-32"
+                />
+                <span className="text-sm text-slate-500 w-12">{Math.round((ui.searchVerticalRatio ?? 0.3) * 100)}%</span>
+                {Math.round((ui.searchVerticalRatio ?? 0.3) * 100) !== Math.round(DEFAULT_SEARCH_VERTICAL_RATIO * 100) && (
+                  <button
+                    onClick={() => {
+                      const next = { ...ui, searchVerticalRatio: DEFAULT_SEARCH_VERTICAL_RATIO }
+                      setUi(next)
+                      saveConfig({ ui: next })
+                    }}
+                    aria-label="恢复默认位置"
+                    title="恢复默认"
+                    className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500 transition-colors hover:border-brand-400 hover:text-brand-600"
+                  >
+                    ↺
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
+              <span className="text-sm text-slate-700">结果展示条数</span>
+              <div className="flex gap-1">
+                {[4, 6, 8, 10, 12].map(n => (
+                  <button
+                    key={n}
+                    onClick={() => {
+                      const next = { ...ui, searchMaxResults: n }
+                      setUi(next)
+                      saveConfig({ ui: next })
+                    }}
+                    className={`w-8 h-8 rounded-lg text-sm ${ui.searchMaxResults === n ? 'bg-brand-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-brand-400'}`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-slate-400 mt-2">搜索框宽度与位置在下次唤起时生效；Esc 清空后再按可隐藏窗口。</p>
         </div>
 
         <div className="mb-5">
@@ -319,6 +492,48 @@ export const SettingsModal = React.memo(function SettingsModal({
             <Palette size={17} weight="duotone" aria-hidden="true" /> 界面
           </h3>
           <div className="space-y-3">
+            <div className="p-3 bg-brand-50/50 rounded-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-slate-700">主题色</div>
+                  <div className="text-xs text-slate-500">按钮、选中态和强调元素的主色调</div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {accentPresets.map(preset => (
+                    <button
+                      key={preset.name}
+                      title={preset.name}
+                      aria-label={`主题色：${preset.name}`}
+                      onClick={() => {
+                        const next = { ...ui, accentColor: preset.value }
+                        setUi(next)
+                        saveConfig({ ui: next })
+                      }}
+                      className={`focus-ring h-6 w-6 rounded-full border-2 transition-transform hover:scale-110 ${
+                        (ui.accentColor || '') === preset.value ? 'border-slate-900' : 'border-transparent'
+                      }`}
+                      style={{ background: preset.value || '#6366F1' }}
+                    />
+                  ))}
+                  <label
+                    title="自定义颜色"
+                    className="focus-ring relative h-6 w-6 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-slate-300"
+                    style={{ background: ui.accentColor || 'transparent' }}
+                  >
+                    <input
+                      type="color"
+                      value={ui.accentColor || '#6366F1'}
+                      onChange={(e) => {
+                        const next = { ...ui, accentColor: e.target.value }
+                        setUi(next)
+                        saveConfig({ ui: next })
+                      }}
+                      className="absolute inset-0 cursor-pointer opacity-0"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
             <div>
               <div className="mb-2 flex items-end justify-between gap-3">
                 <div>
@@ -366,6 +581,27 @@ export const SettingsModal = React.memo(function SettingsModal({
                     </button>
                   )
                 })}
+              </div>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">
+              <div>
+                <div className="text-sm font-medium text-slate-700">排序方式</div>
+                <div className="text-xs text-slate-500">手动排序支持拖拽；其它方式只影响展示顺序</div>
+              </div>
+              <div className="flex gap-1">
+                {([['manual', '手动'], ['name', '名称'], ['launchCount', '常用'], ['recent', '最近']] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    onClick={() => {
+                      const next = { ...ui, sortMode: mode }
+                      setUi(next)
+                      saveConfig({ ui: next })
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs ${(ui.sortMode || 'manual') === mode ? 'bg-brand-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-brand-400'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
             <div className="flex items-center justify-between p-3 bg-brand-50/50 rounded-xl">

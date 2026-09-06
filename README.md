@@ -97,6 +97,36 @@ npm run build:main
 npx electron-builder --win --x64
 ```
 
+## 发布流程
+
+`scripts/release.mjs` 会自动完成：升版本号（package.json + lock）、typecheck、测试、打包 NSIS 安装包、生成 SHA256 校验文件、提交 `release: vX.Y.Z` 并打 tag。任何一步失败会回滚版本号。
+
+**前置条件**：
+
+- 发布相关文件（src、package.json 等）必须已提交，工作区干净，否则脚本直接阻断；
+- Windows 上默认要求代码签名证书（环境变量 `CSC_LINK`）；本地/测试打包需显式设置 `ALLOW_UNSIGNED_RELEASE=1`；
+- 发布 GitHub Release 需要 [gh CLI](https://cli.github.com/) 已登录（`gh auth status`）。
+
+**完整步骤**（以 minor 版本为例，当前 master 分支）：
+
+```bash
+# 1. 提交本次改动
+git add -A
+git commit -m "Feat: ..."
+git push origin master
+
+# 2. 升版本 + 验证 + 打包（无签名证书时）
+ALLOW_UNSIGNED_RELEASE=1 npm run release -- minor
+# 有签名证书时：CSC_LINK=<证书路径或URL> npm run release -- minor
+
+# 3. 推送并创建 GitHub Release
+git push origin master
+git push origin v2.2.0
+gh release create v2.2.0 "release/*2.2.0*" --title "v2.2.0" --notes "Release v2.2.0"
+```
+
+版本号规则：`patch` 修 bug、`minor` 新功能、`major` 破坏性变更。同步 Gitee 可用 `npm run publish:gitee`。
+
 ## 项目结构
 
 ```

@@ -42,6 +42,11 @@ export interface UISettings {
   theme?: 'aurora' | 'light' | 'dark' | 'system'
   layout?: 'command-rail' | 'horizon-workspace' | 'studio-split'
   sidebarWidth?: number
+  accentColor?: string
+  searchWidth?: number
+  searchVerticalRatio?: number
+  searchMaxResults?: number
+  sortMode?: 'manual' | 'name' | 'launchCount' | 'recent'
 }
 
 export interface AutoCategoryRule {
@@ -74,6 +79,7 @@ export interface Config {
     width: number
     height: number
   }
+  windowPosition?: { x: number; y: number } | null
   searchEngines: {
     [key: string]: SearchEngine
   }
@@ -86,6 +92,8 @@ export interface Config {
   closeAction?: 'tray' | 'quit'
   lastActiveCategoryId?: string | null
   trayNotified?: boolean
+  searchAutoHideOnBlur?: boolean
+  startMinimizedToTray?: boolean
 }
 
 export interface AppsData {

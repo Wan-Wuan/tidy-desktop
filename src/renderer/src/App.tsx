@@ -8,12 +8,10 @@ import {
   SquaresFour
 } from '@phosphor-icons/react'
 import { AppItem, AutoCategoryRule, Category, Subcategory, Config, ShortcutImportItem, UiCommand } from '../../shared/types'
-import { isFolderPath, DOC_FILE_EXTS, isImageFile } from '../../shared/utils'
+import { isFolderPath, parseSteamUrl } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { buildShortcutTargetMap, getDroppedPathIdentities, getDroppedPaths, normalizeDroppedPath } from './utils/dropPaths'
-import { filterNewShortcutItems } from './utils/shortcutImport'
 import { hasDisplayableIcon, needsIconUpdate } from './utils/iconUtils'
-import { deduplicateAppsByPath, filterStillEmptyCategories, findEmptyCategories } from './utils/maintenance'
 import {
   countCategoryApps,
   countSubcategoryApps,
@@ -21,6 +19,10 @@ import {
   removeSubcategoryFromApps
 } from './utils/categoryDeletion'
 import { useUpdate } from './hooks/useUpdate'
+import { applyAccentScale, generateAccentScale } from './utils/colorScale'
+import { useDragGhost } from './hooks/useDragGhost'
+import { useMaintenance } from './hooks/useMaintenance'
+import type { MaintenanceSummary } from './hooks/useMaintenance'
 import { UpdateButton, UpdateDialog } from './components/UpdateButton'
 import { SidebarResizeHandle } from './components/SidebarResizeHandle'
 import { WindowResizeHandles } from './components/WindowResizeHandles'
@@ -32,6 +34,7 @@ import {
 } from './components/CategoryOverlays'
 import type { CategoryContextMenu, CategoryContextMenuTarget, CategoryDeleteDialog, CategoryEditDialog } from './components/CategoryOverlays'
 import { AppContextMenuOverlay } from './components/AppContextMenuOverlay'
+import { AppCard, canNativeDrag, isDocFile } from './components/AppCard'
 import type { AppContextMenuState, MoveTarget } from './components/AppContextMenuOverlay'
 import {
   AddAppModal,
@@ -40,10 +43,8 @@ import {
   SettingsModal,
   SmartOrganizeModal,
 } from './components/modals'
-import type { HealthReport, IconRefreshProgress } from './components/modals'
 
 
-type MaintenanceSummary = { title: string; items: string[] }
 type ParsedDrop = { apps: AppItem[]; duplicateCount: number; unsupportedCount: number }
 type UndoSnapshot = {
   label: string
@@ -84,9 +85,6 @@ function App() {
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [dragOverAppId, setDragOverAppId] = useState<string | null>(null)
-  const [iconRefreshProgress, setIconRefreshProgress] = useState<IconRefreshProgress | null>(null)
-  const [healthReport, setHealthReport] = useState<HealthReport | null>(null)
-  const [maintenanceSummary, setMaintenanceSummary] = useState<MaintenanceSummary | null>(null)
   const [undoSnapshot, setUndoSnapshot] = useState<UndoSnapshot | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const dropZoneRef = useRef<HTMLDivElement>(null)
@@ -103,89 +101,51 @@ function App() {
   const rightDragRef = useRef<{ appId: string; active: boolean; startX: number; startY: number } | null>(null)
   const dragGhostRef = useRef<HTMLDivElement | null>(null)
   const iconBackfillTimerRef = useRef<number | null>(null)
-  const maintenanceSummaryTimerRef = useRef<number | null>(null)
-  const shortcutImportInFlightRef = useRef(false)
-
-  const showMaintenanceSummary = useCallback((summary: MaintenanceSummary, autoDismiss = true) => {
-    if (maintenanceSummaryTimerRef.current) {
-      window.clearTimeout(maintenanceSummaryTimerRef.current)
-      maintenanceSummaryTimerRef.current = null
-    }
-    setMaintenanceSummary(summary)
-    if (autoDismiss) {
-      maintenanceSummaryTimerRef.current = window.setTimeout(() => {
-        maintenanceSummaryTimerRef.current = null
-        setMaintenanceSummary(null)
-      }, 10_000)
-    }
-  }, [])
-
-  const clearMaintenanceSummary = useCallback(() => {
-    if (maintenanceSummaryTimerRef.current) {
-      window.clearTimeout(maintenanceSummaryTimerRef.current)
-      maintenanceSummaryTimerRef.current = null
-    }
-    setMaintenanceSummary(null)
-  }, [])
 
   // 创建跟随鼠标的幽灵卡片（HTML5拖拽和右键拖拽共用）
-  const dragGhostRafRef = useRef(0)
-  const dragGhostPosRef = useRef({ x: 0, y: 0 })
+  const { createDragGhost, moveDragGhost, removeDragGhost } = useDragGhost(appsRef)
 
-  const createDragGhost = (appId: string, x: number, y: number) => {
-    removeDragGhost()
-    const app = appsRef.current.find(a => a.id === appId)
-    if (!app) return
-    const div = document.createElement('div')
-    // 小型标签：圆角胶囊，跟随鼠标右下方
-    div.style.cssText = 'position:fixed;z-index:99999;pointer-events:none;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:10px;background:rgba(79,70,229,0.92);backdrop-filter:blur(8px);color:white;font-family:Inter,sans-serif;font-size:12px;font-weight:500;white-space:nowrap;box-shadow:0 8px 24px rgba(79,70,229,0.35),0 2px 6px rgba(0,0,0,0.1);will-change:transform;transition:transform 120ms cubic-bezier(0.34,1.56,0.64,1),opacity 150ms ease-out;opacity:0;transform:translate(' + (x + 14) + 'px,' + (y + 18) + 'px) scale(0.5);'
-    // 入场：淡入 + 弹性放大
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (div.parentNode) {
-          div.style.opacity = '1'
-          div.style.transform = `translate(${x + 14}px, ${y + 18}px) scale(1)`
-        }
-      })
+  const captureUndoSnapshot = (label: string) => {
+    setUndoSnapshot({
+      label,
+      apps: appsRef.current.map(app => ({ ...app })),
+      categories: categoriesRef.current.map(category => ({ ...category })),
+      subcategories: subcategories.map(subcategory => ({ ...subcategory })),
+      activeCategory: activeCategoryRef.current
     })
-    // 小图标
-    if (hasDisplayableIcon(app.icon)) {
-      const img = document.createElement('img')
-      img.src = app.icon
-      img.style.cssText = 'width:18px;height:18px;border-radius:4px;'
-      div.appendChild(img)
-    }
-    const span = document.createElement('span')
-    span.textContent = app.name
-    div.appendChild(span)
-    document.body.appendChild(div)
-    dragGhostRef.current = div
-    dragGhostPosRef.current = { x: x - 60, y: y - 20 }
   }
 
-  const moveDragGhost = (x: number, y: number) => {
-    if (!dragGhostRef.current) return
-    dragGhostPosRef.current = { x: x + 14, y: y + 18 }
-    if (!dragGhostRafRef.current) {
-      dragGhostRafRef.current = requestAnimationFrame(() => {
-        dragGhostRafRef.current = 0
-        if (dragGhostRef.current) {
-          dragGhostRef.current.style.transform = `translate(${dragGhostPosRef.current.x}px, ${dragGhostPosRef.current.y}px) scale(1)`
-        }
-      })
-    }
-  }
-
-  const removeDragGhost = () => {
-    if (dragGhostRafRef.current) {
-      cancelAnimationFrame(dragGhostRafRef.current)
-      dragGhostRafRef.current = 0
-    }
-    if (dragGhostRef.current) {
-      dragGhostRef.current.remove()
-      dragGhostRef.current = null
-    }
-  }
+  // 维护操作集（图标刷新/自动分类/健康检查/导入/备份等）
+  const {
+    maintenanceSummary,
+    clearMaintenanceSummary,
+    iconRefreshProgress,
+    healthReport,
+    showMaintenanceSummary,
+    handleRefreshAllIcons,
+    handleAutoCategorize,
+    handleCleanupInvalidApps,
+    handleRestoreHiddenApps,
+    handleExportBackup,
+    handleImportBackup,
+    handleRunHealthCheck,
+    handleFixHealthIssues,
+    handleImportShortcuts
+  } = useMaintenance({
+    appsRef,
+    categoriesRef,
+    categories,
+    subcategories,
+    config,
+    activeCategoryRef,
+    setActiveCategory,
+    setApps,
+    setCategories,
+    setSubcategories,
+    captureUndoSnapshot,
+    loadData: () => loadData(),
+    scheduleIconBackfill: (apps) => scheduleIconBackfill(apps)
+  })
 
   useEffect(() => {
     loadData()
@@ -209,6 +169,12 @@ function App() {
   useEffect(() => {
     appsRef.current = apps
   }, [apps])
+
+  // 主题色（accent）：写入 brand 色阶 CSS 变量；留空回落到默认靛蓝
+  useEffect(() => {
+    const accent = config?.ui?.accentColor?.trim()
+    applyAccentScale(accent ? generateAccentScale(accent) : null, document.documentElement)
+  }, [config?.ui?.accentColor])
 
   useEffect(() => {
     categoriesRef.current = categories
@@ -266,10 +232,6 @@ function App() {
         window.clearTimeout(iconBackfillTimerRef.current)
         iconBackfillTimerRef.current = null
       }
-      if (maintenanceSummaryTimerRef.current) {
-        window.clearTimeout(maintenanceSummaryTimerRef.current)
-        maintenanceSummaryTimerRef.current = null
-      }
     }
   }, [])
 
@@ -303,12 +265,18 @@ function App() {
   const [categoryEditDialog, setCategoryEditDialog] = useState<CategoryEditDialog | null>(null)
   const [categoryDeleteDialog, setCategoryDeleteDialog] = useState<CategoryDeleteDialog | null>(null)
   const [appContextMenu, setAppContextMenu] = useState<AppContextMenuState | null>(null)
+  const [selectedAppIds, setSelectedAppIds] = useState<string[]>([])
+  const lastClickedIndexRef = useRef<number | null>(null)
   const suppressAppContextMenuRef = useRef(false)
   const skipActiveCategoryPersistRef = useRef(true)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
+      if (selectedAppIds.length > 0) {
+        setSelectedAppIds([])
+        return
+      }
       const overlayOpen = showSettings || showAddApp || showEditApp || showSmartOrganize
         || !!appContextMenu || !!categoryContextMenu || !!categoryEditDialog || !!categoryDeleteDialog
       if (overlayOpen) return
@@ -316,7 +284,7 @@ function App() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showSettings, showAddApp, showEditApp, showSmartOrganize, appContextMenu, categoryContextMenu, categoryEditDialog, categoryDeleteDialog])
+  }, [showSettings, showAddApp, showEditApp, showSmartOrganize, appContextMenu, categoryContextMenu, categoryEditDialog, categoryDeleteDialog, selectedAppIds])
 
   useEffect(() => {
     // 右键自定义拖拽（HTML5 draggable 不支持右键）：普通应用右键拖到应用/分类/子分类上完成排序或归类；
@@ -589,45 +557,28 @@ function App() {
   }
 
   const handleOpenApp = async (app: AppItem) => {
+    let success: boolean
     if (app.id === '__folder_path__') {
-      await window.electronAPI.openFolder(app.path)
-      return
-    }
-    if (app.type === 'steam') {
-      await window.electronAPI.openSteam(app.path)
+      success = await window.electronAPI.openFolder(app.path)
+    } else if (app.type === 'steam') {
+      success = await window.electronAPI.openSteam(app.path)
     } else if (app.type === 'folder') {
-      await window.electronAPI.openFolder(app.path)
+      success = await window.electronAPI.openFolder(app.path)
     } else {
-      await window.electronAPI.openApp(app.path)
+      success = await window.electronAPI.openApp(app.path)
     }
-    await recordAppLaunch(app.id)
+    // 打开失败（路径失效等）不计入启动统计，避免污染智能启动和搜索排序
+    if (success) await recordAppLaunch(app.id)
   }
 
-  const isDocFile = (app: AppItem): boolean => {
-    if (app.type !== 'app') return false
-    const ext = app.path.toLowerCase().substring(app.path.lastIndexOf('.'))
-    return DOC_FILE_EXTS.includes(ext)
-  }
-
-  const canNativeDrag = (app: AppItem): boolean => {
-    return isDocFile(app) || isImageFile(app)
-  }
-
-  const handleCopyFile = async (app: AppItem) => {
-    const success = await window.electronAPI.copyFileToClipboard(app.path)
+  const handleSendFile = async (app: AppItem) => {
+    const success = isDocFile(app)
+      ? await window.electronAPI.copyFileToClipboard(app.path)
+      : await window.electronAPI.copyImageToClipboard(app.path)
     if (success) {
-      alert('文件已复制到剪贴板，可以在微信等应用中粘贴发送。')
+      alert('已复制到剪贴板，可以在微信等应用中粘贴发送。')
     } else {
-      alert('复制文件失败，请重试。')
-    }
-  }
-
-  const handleCopyImage = async (app: AppItem) => {
-    const success = await window.electronAPI.copyImageToClipboard(app.path)
-    if (success) {
-      alert('图片已复制到剪贴板，可以在微信等应用中粘贴发送。')
-    } else {
-      alert('复制图片失败，请重试。')
+      alert('复制失败，请重试。')
     }
   }
 
@@ -814,22 +765,6 @@ function App() {
     appsRef.current = updatedApps
     setApps(updatedApps)
     await window.electronAPI.saveApps({ apps: updatedApps })
-  }
-
-  const parseSteamUrlFromText = (text: string): { steamUrl: string; appId: string } | null => {
-    const launchMatch = text.match(/steam:\/\/launch\/(\d+)/)
-    if (launchMatch) {
-      return { steamUrl: `steam://launch/${launchMatch[1]}/0`, appId: launchMatch[1] }
-    }
-    const storeMatch = text.match(/steampowered\.com\/app\/(\d+)/)
-    if (storeMatch) {
-      return { steamUrl: `steam://launch/${storeMatch[1]}/0`, appId: storeMatch[1] }
-    }
-    const runGameMatch = text.match(/steam:\/\/rungameid\/(\d+)/)
-    if (runGameMatch) {
-      return { steamUrl: `steam://rungameid/${runGameMatch[1]}`, appId: runGameMatch[1] }
-    }
-    return null
   }
 
   const parsePathsToApps = async (filePaths: string[], categoryId: string): Promise<ParsedDrop> => {
@@ -1130,6 +1065,148 @@ function App() {
     await window.electronAPI.saveApps({ apps: updatedApps })
   }
 
+  const handleCardClick = (e: React.MouseEvent, app: AppItem) => {
+    const flat = groupedApps.flatMap(group => group.apps)
+    const index = flat.findIndex(item => item.id === app.id)
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault()
+      setSelectedAppIds(prev => prev.includes(app.id) ? prev.filter(id => id !== app.id) : [...prev, app.id])
+      if (index !== -1) lastClickedIndexRef.current = index
+      return
+    }
+    if (e.shiftKey && index !== -1) {
+      e.preventDefault()
+      const startIndex = lastClickedIndexRef.current ?? index
+      const [lo, hi] = startIndex <= index ? [startIndex, index] : [index, startIndex]
+      const range = flat.slice(lo, hi + 1).map(item => item.id)
+      setSelectedAppIds(prev => Array.from(new Set([...prev, ...range])))
+      return
+    }
+    if (selectedAppIds.length > 0) {
+      // 已有多选时，普通点击只清除选择，避免误启动
+      setSelectedAppIds([])
+      lastClickedIndexRef.current = index === -1 ? null : index
+      return
+    }
+    if (index !== -1) lastClickedIndexRef.current = index
+    void handleOpenApp(app)
+  }
+
+  const clearAppSelection = () => setSelectedAppIds([])
+
+  const batchMoveToCategory = async (categoryId: string) => {
+    if (!categoryId || selectedAppIds.length === 0) return
+    const ids = new Set(selectedAppIds)
+    const updatedApps = appsRef.current.map(a => ids.has(a.id) ? { ...a, categoryId, subcategoryId: null } : a)
+    appsRef.current = updatedApps
+    setApps(updatedApps)
+    await window.electronAPI.saveApps({ apps: updatedApps })
+    clearAppSelection()
+  }
+
+  const batchHideApps = async () => {
+    if (selectedAppIds.length === 0) return
+    const ids = new Set(selectedAppIds)
+    const updatedApps = appsRef.current.map(a => ids.has(a.id) ? { ...a, hidden: true } : a)
+    appsRef.current = updatedApps
+    setApps(updatedApps)
+    await window.electronAPI.saveApps({ apps: updatedApps })
+    clearAppSelection()
+  }
+
+  const batchDeleteApps = async () => {
+    if (selectedAppIds.length === 0) return
+    const confirmed = await window.electronAPI.confirm(`确定删除选中的 ${selectedAppIds.length} 个项目吗？（仅从列表移除，不删除文件）`)
+    if (!confirmed) return
+    captureUndoSnapshot('批量删除')
+    const ids = new Set(selectedAppIds)
+    const updatedApps = appsRef.current.filter(a => !ids.has(a.id))
+    appsRef.current = updatedApps
+    setApps(updatedApps)
+    await window.electronAPI.saveApps({ apps: updatedApps })
+    showMaintenanceSummary({
+      title: '批量删除完成',
+      items: [`已移除 ${ids.size} 个项目。`]
+    })
+    clearAppSelection()
+  }
+
+  const handleCardMouseDown = (e: React.MouseEvent, app: AppItem) => {
+    if (e.button !== 2) return
+    if (canNativeDrag(app)) {
+      // 右键图片/文档：准备原生拖拽（复制发送到外部应用）
+      e.preventDefault()
+      nativeDragPathRef.current = app.path
+    } else {
+      // 其他类型：记录起点，移动超过阈值后进入内部右键拖拽（排序/移动分类）
+      rightDragRef.current = { appId: app.id, active: false, startX: e.clientX, startY: e.clientY }
+    }
+  }
+
+  const handleCardContextMenu = (e: React.MouseEvent, app: AppItem) => {
+    // 右键拖拽释放后派发的 contextmenu 已被消费；其余情况为所有类型应用打开操作菜单
+    e.preventDefault()
+    if (suppressAppContextMenuRef.current) {
+      suppressAppContextMenuRef.current = false
+      return
+    }
+    openAppContextMenu(e, app)
+  }
+
+  const handleCardDragStart = (e: React.DragEvent, app: AppItem) => {
+    setSelectedAppIds([])
+    // 清理上一次拖拽可能残留的状态
+    if (draggedAppIdRef.current) {
+      draggedAppIdRef.current = null
+    }
+    draggedAppIdRef.current = app.id
+    setDraggedAppId(app.id)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', app.id)
+    // 隐藏默认拖拽幽灵，使用自定义幽灵
+    const emptyImg = new Image()
+    emptyImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs='
+    e.dataTransfer.setDragImage(emptyImg, 0, 0)
+    createDragGhost(app.id, e.clientX, e.clientY)
+  }
+
+  const handleCardDragOver = (e: React.DragEvent, app: AppItem) => {
+    e.preventDefault()
+    e.stopPropagation()
+    moveDragGhost(e.clientX, e.clientY)
+    if (draggedAppIdRef.current && draggedAppIdRef.current !== app.id) {
+      e.dataTransfer.dropEffect = 'move'
+      setDragOverAppId(app.id)
+    }
+  }
+
+  const handleCardDrop = async (e: React.DragEvent, app: AppItem) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOverAppId(null)
+    setDragOverCategory(null)
+    const sourceId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
+    if (sourceId && sourceId !== app.id) {
+      await handleReorderApp(sourceId, app.id)
+    }
+    draggedAppIdRef.current = null
+    setDraggedAppId(null)
+  }
+
+  const handleCardDragEnd = () => {
+    removeDragGhost()
+    if (dragTimeoutRef.current) {
+      clearTimeout(dragTimeoutRef.current)
+    }
+    dragTimeoutRef.current = setTimeout(() => {
+      draggedAppIdRef.current = null
+      setDraggedAppId(null)
+      setDragOverCategory(null)
+      setDragOverAppId(null)
+      dragTimeoutRef.current = null
+    }, 100)
+  }
+
   // 键盘导航：方向键按网格移动焦点（左右 ±1，上下 ±每行列数），Enter/Space 打开，F2 编辑
   const moveCardFocus = (appId: string, key: string) => {
     const flat = groupedApps.flatMap(group => group.apps)
@@ -1243,20 +1320,29 @@ function App() {
     [activeCategory, subcategories]
   )
 
+  const sortMode = config?.ui?.sortMode || 'manual'
+  const sortAppsForDisplay = useCallback((list: AppItem[]) => {
+    if (sortMode === 'name') return [...list].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
+    if (sortMode === 'launchCount') return [...list].sort((a, b) => (b.launchCount || 0) - (a.launchCount || 0))
+    if (sortMode === 'recent') return [...list].sort((a, b) => (b.lastOpenedAt || 0) - (a.lastOpenedAt || 0))
+    return list
+  }, [sortMode])
+
   // 与主区域渲染共用同一份分组数据：键盘导航按此顺序在卡片间移动焦点
   const groupedApps = useMemo(() => {
     const groups: { sub: Subcategory | null; apps: AppItem[] }[] = []
-    const noSub = filteredApps.filter(a => !a.subcategoryId)
+    const noSub = sortAppsForDisplay(filteredApps.filter(a => !a.subcategoryId))
     if (noSub.length > 0) groups.push({ sub: null, apps: noSub })
     for (const s of displaySubcategories) {
-      const sApps = filteredApps.filter(a => a.subcategoryId === s.id)
+      const sApps = sortAppsForDisplay(filteredApps.filter(a => a.subcategoryId === s.id))
       if (sApps.length > 0) groups.push({ sub: s, apps: sApps })
     }
     return groups
-  }, [filteredApps, displaySubcategories])
+  }, [filteredApps, displaySubcategories, sortAppsForDisplay])
 
   useEffect(() => {
     setActiveSubcategoryId(null)
+    setSelectedAppIds([])
   }, [activeCategory])
 
   const handleSubcategoryWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
@@ -1407,7 +1493,7 @@ function App() {
 
     // Check for Steam URL in dragged text (e.g. dragging from browser)
     const textData = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/uri-list')
-    const steamMatch = textData ? parseSteamUrlFromText(textData) : null
+    const steamMatch = textData ? parseSteamUrl(textData) : null
 
     if (steamMatch) {
       if (categoriesRef.current.length === 0) {
@@ -1472,6 +1558,8 @@ function App() {
   }, [])
 
   const handleReorderApp = async (sourceId: string, targetId: string) => {
+    // 非手动排序模式下拖拽只用于移动分类，不改变顺序
+    if ((config?.ui?.sortMode || 'manual') !== 'manual') return
     const currentApps = appsRef.current
     const sourceIndex = currentApps.findIndex(a => a.id === sourceId)
     const targetIndex = currentApps.findIndex(a => a.id === targetId)
@@ -1483,189 +1571,6 @@ function App() {
     appsRef.current = updated
     setApps(updated)
     await window.electronAPI.saveApps({ apps: updated })
-  }
-
-  const handleRefreshAllIcons = async () => {
-    const cleared = await window.electronAPI.clearIconCache()
-    const sourceApps = [...appsRef.current]
-    const refreshTargets = sourceApps.filter(app => app.type !== 'folder')
-    const refreshed: AppItem[] = [...sourceApps]
-    const indexById = new Map(sourceApps.map((app, index) => [app.id, index]))
-    let successCount = 0
-    let failedCount = 0
-    let doneCount = 0
-    const failures: string[] = []
-    const CONCURRENCY = 4
-    const isBetterIcon = (nextIcon: string, previousIcon: string) => {
-      if (!hasDisplayableIcon(nextIcon)) return false
-      if (!previousIcon) return true
-      if (needsIconUpdate(previousIcon)) return true
-      return nextIcon.length >= 1000 || nextIcon.length > previousIcon.length
-    }
-    const refreshOne = async (app: AppItem) => {
-      let iconPath: string | null = null
-      try {
-        if (app.type === 'steam') {
-          iconPath = await window.electronAPI.extractSteamIcon(app.path)
-        }
-        if (!iconPath) {
-          iconPath = await window.electronAPI.extractIcon(app.path)
-        }
-      } catch { /* ignore */ }
-      if (iconPath && isBetterIcon(iconPath, app.icon || '')) {
-        const index = indexById.get(app.id)
-        if (index !== undefined) refreshed[index] = { ...app, icon: iconPath }
-        successCount++
-      } else {
-        failedCount++
-        failures.push(app.name)
-      }
-      doneCount++
-      setIconRefreshProgress({
-        done: doneCount,
-        total: refreshTargets.length,
-        success: successCount,
-        failed: failedCount,
-        current: app.name,
-        failures: failures.slice(-8)
-      })
-    }
-
-    setIconRefreshProgress({ done: 0, total: refreshTargets.length, success: 0, failed: 0, failures: [] })
-    for (let i = 0; i < refreshTargets.length; i += CONCURRENCY) {
-      const batch = refreshTargets.slice(i, i + CONCURRENCY)
-      await Promise.all(batch.map(refreshOne))
-      appsRef.current = [...refreshed]
-      setApps([...refreshed])
-      await window.electronAPI.saveApps({ apps: refreshed })
-    }
-    appsRef.current = refreshed
-    setApps(refreshed)
-    await window.electronAPI.saveApps({ apps: refreshed })
-    setIconRefreshProgress(null)
-    showMaintenanceSummary({
-      title: '图标刷新完成',
-      items: [
-        `已清理 ${cleared.count} 个图标缓存。`,
-        `成功刷新 ${successCount} 个图标。`,
-        `文件夹使用默认图标，不参与补全。`,
-        ...(failedCount > 0 ? [`${failedCount} 个图标提取失败，已保留原图标。`] : [])
-      ]
-    })
-  }
-
-  const handleAutoCategorize = async () => {
-    const rules = config?.autoCategoryRules || []
-    const currentApps = appsRef.current
-    const updatedApps = currentApps.map(app => {
-      const haystack = `${app.name} ${app.path} ${(app.aliases || []).join(' ')}`.toLowerCase()
-      const rule = rules.find(item => item.categoryId && haystack.includes(item.match.toLowerCase()))
-      if (rule) return { ...app, categoryId: rule.categoryId, subcategoryId: null }
-
-      const category = categories.find(cat => haystack.includes(cat.name.toLowerCase()))
-      if (category) return { ...app, categoryId: category.id, subcategoryId: null }
-
-      return app
-    })
-    const changedCount = updatedApps.filter((app, index) =>
-      app.categoryId !== currentApps[index]?.categoryId ||
-      app.subcategoryId !== currentApps[index]?.subcategoryId
-    ).length
-    if (changedCount > 0) captureUndoSnapshot('自动分类')
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
-    showMaintenanceSummary({
-      title: '自动分类完成',
-      items: [changedCount > 0 ? `${changedCount} 个项目已重新归类。` : '没有项目需要调整分类。']
-    })
-    alert('自动分类已完成。')
-  }
-
-  const handleCleanupInvalidApps = async () => {
-    const checks = await window.electronAPI.validateApps(appsRef.current.map(app => ({
-      id: app.id,
-      path: app.path,
-      type: app.type
-    })))
-    const invalidIds = new Set(checks.filter(item => !item.exists).map(item => item.id))
-    if (invalidIds.size === 0) {
-      alert('没有发现失效的应用路径。')
-      return
-    }
-    const confirmed = await window.electronAPI.confirm(`确定移除 ${invalidIds.size} 个失效项目吗？`)
-    if (!confirmed) return
-    captureUndoSnapshot('清理失效项')
-    const updatedApps = appsRef.current.filter(app => !invalidIds.has(app.id))
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
-    showMaintenanceSummary({
-      title: '失效项已清理',
-      items: [`已移除 ${invalidIds.size} 个失效项目。`]
-    })
-  }
-
-  const handleRestoreHiddenApps = async () => {
-    const hiddenCount = appsRef.current.filter(app => app.hidden).length
-    if (hiddenCount > 0) captureUndoSnapshot('恢复隐藏项')
-    const updatedApps = appsRef.current.map(app => ({ ...app, hidden: false }))
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
-    showMaintenanceSummary({
-      title: '隐藏项已恢复',
-      items: [hiddenCount > 0 ? `已恢复 ${hiddenCount} 个隐藏项目。` : '没有需要恢复的隐藏项目。']
-    })
-    alert('已恢复搜索中隐藏的项目。')
-  }
-
-  const handleExportBackup = async () => {
-    const result = await window.electronAPI.exportBackup()
-    if (result.success) alert(`备份已导出：\n${result.filePath}`)
-  }
-
-  const handleImportBackup = async () => {
-    const confirmed = await window.electronAPI.confirm('确定导入备份并替换当前配置、应用和分类吗？')
-    if (!confirmed) return
-    const result = await window.electronAPI.importBackup()
-    if (result.success) {
-      await loadData()
-      alert('备份已导入。')
-    }
-  }
-
-  const buildHealthReport = async (): Promise<HealthReport> => {
-    const currentApps = appsRef.current
-    const checks = await window.electronAPI.validateApps(currentApps.map(app => ({
-      id: app.id,
-      path: app.path,
-      type: app.type
-    })))
-    const invalidIds = new Set(checks.filter(item => !item.exists).map(item => item.id))
-    const pathCounts = new Map<string, number>()
-    for (const app of currentApps) {
-      const key = app.path.toLowerCase()
-      pathCounts.set(key, (pathCounts.get(key) || 0) + 1)
-    }
-    return {
-      total: currentApps.length,
-      invalidPaths: currentApps.filter(app => invalidIds.has(app.id)),
-      missingIcons: currentApps.filter(appNeedsIconUpdate),
-      duplicatePaths: currentApps.filter(app => pathCounts.get(app.path.toLowerCase())! > 1),
-      emptyCategories: findEmptyCategories(currentApps, categoriesRef.current),
-      hiddenCount: currentApps.filter(app => app.hidden).length
-    }
-  }
-
-  const captureUndoSnapshot = (label: string) => {
-    setUndoSnapshot({
-      label,
-      apps: appsRef.current.map(app => ({ ...app })),
-      categories: categoriesRef.current.map(category => ({ ...category })),
-      subcategories: subcategories.map(subcategory => ({ ...subcategory })),
-      activeCategory: activeCategoryRef.current
-    })
   }
 
   const restoreUndoSnapshot = async () => {
@@ -1687,194 +1592,7 @@ function App() {
       title: `已撤销：${undoSnapshot.label}`,
       items: ['应用、分类和子分类已恢复到操作前状态。']
     })
-    setHealthReport(await buildHealthReport())
-  }
-
-  const handleRunHealthCheck = async () => {
-    setHealthReport(await buildHealthReport())
-  }
-
-  const handleFixHealthIssues = async () => {
-    const report = healthReport || await buildHealthReport()
-    let updatedApps = [...appsRef.current]
-    let removedInvalidCount = 0
-    let removedDuplicateCount = 0
-    let removedEmptyCategoryCount = 0
-    let undoCaptured = false
-    const ensureUndoSnapshot = () => {
-      if (undoCaptured) return
-      captureUndoSnapshot('一键修复')
-      undoCaptured = true
-    }
-    if (report.invalidPaths.length > 0) {
-      const confirmed = await window.electronAPI.confirm(`检测到 ${report.invalidPaths.length} 个失效路径，是否移除这些项目？`)
-      if (confirmed) {
-        ensureUndoSnapshot()
-        const invalidIds = new Set(report.invalidPaths.map(app => app.id))
-        removedInvalidCount = updatedApps.filter(app => invalidIds.has(app.id)).length
-        updatedApps = updatedApps.filter(app => !invalidIds.has(app.id))
-      }
-    }
-    if (report.duplicatePaths.length > 0) {
-      const confirmed = await window.electronAPI.confirm('检测到重复路径，是否只保留每个路径的第一个项目？')
-      if (confirmed) {
-        ensureUndoSnapshot()
-        const deduplicated = deduplicateAppsByPath(updatedApps)
-        updatedApps = deduplicated.apps
-        removedDuplicateCount = deduplicated.removedCount
-      }
-    }
-    if (report.emptyCategories.length > 0) {
-      const emptyCategories = filterStillEmptyCategories(report.emptyCategories, updatedApps)
-      const confirmed = emptyCategories.length > 0 && await window.electronAPI.confirm(`检测到 ${emptyCategories.length} 个空分类，是否删除这些分类？`)
-      if (confirmed) {
-        ensureUndoSnapshot()
-        removedEmptyCategoryCount = emptyCategories.length
-        const emptyIds = new Set(emptyCategories.map(category => category.id))
-        const updatedCategories = categoriesRef.current.filter(category => !emptyIds.has(category.id))
-        const updatedSubcategories = subcategories.filter(subcategory => !subcategory.parentId || !emptyIds.has(subcategory.parentId))
-        categoriesRef.current = updatedCategories
-        setCategories(updatedCategories)
-        setSubcategories(updatedSubcategories)
-        await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories: updatedSubcategories })
-        if (activeCategoryRef.current && emptyIds.has(activeCategoryRef.current)) {
-          const nextCategoryId = updatedCategories[0]?.id || null
-          activeCategoryRef.current = nextCategoryId
-          setActiveCategory(nextCategoryId)
-        }
-      }
-    }
-    const changed = removedInvalidCount > 0 || removedDuplicateCount > 0 || removedEmptyCategoryCount > 0
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
-    setHealthReport(await buildHealthReport())
-    showMaintenanceSummary({
-      title: changed ? '一键修复完成' : '一键修复已检查',
-      items: changed
-        ? [
-          ...(removedInvalidCount > 0 ? [`移除 ${removedInvalidCount} 个失效项目。`] : []),
-          ...(removedDuplicateCount > 0 ? [`合并 ${removedDuplicateCount} 个重复项目。`] : []),
-          ...(removedEmptyCategoryCount > 0 ? [`删除 ${removedEmptyCategoryCount} 个空分类。`] : [])
-        ]
-        : ['没有发现需要自动修复的项目。']
-    })
-  }
-
-  const importShortcutItemsWithAutoCategories = async (items: ShortcutImportItem[]): Promise<boolean> => {
-    if (items.length === 0) {
-      showMaintenanceSummary({
-        title: '没有发现快捷方式',
-        items: ['桌面和开始菜单中没有可导入的快捷方式。']
-      })
-      return false
-    }
-
-    const currentApps = appsRef.current
-    const shortcutTargets = await window.electronAPI.resolveShortcutTargets(
-      currentApps.map(app => app.path).filter(appPath => appPath.toLowerCase().endsWith('.lnk'))
-    )
-    const importableItems = filterNewShortcutItems(
-      items,
-      currentApps,
-      shortcutTargets.map(item => item.targetPath)
-    ).slice(0, 120)
-
-    if (importableItems.length === 0) {
-      showMaintenanceSummary({
-        title: '未新增快捷方式',
-        items: [`扫描到 ${items.length} 个快捷方式，目标程序均已存在，已全部跳过。`]
-      })
-      return false
-    }
-
-    const sourceMeta: Record<ShortcutImportItem['source'], { name: string; icon: string }> = {
-      desktop: { name: '桌面快捷方式', icon: '⌘' },
-      startMenu: { name: '开始菜单', icon: '⊞' },
-      other: { name: '快捷方式', icon: '◇' }
-    }
-    const nextCategories = [...categoriesRef.current]
-    const categoryBySource = new Map<ShortcutImportItem['source'], string>()
-
-    for (const item of importableItems) {
-      const source = item.source || 'other'
-      const meta = sourceMeta[source]
-      let category = nextCategories.find(cat => cat.name === meta.name)
-      if (!category) {
-        category = {
-          id: crypto.randomUUID(),
-          name: meta.name,
-          icon: meta.icon,
-          order: nextCategories.length + 1
-        }
-        nextCategories.push(category)
-      }
-      categoryBySource.set(source, category.id)
-    }
-
-    const createdCount = nextCategories.length - categoriesRef.current.length
-    const confirmed = await window.electronAPI.confirm(
-      `发现 ${items.length} 个快捷方式，可新增 ${importableItems.length} 个项目。` +
-      `${createdCount > 0 ? `将自动创建 ${createdCount} 个分类。` : ''}是否继续导入？`
-    )
-    if (!confirmed) return false
-
-    captureUndoSnapshot('导入快捷方式')
-    if (createdCount > 0) {
-      setCategories(nextCategories)
-      categoriesRef.current = nextCategories
-      await window.electronAPI.saveCategories({ categories: nextCategories, subcategories })
-    }
-
-    const newApps = importableItems.map(item => ({
-      id: Date.now().toString() + Math.random().toString(36).slice(2),
-      name: item.name,
-      path: item.targetPath,
-      icon: item.icon,
-      categoryId: categoryBySource.get(item.source || 'other') || nextCategories[0]?.id || null,
-      subcategoryId: null,
-      pinyin: getPinyin(item.name),
-      firstLetter: getFirstLetter(item.name),
-      type: item.type,
-      aliases: []
-    } satisfies AppItem))
-
-    const updatedApps = [...appsRef.current, ...newApps]
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
-    if (!activeCategoryRef.current && nextCategories.length > 0) {
-      setActiveCategory(nextCategories[0].id)
-      activeCategoryRef.current = nextCategories[0].id
-    }
-    scheduleIconBackfill(newApps.filter(app => !app.icon))
-    showMaintenanceSummary({
-      title: '快捷方式导入完成',
-      items: [
-        `新增 ${newApps.length} 个项目。`,
-        ...(createdCount > 0 ? [`自动创建 ${createdCount} 个分类。`] : [])
-      ]
-    })
-    return true
-  }
-
-  const handleImportShortcuts = async () => {
-    if (shortcutImportInFlightRef.current) return
-    shortcutImportInFlightRef.current = true
-    showMaintenanceSummary({
-      title: '正在扫描快捷方式',
-      items: ['首次扫描会读取桌面和开始菜单，请稍候。']
-    }, false)
-    try {
-      await importShortcutItemsWithAutoCategories(await window.electronAPI.scanShortcuts())
-    } catch (error) {
-      showMaintenanceSummary({
-        title: '快捷方式导入失败',
-        items: [error instanceof Error ? error.message : '扫描快捷方式时发生未知错误。']
-      })
-    } finally {
-      shortcutImportInFlightRef.current = false
-    }
+    await handleRunHealthCheck()
   }
 
   const handleExportDiagnostics = async () => {
@@ -2334,165 +2052,28 @@ function App() {
                     config?.ui?.gridColumns === 8 ? 'grid-cols-8' :
                     'grid-cols-6'
                   }`} style={{ gridAutoRows: 'min-content', contain: 'layout style' }}>
-                    {group.apps.map(app => {
-                      const ui = config?.ui
-                      const pSize = ui?.cardSize === 'small' ? 'p-2' : ui?.cardSize === 'large' ? 'p-5' : 'p-4'
-                      const iconSize = ui?.cardSize === 'small' ? 'w-10 h-10' : ui?.cardSize === 'large' ? 'w-14 h-14' : 'w-12 h-12'
-                      const iconInner = ui?.cardSize === 'small' ? 'w-8 h-8' : ui?.cardSize === 'large' ? 'w-12 h-12' : 'w-10 h-10'
-                      const textSize = ui?.cardSize === 'small' ? 'text-xs' : ui?.cardSize === 'large' ? 'text-base' : 'text-sm'
-                      const br = ui?.borderRadius ?? 8
-                      const brClass = br <= 2 ? 'rounded-none' : br <= 4 ? 'rounded-sm' : br <= 8 ? 'rounded-lg' : br <= 14 ? 'rounded-xl' : 'rounded-2xl'
-                      return (
-                      <div
+                    {group.apps.map(app => (
+                      <AppCard
                         key={app.id}
-                        data-app-id={app.id}
-                        draggable
-                        tabIndex={0}
-                        role="button"
-                        aria-label={`打开 ${app.name}`}
-                        onKeyDown={(e) => handleCardKeyDown(e, app)}
-                        onMouseDown={(e) => {
-                          if (e.button !== 2) return
-                          if (canNativeDrag(app)) {
-                            // 右键图片/文档：准备原生拖拽（复制发送到外部应用）
-                            e.preventDefault()
-                            nativeDragPathRef.current = app.path
-                          } else {
-                            // 其他类型：记录起点，移动超过阈值后进入内部右键拖拽（排序/移动分类）
-                            rightDragRef.current = { appId: app.id, active: false, startX: e.clientX, startY: e.clientY }
-                          }
-                        }}
-                        onContextMenu={(e) => {
-                          // 右键拖拽释放后派发的 contextmenu 已被消费；其余情况为所有类型应用打开操作菜单
-                          e.preventDefault()
-                          if (suppressAppContextMenuRef.current) {
-                            suppressAppContextMenuRef.current = false
-                            return
-                          }
-                          openAppContextMenu(e, app)
-                        }}
-                        onDragStart={(e) => {
-                          // 清理上一次拖拽可能残留的状态
-                          if (draggedAppIdRef.current) {
-                            draggedAppIdRef.current = null
-                          }
-                          draggedAppIdRef.current = app.id
-                          setDraggedAppId(app.id)
-                          e.dataTransfer.effectAllowed = 'move'
-                          e.dataTransfer.setData('text/plain', app.id)
-                          // 隐藏默认拖拽幽灵，使用自定义幽灵
-                          const emptyImg = new Image()
-                          emptyImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs='
-                          e.dataTransfer.setDragImage(emptyImg, 0, 0)
-                          createDragGhost(app.id, e.clientX, e.clientY)
-                        }}
-                        onDragOver={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          moveDragGhost(e.clientX, e.clientY)
-                          if (draggedAppIdRef.current && draggedAppIdRef.current !== app.id) {
-                            e.dataTransfer.dropEffect = 'move'
-                            setDragOverAppId(app.id)
-                          }
-                        }}
+                        app={app}
+                        ui={config?.ui}
+                        isDragging={draggedAppId === app.id}
+                        isDragOver={dragOverAppId === app.id}
+                        isSelected={selectedAppIds.includes(app.id)}
+                        onOpen={handleCardClick}
+                        onEdit={editingApp => { setEditingApp(editingApp); setShowEditApp(true) }}
+                        onDelete={deletedApp => void handleDeleteApp(deletedApp.id)}
+                        onSendFile={handleSendFile}
+                        onMouseDown={handleCardMouseDown}
+                        onContextMenu={handleCardContextMenu}
+                        onDragStart={handleCardDragStart}
+                        onDragOver={handleCardDragOver}
                         onDragLeave={() => setDragOverAppId(null)}
-                        onDrop={async (e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          setDragOverAppId(null)
-                          setDragOverCategory(null)
-                          const sourceId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-                          if (sourceId && sourceId !== app.id) {
-                            await handleReorderApp(sourceId, app.id)
-                          }
-                          draggedAppIdRef.current = null
-                          setDraggedAppId(null)
-                        }}
-                        onDragEnd={() => {
-                          removeDragGhost()
-                          if (dragTimeoutRef.current) {
-                            clearTimeout(dragTimeoutRef.current)
-                          }
-                          dragTimeoutRef.current = setTimeout(() => {
-                            draggedAppIdRef.current = null
-                            setDraggedAppId(null)
-                            setDragOverCategory(null)
-                            setDragOverAppId(null)
-                            dragTimeoutRef.current = null
-                          }, 100)
-                        }}
-                        style={{ borderRadius: br }}
-                        className={`app-tile glass-card focus-ring ${pSize} card-hover cursor-pointer group relative select-none ${
-                          draggedAppId === app.id ? 'opacity-30 scale-95 blur-[2px]' : ''
-                        } ${dragOverAppId === app.id ? 'scale-[1.03] ring-2 ring-brand-500 ring-offset-2 shadow-xl shadow-brand-500/20 bg-brand-50/50' : ''}`}
-                        onClick={() => handleOpenApp(app)}
-                      >
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setEditingApp(app)
-                              setShowEditApp(true)
-                            }}
-                            className="text-slate-400 hover:text-brand-500 p-0.5 transition-colors"
-                            title="编辑"
-                          >
-                            ✎
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDeleteApp(app.id)
-                            }}
-                            className="text-slate-400 hover:text-red-500 p-0.5 transition-colors"
-                            title="删除"
-                          >
-                            ×
-                          </button>
-                          {isDocFile(app) && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleCopyFile(app)
-                              }}
-                              className="text-slate-400 hover:text-emerald-500 p-0.5 transition-colors"
-                              title="发送文件（复制到剪贴板）"
-                            >
-                              📤
-                            </button>
-                          )}
-                          {isImageFile(app) && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleCopyImage(app)
-                              }}
-                              className="text-slate-400 hover:text-emerald-500 p-0.5 transition-colors"
-                              title="复制图片（可粘贴到微信等应用）"
-                            >
-                              📤
-                            </button>
-                          )}
-                        </div>
-                        {ui?.showIcon !== false && (
-                          <div style={{ borderRadius: Math.min(br, 12) }} className={`${iconSize} flex items-center justify-center mb-3 mx-auto ${
-                            app.type === 'folder' ? 'bg-gradient-to-br from-orange-50 to-orange-100' : app.type === 'steam' ? 'bg-gradient-to-br from-aurora-50 to-aurora-100' : 'bg-gradient-to-br from-brand-50 to-brand-100'
-                          }`}>
-                            {hasDisplayableIcon(app.icon) ? (
-                              <img src={app.icon} alt={app.name} className={iconInner} draggable={false} />
-                            ) : (
-                              app.type === 'folder'
-                                ? <FolderPlus size={ui?.cardSize === 'small' ? 24 : ui?.cardSize === 'large' ? 34 : 30} weight="duotone" aria-hidden="true" />
-                                : <AppWindow size={ui?.cardSize === 'small' ? 24 : ui?.cardSize === 'large' ? 34 : 30} weight="duotone" aria-hidden="true" />
-                            )}
-                          </div>
-                        )}
-                        {ui?.showName !== false && (
-                          <p className={`${textSize} text-center text-slate-700 font-medium truncate`}>{app.name}</p>
-                        )}
-                      </div>
-                      )
-                    })}
+                        onDrop={handleCardDrop}
+                        onDragEnd={handleCardDragEnd}
+                        onKeyDown={handleCardKeyDown}
+                      />
+                    ))}
                   </div>
                 </div>
               ))}
@@ -2530,6 +2111,42 @@ function App() {
           </span>
         </span>
       </footer>
+
+      {selectedAppIds.length > 0 && (
+        <div className="glass fixed bottom-16 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-xl border border-brand-200/80 px-4 py-2.5 shadow-xl">
+          <span className="text-sm font-semibold text-slate-800">已选 {selectedAppIds.length} 项</span>
+          <select
+            value=""
+            onChange={e => { if (e.target.value) void batchMoveToCategory(e.target.value) }}
+            aria-label="批量移动到分类"
+            className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none"
+          >
+            <option value="">移动到分类…</option>
+            {categories.map(category => (
+              <option key={category.id} value={category.id}>{category.icon} {category.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => void batchHideApps()}
+            className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
+          >
+            隐藏
+          </button>
+          <button
+            onClick={() => void batchDeleteApps()}
+            className="focus-ring cursor-pointer rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-red-600"
+          >
+            删除
+          </button>
+          <button
+            onClick={clearAppSelection}
+            aria-label="取消选择"
+            className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+          >
+            取消
+          </button>
+        </div>
+      )}
 
       {undoSnapshot && (
         <UndoToast

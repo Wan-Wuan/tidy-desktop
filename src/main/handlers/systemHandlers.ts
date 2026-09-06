@@ -1,7 +1,7 @@
 import { ipcMain, BrowserWindow, dialog, screen, app, nativeImage, shell, clipboard } from 'electron'
 import fs from 'fs'
 import path from 'path'
-import { BACKUP_DIR } from '../backup'
+import { getBackupDir } from '../backup'
 import { APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, CONFIG_DIR, ICONS_DIR, getDefaultConfig, readJsonFile, writeJsonFilesAtomically } from '../config'
 import type { AppsData, CategoriesData, Config, ShortcutImportItem } from '../../shared/types'
 import { sanitizeAppsData, sanitizeCategoriesData, sanitizeConfig } from '../validation'
@@ -187,12 +187,14 @@ export function registerSystemHandlers() {
     if (!w || w.isDestroyed()) return false
     const point = screen.getCursorScreenPoint()
     const display = screen.getDisplayNearestPoint(point)
-    const bounds = w.getBounds()
+    const config = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
+    const width = Math.min(900, Math.max(380, Math.round(config.ui?.searchWidth || 600)))
+    const verticalRatio = Math.min(0.8, Math.max(0.1, config.ui?.searchVerticalRatio || 0.3))
     w.setBounds({
-      x: Math.round(display.workArea.x + (display.workArea.width - bounds.width) / 2),
-      y: Math.round(display.workArea.y + display.workArea.height * 0.3),
-      width: bounds.width,
-      height: bounds.height
+      x: Math.round(display.workArea.x + (display.workArea.width - width) / 2),
+      y: Math.round(display.workArea.y + display.workArea.height * verticalRatio),
+      width,
+      height: w.getBounds().height
     })
     w.webContents.send('reset-search')
     w.show()
@@ -230,12 +232,14 @@ export function registerSystemHandlers() {
     if (!w || w.isDestroyed()) return false
     const point = screen.getCursorScreenPoint()
     const display = screen.getDisplayNearestPoint(point)
-    const bounds = w.getBounds()
+    const config = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
+    const width = Math.min(900, Math.max(380, Math.round(config.ui?.searchWidth || 600)))
+    const verticalRatio = Math.min(0.8, Math.max(0.1, config.ui?.searchVerticalRatio || 0.3))
     w.setBounds({
-      x: Math.round(display.workArea.x + (display.workArea.width - bounds.width) / 2),
-      y: Math.round(display.workArea.y + display.workArea.height * 0.3),
-      width: bounds.width,
-      height: bounds.height
+      x: Math.round(display.workArea.x + (display.workArea.width - width) / 2),
+      y: Math.round(display.workArea.y + display.workArea.height * verticalRatio),
+      width,
+      height: w.getBounds().height
     })
     return true
   })
@@ -256,7 +260,9 @@ export function registerSystemHandlers() {
   ipcMain.handle('set-auto-start', (_, enabled: unknown) => {
     app.setLoginItemSettings({
       openAtLogin: enabled === true,
-      path: app.getPath('exe')
+      path: app.getPath('exe'),
+      // 是否真正隐藏由主进程按 startMinimizedToTray 设置判断
+      args: ['--hidden']
     })
     return true
   })
@@ -473,10 +479,11 @@ export function registerSystemHandlers() {
   })
 
   ipcMain.handle('open-backups-directory', async () => {
-    if (!fs.existsSync(BACKUP_DIR)) {
-      fs.mkdirSync(BACKUP_DIR, { recursive: true })
+    const backupDir = getBackupDir(CONFIG_DIR)
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true })
     }
-    const error = await shell.openPath(BACKUP_DIR)
+    const error = await shell.openPath(backupDir)
     return !error
   })
 

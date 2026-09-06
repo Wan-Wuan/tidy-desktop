@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from 'react'
 import { AppItem, Config, Category, UiCommand } from '../../shared/types'
 import { getFolderSuggestion, checkSearchEngine } from '../../shared/utils'
 import { hasDisplayableIcon } from './utils/iconUtils'
+import { applyAccentScale, generateAccentScale } from './utils/colorScale'
 
 interface SearchEngineInfo {
   key: string
@@ -25,6 +26,7 @@ interface BuiltInCommand {
 }
 
 const MAX_DISPLAY = 6
+const RECENTS_HEADER_HEIGHT = 28
 const INPUT_HEIGHT = 56
 const RESULT_ITEM_HEIGHT = 51
 const RESULT_ITEM_GAP = 4
@@ -105,6 +107,7 @@ function SearchApp() {
   const queryRef = useRef('')
   const resultsRef = useRef<SearchResult[]>([])
   const resultsContainerRef = useRef<HTMLDivElement>(null)
+  const appsRef = useRef<AppItem[]>([])
   const isActiveRef = useRef(false)
   const resizeTimerRef = useRef<NodeJS.Timeout | null>(null)
   const dataReloadTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -116,7 +119,9 @@ function SearchApp() {
     const focusTimer = setTimeout(() => inputRef.current?.focus(), 50)
 
     const removeBlur = window.electronAPI.onBlur(() => {
-      // 搜索框永不因失焦而隐藏，只通过 Escape 或打开应用关闭
+      if (configRef.current?.searchAutoHideOnBlur) {
+        window.electronAPI.hideSearchWindow()
+      }
     })
 
     const removeReset = window.electronAPI.onResetSearch(async () => {
@@ -178,9 +183,10 @@ function SearchApp() {
   const resizeWindow = useCallback((resultCount: number, hasQuery: boolean = false) => {
     if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
     resizeTimerRef.current = setTimeout(() => {
+      const maxDisplay = configRef.current?.ui?.searchMaxResults || MAX_DISPLAY
       let targetHeight: number
       if (resultCount > 0) {
-        const count = Math.min(resultCount, MAX_DISPLAY)
+        const count = Math.min(resultCount, maxDisplay)
         const resultsHeight =
           RESULTS_PADDING_Y * 2 +
           count * RESULT_ITEM_HEIGHT +
@@ -198,6 +204,15 @@ function SearchApp() {
     }, RESIZE_DEBOUNCE_MS)
   }, [])
 
+  const configRef = useRef(config)
+  configRef.current = config
+
+  // 主题色（accent）：搜索窗是独立 document，需要自行注入
+  useEffect(() => {
+    const accent = config?.ui?.accentColor?.trim()
+    applyAccentScale(accent ? generateAccentScale(accent) : null, document.documentElement)
+  }, [config?.ui?.accentColor])
+
   const loadData = async () => {
     try {
       const [configData, appsData, categoriesData] = await Promise.all([
@@ -206,6 +221,7 @@ function SearchApp() {
         window.electronAPI.getCategories()
       ])
       const loadedApps = appsData?.apps || []
+      appsRef.current = loadedApps
       setConfig(configData)
       setApps(loadedApps)
       setResults(prev => {
@@ -427,6 +443,7 @@ function SearchApp() {
 
   const handleOpenItem = async (app: SearchResult) => {
     isActiveRef.current = true
+    let launched = true
     if (app.type === 'action' && app.actionCommand) {
       const completed = await window.electronAPI.runQuickAction(app.actionCommand)
       if (!completed) {
@@ -443,17 +460,18 @@ function SearchApp() {
     } else if (app.type === 'folder') {
       window.electronAPI.hideSearchWindow()
       resetAll()
-      await window.electronAPI.openFolder(app.path)
+      launched = await window.electronAPI.openFolder(app.path)
     } else if (app.type === 'steam') {
       window.electronAPI.hideSearchWindow()
       resetAll()
-      await window.electronAPI.openSteam(app.path)
+      launched = await window.electronAPI.openSteam(app.path)
     } else {
       window.electronAPI.hideSearchWindow()
       resetAll()
-      await window.electronAPI.openApp(app.path)
+      launched = await window.electronAPI.openApp(app.path)
     }
-    await recordLaunch(app)
+    // 打开失败（路径失效等）不计入启动统计
+    if (launched) await recordLaunch(app)
     setTimeout(() => { isActiveRef.current = false }, 200)
   }
 
@@ -489,8 +507,8 @@ function SearchApp() {
     isActiveRef.current = true
     window.electronAPI.hideSearchWindow()
     resetAll()
-    await window.electronAPI.openAppAsAdmin(app.path)
-    await recordLaunch(app)
+    const launched = await window.electronAPI.openAppAsAdmin(app.path)
+    if (launched) await recordLaunch(app)
     setTimeout(() => { isActiveRef.current = false }, 200)
   }
 
@@ -556,8 +574,8 @@ function SearchApp() {
         setResults([])
         resultsRef.current = []
         setActiveIndex(0)
-        currentHeightRef.current = EMPTY_SEARCH_HEIGHT
-        window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
+        currentHeightRef.current = INPUT_HEIGHT
+        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
         return
       }
     }

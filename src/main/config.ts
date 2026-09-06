@@ -24,6 +24,12 @@ export function ensureDataDir() {
       const stat = fs.statSync(filePath)
       if (stat.size === 0) {
         fs.unlinkSync(filePath)
+        continue
+      }
+      // 清理旧缓存键规则（base64url 截断）遗留的文件；当前键为 32 位十六进制 png
+      const lower = file.toLowerCase()
+      if (lower.endsWith('.png') && !/^[0-9a-f]{32}\.png$/.test(lower)) {
+        fs.unlinkSync(filePath)
       }
     }
   } catch { /* ignore */ }
@@ -69,6 +75,7 @@ export function getDefaultConfig() {
     hotkey: 'Alt+Space',
     searchHotkey: 'Ctrl+K',
     windowSize: { width: 1050, height: 800 },
+    windowPosition: null,
     searchEngines: {
       b: { name: 'Bing', url: 'https://www.bing.com/search?q=' },
       g: { name: 'Google', url: 'https://www.google.com/search?q=' },
@@ -87,6 +94,8 @@ export function getDefaultConfig() {
     closeAction: 'tray' as const,
     lastActiveCategoryId: null,
     trayNotified: false,
+    searchAutoHideOnBlur: false,
+    startMinimizedToTray: false,
     ui: {
       gridColumns: 6,
       cardSize: 'medium' as const,
@@ -95,7 +104,12 @@ export function getDefaultConfig() {
       borderRadius: 8,
       theme: 'aurora' as const,
       layout: 'horizon-workspace' as const,
-      sidebarWidth: 240
+      sidebarWidth: 240,
+      accentColor: '',
+      searchWidth: 600,
+      searchVerticalRatio: 0.3,
+      searchMaxResults: 6,
+      sortMode: 'manual' as const
     },
     defaultEngine: 'b',
     onboardingCompleted: false,

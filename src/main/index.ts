@@ -1,8 +1,8 @@
 import { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen, dialog, shell, ipcMain, Notification } from 'electron'
 import path from 'path'
 import type { Config, UiCommand } from '../shared/types'
-import { ensureDataDir, readJsonFile, writeJsonFile, getDefaultConfig, CONFIG_FILE } from './config'
-import { runStartupBackup } from './backup'
+import { ensureDataDir, readJsonFile, writeJsonFile, getDefaultConfig, CONFIG_DIR, CONFIG_FILE, APPS_FILE, CATEGORIES_FILE } from './config'
+import { getBackupDir, runStartupBackup } from './backup'
 import { registerAppHandlers } from './handlers/appHandlers'
 import { registerFileHandlers } from './handlers/fileHandlers'
 import { registerIconHandlers } from './handlers/iconHandlers'
@@ -19,8 +19,15 @@ let searchWindowShouldShow = false
 let shortcutRetryTimer: NodeJS.Timeout | null = null
 const pendingSearchReveal = new WeakSet<BrowserWindow>()
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
-const SEARCH_WINDOW_WIDTH = 600
+const SEARCH_WINDOW_DEFAULT_WIDTH = 600
 const SEARCH_WINDOW_EMPTY_HEIGHT = 100
+
+function getSearchWindowLayout(): { width: number; verticalRatio: number } {
+  const config = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
+  const width = Math.min(900, Math.max(380, Math.round(config.ui?.searchWidth || SEARCH_WINDOW_DEFAULT_WIDTH)))
+  const verticalRatio = Math.min(0.8, Math.max(0.1, config.ui?.searchVerticalRatio || 0.3))
+  return { width, verticalRatio }
+}
 const SHORTCUT_RETRY_DELAY_MS = 1200
 
 function getAppIcon() {
@@ -88,19 +95,29 @@ function attachWindowSecurity(win: BrowserWindow) {
 }
 
 function createWindow() {
-  const config = readJsonFile(CONFIG_FILE, getDefaultConfig())
+  const config = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
   const workArea = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
   const maxWidth = Math.max(520, workArea.width - 32)
   const maxHeight = Math.max(400, workArea.height - 32)
   const width = Math.min(config.windowSize?.width ?? 1050, maxWidth)
   const height = Math.min(config.windowSize?.height ?? 800, maxHeight)
+  // 记住的窗口位置 clamp 到当前工作区，防止显示器变更后窗口跑出屏幕
+  const savedPosition = config.windowPosition
+  const x = savedPosition
+    ? Math.min(Math.max(savedPosition.x, workArea.x), Math.max(workArea.x, workArea.x + workArea.width - width))
+    : null
+  const y = savedPosition
+    ? Math.min(Math.max(savedPosition.y, workArea.y), Math.max(workArea.y, workArea.y + workArea.height - height))
+    : null
 
   const win = new BrowserWindow({
     width,
     height,
     minWidth: Math.min(600, maxWidth),
     minHeight: Math.min(400, maxHeight),
-    center: true,
+    center: x === null || y === null,
+    x: x ?? undefined,
+    y: y ?? undefined,
     show: false,
     frame: true,
     resizable: true,
@@ -118,20 +135,25 @@ function createWindow() {
   const persistWindowSize = () => {
     if (win.isDestroyed()) return
     const [currentWidth, currentHeight] = win.getSize()
+    const [currentX, currentY] = win.getPosition()
     const latestConfig = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
     writeJsonFile(CONFIG_FILE, {
       ...latestConfig,
-      windowSize: { width: currentWidth, height: currentHeight }
+      windowSize: { width: currentWidth, height: currentHeight },
+      windowPosition: { x: currentX, y: currentY }
     })
   }
 
-  win.on('resize', () => {
+  const schedulePersist = () => {
     if (windowSizeSaveTimer) clearTimeout(windowSizeSaveTimer)
     windowSizeSaveTimer = setTimeout(() => {
       windowSizeSaveTimer = null
       persistWindowSize()
     }, 300)
-  })
+  }
+
+  win.on('resize', schedulePersist)
+  win.on('move', schedulePersist)
 
   attachWindowSecurity(win)
 
@@ -154,6 +176,11 @@ function createWindow() {
   }
 
   win.once('ready-to-show', () => {
+    // 启动最小化到托盘：设置开启时不弹窗，仅驻留托盘
+    if (config.startMinimizedToTray === true) {
+      notifyTrayOnce()
+      return
+    }
     win.show()
   })
 
@@ -243,10 +270,10 @@ function showSearchWindow(win: BrowserWindow) {
 
 function createSearchWindow(showOnReady = true) {
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-  const width = SEARCH_WINDOW_WIDTH
+  const { width, verticalRatio } = getSearchWindowLayout()
   const height = SEARCH_WINDOW_EMPTY_HEIGHT
   const x = Math.round(display.workArea.x + (display.workArea.width - width) / 2)
-  const y = Math.round(display.workArea.y + display.workArea.height * 0.3)
+  const y = Math.round(display.workArea.y + display.workArea.height * verticalRatio)
 
   const win = new BrowserWindow({
     width,
@@ -301,6 +328,12 @@ function createSearchWindow(showOnReady = true) {
       if (blurredWin.isDestroyed()) return
       blurredWin.removeListener('focus', cancelHandler)
       if (!cancelled && !blurredWin.isFocused()) {
+        // 失焦自动隐藏：在主进程读取配置并直接隐藏，避免渲染层时序问题
+        const latestConfig = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
+        if (latestConfig.searchAutoHideOnBlur === true) {
+          blurredWin.hide()
+          return
+        }
         blurredWin.webContents.send('blur-event')
       }
     }, 200)
@@ -356,12 +389,12 @@ function registerUiCommandHandler() {
 function moveSearchWindowToCursorDisplay(win: BrowserWindow) {
   if (win.isDestroyed()) return
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-  const bounds = win.getBounds()
+  const { width, verticalRatio } = getSearchWindowLayout()
   win.setBounds({
-    x: Math.round(display.workArea.x + (display.workArea.width - bounds.width) / 2),
-    y: Math.round(display.workArea.y + display.workArea.height * 0.3),
-    width: bounds.width,
-    height: bounds.height
+    x: Math.round(display.workArea.x + (display.workArea.width - width) / 2),
+    y: Math.round(display.workArea.y + display.workArea.height * verticalRatio),
+    width,
+    height: win.getBounds().height
   })
 }
 
@@ -392,6 +425,10 @@ function createTray() {
 
   tray.setToolTip('tidy_desktop')
   tray.setContextMenu(contextMenu)
+
+  tray.on('click', () => {
+    showMainWindow()
+  })
 
   tray.on('double-click', () => {
     showMainWindow()
@@ -471,7 +508,10 @@ app.on('ready', () => {
   Menu.setApplicationMenu(null)
   ensureDataDir()
   app.setAppUserModelId('com.tidy-desktop.app')
-  runStartupBackup()
+  runStartupBackup({
+    files: [CONFIG_FILE, APPS_FILE, CATEGORIES_FILE],
+    backupDir: getBackupDir(CONFIG_DIR)
+  })
 
   // Set up window refs for system handlers before registration
   setWindowRefs(mainWindowRef, searchWindowRef)

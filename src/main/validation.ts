@@ -17,6 +17,7 @@ const THEMES = new Set(['aurora', 'light', 'dark', 'system'])
 const LAYOUTS = new Set(['command-rail', 'horizon-workspace', 'studio-split'])
 const QUICK_ACTIONS = new Set(['shutdown', 'restart', 'lock', 'settings', 'calculator', 'notepad', 'clipboard'])
 const CLOSE_ACTIONS = new Set(['tray', 'quit'])
+const SORT_MODES = new Set(['manual', 'name', 'launchCount', 'recent'])
 const MAX_ITEMS = 5000
 const MAX_STRING_LENGTH = 8192
 const MAX_ICON_LENGTH = 2_000_000
@@ -72,7 +73,14 @@ function sanitizeUiSettings(value: unknown, defaults: UISettings): UISettings {
     borderRadius: Math.min(32, Math.max(0, Math.round(asFiniteNumber(value.borderRadius, defaults.borderRadius)))),
     theme: THEMES.has(theme) ? theme as UISettings['theme'] : defaults.theme,
     layout: LAYOUTS.has(layout) ? layout as UISettings['layout'] : defaults.layout,
-    sidebarWidth: Math.min(420, Math.max(180, Math.round(asFiniteNumber(value.sidebarWidth, defaults.sidebarWidth || 240))))
+    sidebarWidth: Math.min(420, Math.max(180, Math.round(asFiniteNumber(value.sidebarWidth, defaults.sidebarWidth || 240)))),
+    accentColor: asString(value.accentColor, defaults.accentColor || '', 9).trim(),
+    searchWidth: Math.min(900, Math.max(380, Math.round(asFiniteNumber(value.searchWidth, defaults.searchWidth || 600)))),
+    searchVerticalRatio: Math.min(0.8, Math.max(0.1, asFiniteNumber(value.searchVerticalRatio, defaults.searchVerticalRatio || 0.3))),
+    searchMaxResults: Math.min(12, Math.max(4, Math.round(asFiniteNumber(value.searchMaxResults, defaults.searchMaxResults || 6)))),
+    sortMode: SORT_MODES.has(asString(value.sortMode, defaults.sortMode || 'manual', 20))
+      ? asString(value.sortMode, defaults.sortMode || 'manual', 20) as UISettings['sortMode']
+      : 'manual'
   }
 }
 
@@ -114,6 +122,7 @@ export function sanitizeConfig(input: unknown, defaults: Config): Config | null 
   }
 
   const windowSizeValue = isRecord(input.windowSize) ? input.windowSize : {}
+  const windowPositionValue = isRecord(input.windowPosition) ? input.windowPosition : null
   const closeAction = asString(input.closeAction, defaults.closeAction || 'tray', 10)
   const lastActiveCategoryId = asStringOrNull(input.lastActiveCategoryId)
   const quickActions = Array.isArray(input.quickActions)
@@ -130,6 +139,12 @@ export function sanitizeConfig(input: unknown, defaults: Config): Config | null 
       width: Math.min(3840, Math.max(600, Math.round(asFiniteNumber(windowSizeValue.width, defaults.windowSize.width)))),
       height: Math.min(2160, Math.max(400, Math.round(asFiniteNumber(windowSizeValue.height, defaults.windowSize.height))))
     },
+    windowPosition: windowPositionValue
+      ? {
+        x: Math.round(asFiniteNumber(windowPositionValue.x, 0)),
+        y: Math.round(asFiniteNumber(windowPositionValue.y, 0))
+      }
+      : null,
     searchEngines,
     autoStart: asBoolean(input.autoStart, defaults.autoStart),
     ui: sanitizeUiSettings(input.ui, defaults.ui || {
@@ -150,7 +165,9 @@ export function sanitizeConfig(input: unknown, defaults: Config): Config | null 
     onboardingCompleted: asBoolean(input.onboardingCompleted, defaults.onboardingCompleted),
     closeAction: CLOSE_ACTIONS.has(closeAction) ? closeAction as Config['closeAction'] : 'tray',
     lastActiveCategoryId: lastActiveCategoryId ? lastActiveCategoryId.slice(0, 160) : null,
-    trayNotified: asBoolean(input.trayNotified, defaults.trayNotified === true)
+    trayNotified: asBoolean(input.trayNotified, defaults.trayNotified === true),
+    searchAutoHideOnBlur: asBoolean(input.searchAutoHideOnBlur, defaults.searchAutoHideOnBlur === true),
+    startMinimizedToTray: asBoolean(input.startMinimizedToTray, defaults.startMinimizedToTray === true)
   }
 }
 

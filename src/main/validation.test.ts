@@ -59,3 +59,51 @@ describe('sanitizeConfig UI layout', () => {
     expect(tooWide?.ui?.sidebarWidth).toBe(420)
   })
 })
+
+describe('sanitizeConfig new fields', () => {
+  it('keeps a supported close action and rejects unknown values', () => {
+    const quit = sanitizeConfig({ ...defaults, closeAction: 'quit' }, defaults)
+    expect(quit?.closeAction).toBe('quit')
+
+    const invalid = sanitizeConfig({ ...defaults, closeAction: 'explode' }, defaults)
+    expect(invalid?.closeAction).toBe('tray')
+  })
+
+  it('preserves lastActiveCategoryId and drops non-string values', () => {
+    const saved = sanitizeConfig({ ...defaults, lastActiveCategoryId: 'cat-123' }, defaults)
+    expect(saved?.lastActiveCategoryId).toBe('cat-123')
+
+    const empty = sanitizeConfig({ ...defaults, lastActiveCategoryId: 42 }, defaults)
+    expect(empty?.lastActiveCategoryId).toBeNull()
+  })
+
+  it('clamps search box settings to supported ranges', () => {
+    const result = sanitizeConfig({
+      ...defaults,
+      ui: { ...defaults.ui, searchWidth: 2000, searchVerticalRatio: 5, searchMaxResults: 99, sortMode: 'newest' }
+    }, defaults)
+    expect(result?.ui?.searchWidth).toBe(900)
+    expect(result?.ui?.searchVerticalRatio).toBe(0.8)
+    expect(result?.ui?.searchMaxResults).toBe(12)
+    expect(result?.ui?.sortMode).toBe('manual')
+  })
+
+  it('keeps a valid sort mode', () => {
+    const result = sanitizeConfig({ ...defaults, ui: { ...defaults.ui, sortMode: 'launchCount' } }, defaults)
+    expect(result?.ui?.sortMode).toBe('launchCount')
+  })
+
+  it('persists boolean flags as booleans', () => {
+    const result = sanitizeConfig({
+      ...defaults,
+      searchAutoHideOnBlur: true,
+      startMinimizedToTray: true,
+      trayNotified: true,
+      windowPosition: { x: 120, y: 80 }
+    }, defaults)
+    expect(result?.searchAutoHideOnBlur).toBe(true)
+    expect(result?.startMinimizedToTray).toBe(true)
+    expect(result?.trayNotified).toBe(true)
+    expect(result?.windowPosition).toEqual({ x: 120, y: 80 })
+  })
+})

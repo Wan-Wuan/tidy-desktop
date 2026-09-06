@@ -1,5 +1,6 @@
 import { ipcMain, app } from 'electron'
 import { execFileSync } from 'child_process'
+import crypto from 'crypto'
 import path from 'path'
 import fs from 'fs'
 import { ICONS_DIR } from '../config'
@@ -37,6 +38,36 @@ function expandWindowsEnvPath(value: string): string {
   return value.replace(/%([^%]+)%/g, (_, name: string) => {
     return process.env[name] || process.env[name.toUpperCase()] || process.env[name.toLowerCase()] || `%${name}%`
   })
+}
+
+const DEFAULT_STEAM_PATHS = [
+  'C:\\Program Files (x86)\\Steam',
+  'C:\\Program Files\\Steam',
+  'D:\\Steam',
+  'E:\\Steam'
+]
+
+/** 合并注册表读到的 Steam 路径与默认候选（去重、注册表优先），供测试 */
+export function mergeSteamPaths(regValue: string | null, fallbacks: string[] = DEFAULT_STEAM_PATHS): string[] {
+  const candidates = new Set<string>()
+  const normalized = regValue?.trim().replace(/\//g, '\\')
+  if (normalized) candidates.add(normalized)
+  for (const fallback of fallbacks) candidates.add(fallback)
+  return [...candidates]
+}
+
+function getSteamInstallPaths(): string[] {
+  try {
+    const output = execFileSync(
+      'reg',
+      ['query', 'HKCU\\Software\\Valve\\Steam', '/v', 'SteamPath'],
+      { encoding: 'utf8', windowsHide: true, timeout: 2000 }
+    )
+    const match = output.match(/SteamPath\s+REG_SZ\s+(.+)/i)
+    return mergeSteamPaths(match?.[1] || null)
+  } catch {
+    return mergeSteamPaths(null)
+  }
 }
 
 function resolveShortcut(filePath: string): ShortcutInfo {
@@ -147,7 +178,8 @@ async function getIconPng(sourcePath: string, iconIndex = 0): Promise<Buffer | n
 export function registerIconHandlers() {
   ipcMain.handle('extract-icon', async (_, filePath: string) => {
     try {
-      const hash = Buffer.from(filePath).toString('base64url').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
+      // sha256 前 32 位十六进制，避免旧 base64url 截断 64 字符在超长路径上的碰撞
+      const hash = crypto.createHash('sha256').update(filePath).digest('hex').slice(0, 32)
       const iconPath = path.join(ICONS_DIR, `${hash}.png`)
 
       if (fs.existsSync(iconPath)) {
@@ -188,12 +220,7 @@ export function registerIconHandlers() {
       if (!match) return null
       const appId = match[1]
 
-      const steamPaths = [
-        'C:\\Program Files (x86)\\Steam',
-        'C:\\Program Files\\Steam',
-        'D:\\Steam',
-        'E:\\Steam'
-      ]
+      const steamPaths = getSteamInstallPaths()
 
       // Search common Steam install paths
       for (const steamPath of steamPaths) {

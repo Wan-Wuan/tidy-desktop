@@ -1,3 +1,28 @@
+/* 与 index.css 保持一致的调色板变量（搜索窗是独立 document，需自带一份基础值） */
+:root {
+  --brand-50: 238 242 255;
+  --brand-100: 224 231 255;
+  --brand-200: 199 210 254;
+  --brand-300: 165 180 252;
+  --brand-400: 129 140 248;
+  --brand-500: 99 102 241;
+  --brand-600: 79 70 229;
+  --brand-700: 67 56 202;
+  --brand-800: 55 48 163;
+  --brand-900: 49 46 129;
+  --white: 255 255 255;
+  --slate-50: 248 250 252;
+  --slate-100: 241 245 249;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 148 163 184;
+  --slate-500: 100 116 139;
+  --slate-600: 71 85 105;
+  --slate-700: 51 65 85;
+  --slate-800: 30 41 59;
+  --slate-900: 15 23 42;
+}
+
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
@@ -33,7 +58,7 @@ html, body {
   border: 1px solid rgba(224, 231, 255, 0.7);
   border-radius: 18px;
   box-shadow:
-    0 8px 40px rgba(79, 70, 229, 0.1),
+    0 8px 40px rgb(var(--brand-600) / 0.1),
     0 2px 8px rgba(0, 0, 0, 0.04),
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
   width: 100%;
@@ -46,7 +71,7 @@ html, body {
   align-items: center;
   padding: 14px 20px;
   gap: 12px;
-  border-bottom: 1px solid rgba(99, 102, 241, 0.06);
+  border-bottom: 1px solid rgb(var(--brand-500) / 0.06);
 }
 
 .search-icon {
@@ -66,7 +91,7 @@ html, body {
   font-weight: 600;
   flex-shrink: 0;
   letter-spacing: 0.01em;
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+  box-shadow: 0 2px 8px rgb(var(--brand-600) / 0.3);
 }
 
 .search-input {
@@ -125,11 +150,11 @@ html, body {
 }
 
 .search-result-item:hover {
-  background: rgba(99, 102, 241, 0.06);
+  background: rgb(var(--brand-500) / 0.06);
 }
 
 .search-result-item.active {
-  background: rgba(99, 102, 241, 0.08);
+  background: rgb(var(--brand-500) / 0.08);
 }
 
 .search-result-item.active .search-result-name {
@@ -201,7 +226,7 @@ html, body {
 }
 
 .search-result-category {
-  background: rgba(99, 102, 241, 0.08);
+  background: rgb(var(--brand-500) / 0.08);
   color: #4F46E5;
   padding: 2px 8px;
   border-radius: 4px;
@@ -216,15 +241,15 @@ html, body {
   color: #94A3B8;
   font-size: 13px;
   font-weight: 400;
-  border-top: 1px solid rgba(99, 102, 241, 0.06);
+  border-top: 1px solid rgb(var(--brand-500) / 0.06);
 }
 
 .search-container.theme-dark {
   background: rgba(15, 23, 42, 0.9);
-  border-color: rgba(129, 140, 248, 0.32);
+  border-color: rgb(var(--brand-400) / 0.32);
   box-shadow:
     0 16px 48px rgba(0, 0, 0, 0.34),
-    0 2px 10px rgba(99, 102, 241, 0.16),
+    0 2px 10px rgb(var(--brand-500) / 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
@@ -249,7 +274,7 @@ html, body {
   padding: 0 6px;
   margin: 0 2px;
   border-radius: 6px;
-  color: #4338ca;
+  color: rgb(var(--brand-700));
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(199, 210, 254, 0.78);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -266,11 +291,11 @@ html, body {
 .search-container.theme-system .search-command-hints kbd {
   color: #C7D2FE;
   background: rgba(30, 41, 59, 0.72);
-  border-color: rgba(129, 140, 248, 0.32);
+  border-color: rgb(var(--brand-400) / 0.32);
 }
 
 .search-container.theme-dark .search-input-wrapper {
-  border-bottom-color: rgba(129, 140, 248, 0.16);
+  border-bottom-color: rgb(var(--brand-400) / 0.16);
 }
 
 .search-container.theme-dark .search-input,
@@ -285,11 +310,11 @@ html, body {
 }
 
 .search-container.theme-dark .search-result-item:hover {
-  background: rgba(129, 140, 248, 0.12);
+  background: rgb(var(--brand-400) / 0.12);
 }
 
 .search-container.theme-dark .search-result-item.active {
-  background: rgba(129, 140, 248, 0.18);
+  background: rgb(var(--brand-400) / 0.18);
 }
 
 .search-container.theme-dark .search-result-item.active .search-result-name,
@@ -298,7 +323,7 @@ html, body {
 }
 
 .search-container.theme-dark .search-result-icon {
-  background: linear-gradient(135deg, rgba(79, 70, 229, 0.28), rgba(99, 102, 241, 0.2));
+  background: linear-gradient(135deg, rgb(var(--brand-600) / 0.28), rgb(var(--brand-500) / 0.2));
 }
 
 .search-container.theme-dark .search-result-icon.folder {
@@ -311,21 +336,21 @@ html, body {
 }
 
 .search-container.theme-dark .search-result-category {
-  background: rgba(129, 140, 248, 0.18);
+  background: rgb(var(--brand-400) / 0.18);
 }
 
 @media (prefers-color-scheme: dark) {
   .search-container.theme-system {
     background: rgba(15, 23, 42, 0.9);
-    border-color: rgba(129, 140, 248, 0.32);
+    border-color: rgb(var(--brand-400) / 0.32);
     box-shadow:
       0 16px 48px rgba(0, 0, 0, 0.34),
-      0 2px 10px rgba(99, 102, 241, 0.16),
+      0 2px 10px rgb(var(--brand-500) / 0.16),
       inset 0 1px 0 rgba(255, 255, 255, 0.06);
   }
 
   .search-container.theme-system .search-input-wrapper {
-    border-bottom-color: rgba(129, 140, 248, 0.16);
+    border-bottom-color: rgb(var(--brand-400) / 0.16);
   }
 
   .search-container.theme-system .search-input,
@@ -340,11 +365,11 @@ html, body {
   }
 
   .search-container.theme-system .search-result-item:hover {
-    background: rgba(129, 140, 248, 0.12);
+    background: rgb(var(--brand-400) / 0.12);
   }
 
   .search-container.theme-system .search-result-item.active {
-    background: rgba(129, 140, 248, 0.18);
+    background: rgb(var(--brand-400) / 0.18);
   }
 
   .search-container.theme-system .search-result-item.active .search-result-name,
@@ -353,7 +378,7 @@ html, body {
   }
 
   .search-container.theme-system .search-result-icon {
-    background: linear-gradient(135deg, rgba(79, 70, 229, 0.28), rgba(99, 102, 241, 0.2));
+    background: linear-gradient(135deg, rgb(var(--brand-600) / 0.28), rgb(var(--brand-500) / 0.2));
   }
 
   .search-container.theme-system .search-result-icon.action {
@@ -362,7 +387,7 @@ html, body {
   }
 
   .search-container.theme-system .search-result-category {
-    background: rgba(129, 140, 248, 0.18);
+    background: rgb(var(--brand-400) / 0.18);
   }
 }
 
@@ -375,12 +400,12 @@ html, body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(99, 102, 241, 0.15);
+  background-color: rgb(var(--brand-500) / 0.15);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(99, 102, 241, 0.3);
+  background-color: rgb(var(--brand-500) / 0.3);
 }
 
 @media (prefers-reduced-motion: reduce) {
