@@ -1,5 +1,7 @@
 appId: com.tidy-desktop.app
 productName: tidy-desktop
+# 最大压缩：把安装包压进 Gitee 100MB 附件上限，使国内更新通道可用
+compression: maximum
 directories:
   output: release
 files:
