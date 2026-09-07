@@ -98,11 +98,13 @@ describe('sanitizeConfig new fields', () => {
       ...defaults,
       searchAutoHideOnBlur: true,
       startMinimizedToTray: true,
+      mainAutoHideOnBlur: true,
       trayNotified: true,
       windowPosition: { x: 120, y: 80 }
     }, defaults)
     expect(result?.searchAutoHideOnBlur).toBe(true)
     expect(result?.startMinimizedToTray).toBe(true)
+    expect(result?.mainAutoHideOnBlur).toBe(true)
     expect(result?.trayNotified).toBe(true)
     expect(result?.windowPosition).toEqual({ x: 120, y: 80 })
   })

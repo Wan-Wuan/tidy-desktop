@@ -2283,20 +2283,9 @@ function App() {
           updateSource={updateSource}
           updateError={updateError}
           onCheckUpdate={manualCheckForUpdate}
-          onRefreshIcons={handleRefreshAllIcons}
-          iconRefreshProgress={iconRefreshProgress}
-          onAutoCategorize={handleAutoCategorize}
-          onCleanupInvalid={handleCleanupInvalidApps}
-          onRestoreHidden={handleRestoreHiddenApps}
-          onExportBackup={handleExportBackup}
-          onImportBackup={handleImportBackup}
-          onImportShortcuts={handleImportShortcuts}
-          onRunHealthCheck={handleRunHealthCheck}
-          onFixHealthIssues={handleFixHealthIssues}
           onExportDiagnostics={handleExportDiagnostics}
           onOpenDataDirectory={() => window.electronAPI.openDataDirectory()}
           onOpenBackupsDirectory={() => window.electronAPI.openBackupsDirectory()}
-          healthReport={healthReport}
           onOpenUpdateLog={() => window.electronAPI.openUpdateLog()}
         />
       )}

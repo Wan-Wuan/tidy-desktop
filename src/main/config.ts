@@ -96,6 +96,7 @@ export function getDefaultConfig() {
     trayNotified: false,
     searchAutoHideOnBlur: false,
     startMinimizedToTray: false,
+    mainAutoHideOnBlur: false,
     ui: {
       gridColumns: 6,
       cardSize: 'medium' as const,

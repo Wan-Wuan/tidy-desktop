@@ -292,6 +292,51 @@ body {
   background-color: rgba(51, 65, 85, 0.95);
 }
 
+/* 带透明度的白色表面（胶囊、kbd、浮层面板）→ 深色玻璃面，避免深色背景下刺眼白块 */
+.theme-dark .bg-white\/50,
+.theme-dark .bg-white\/60,
+.theme-dark .bg-white\/80,
+.theme-dark .bg-white\/82,
+.theme-dark .bg-white\/95 {
+  background-color: rgba(30, 41, 59, 0.78);
+}
+
+/* 浮层（emoji 选择器等）整体换深色；排除开关的白色圆形滑块 */
+.theme-dark div.bg-white:not(.rounded-full) {
+  background-color: rgba(15, 23, 42, 0.96);
+  border-color: rgb(var(--brand-400) / 0.35);
+}
+
+/* slate-900 在深色下失去强对比语义：文字转浅、实底转浅底深字 */
+.theme-dark .text-slate-900 {
+  color: #F1F5F9;
+}
+
+.theme-dark .bg-slate-900 {
+  background-color: rgba(226, 232, 240, 0.92);
+  color: #0F172A;
+}
+
+.theme-dark .border-slate-900 {
+  border-color: rgb(148 163 184 / 0.45);
+}
+
+.theme-dark .hover\:bg-slate-900:hover {
+  background-color: rgba(226, 232, 240, 0.92);
+  color: #0F172A;
+}
+
+.theme-dark .hover\:border-slate-900:hover {
+  border-color: rgb(203 213 225 / 0.9);
+}
+
+/* slate-200 带透明度边框变体（border-slate-200 精确类已有覆盖） */
+.theme-dark .border-slate-200\/60,
+.theme-dark .border-slate-200\/70,
+.theme-dark .border-slate-200\/80 {
+  border-color: rgb(var(--brand-400) / 0.3);
+}
+
 .theme-dark button.bg-red-50 {
   background-color: rgba(127, 29, 29, 0.22);
   border-color: rgba(248, 113, 113, 0.4);
@@ -362,6 +407,47 @@ body {
   .theme-system button.bg-white:hover,
   .theme-system button.bg-slate-100:hover {
     background-color: rgba(51, 65, 85, 0.95);
+  }
+
+  .theme-system .bg-white\/50,
+  .theme-system .bg-white\/60,
+  .theme-system .bg-white\/80,
+  .theme-system .bg-white\/82,
+  .theme-system .bg-white\/95 {
+    background-color: rgba(30, 41, 59, 0.78);
+  }
+
+  .theme-system div.bg-white:not(.rounded-full) {
+    background-color: rgba(15, 23, 42, 0.96);
+    border-color: rgb(var(--brand-400) / 0.35);
+  }
+
+  .theme-system .text-slate-900 {
+    color: #F1F5F9;
+  }
+
+  .theme-system .bg-slate-900 {
+    background-color: rgba(226, 232, 240, 0.92);
+    color: #0F172A;
+  }
+
+  .theme-system .border-slate-900 {
+    border-color: rgb(148 163 184 / 0.45);
+  }
+
+  .theme-system .hover\:bg-slate-900:hover {
+    background-color: rgba(226, 232, 240, 0.92);
+    color: #0F172A;
+  }
+
+  .theme-system .hover\:border-slate-900:hover {
+    border-color: rgb(203 213 225 / 0.9);
+  }
+
+  .theme-system .border-slate-200\/60,
+  .theme-system .border-slate-200\/70,
+  .theme-system .border-slate-200\/80 {
+    border-color: rgb(var(--brand-400) / 0.3);
   }
 
   .theme-system button.bg-red-50 {

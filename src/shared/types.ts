@@ -94,6 +94,7 @@ export interface Config {
   trayNotified?: boolean
   searchAutoHideOnBlur?: boolean
   startMinimizedToTray?: boolean
+  mainAutoHideOnBlur?: boolean
 }
 
 export interface AppsData {

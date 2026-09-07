@@ -167,7 +167,8 @@ export function sanitizeConfig(input: unknown, defaults: Config): Config | null 
     lastActiveCategoryId: lastActiveCategoryId ? lastActiveCategoryId.slice(0, 160) : null,
     trayNotified: asBoolean(input.trayNotified, defaults.trayNotified === true),
     searchAutoHideOnBlur: asBoolean(input.searchAutoHideOnBlur, defaults.searchAutoHideOnBlur === true),
-    startMinimizedToTray: asBoolean(input.startMinimizedToTray, defaults.startMinimizedToTray === true)
+    startMinimizedToTray: asBoolean(input.startMinimizedToTray, defaults.startMinimizedToTray === true),
+    mainAutoHideOnBlur: asBoolean(input.mainAutoHideOnBlur, defaults.mainAutoHideOnBlur === true)
   }
 }
 

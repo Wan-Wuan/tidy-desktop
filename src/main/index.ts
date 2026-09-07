@@ -8,6 +8,7 @@ import { registerFileHandlers } from './handlers/fileHandlers'
 import { registerIconHandlers } from './handlers/iconHandlers'
 import { registerSystemHandlers, setWindowRefs } from './handlers/systemHandlers'
 import { cleanupInstalledUpdateCache, registerUpdateHandlers } from './update'
+import { isNativeDialogOpen, guardNativeDialog } from './dialogGuard'
 
 const isDev = !app.isPackaged
 
@@ -193,6 +194,26 @@ function createWindow() {
     notifyTrayOnce()
   })
 
+  win.on('blur', () => {
+    const blurredWin = win
+    let cancelled = false
+    const cancelHandler = () => { cancelled = true }
+    blurredWin.once('focus', cancelHandler)
+    setTimeout(() => {
+      // 防止窗口在延时期间被销毁
+      if (blurredWin.isDestroyed()) return
+      blurredWin.removeListener('focus', cancelHandler)
+      if (cancelled || blurredWin.isFocused()) return
+      const latestConfig = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
+      if (latestConfig.mainAutoHideOnBlur !== true) return
+      // 原生对话框（打开/保存文件等）会夺走焦点，此时不能隐藏主窗口
+      if (isNativeDialogOpen()) return
+      // 本应用其它窗口（如快速搜索框）仍处于焦点时不隐藏
+      if (BrowserWindow.getFocusedWindow() !== null) return
+      blurredWin.hide()
+    }, 200)
+  })
+
   win.on('closed', () => {
     if (windowSizeSaveTimer) {
       clearTimeout(windowSizeSaveTimer)
@@ -219,13 +240,13 @@ function showMainWindow(showRunningPrompt = false) {
 
   if (showRunningPrompt && !singleInstancePromptOpen) {
     singleInstancePromptOpen = true
-    dialog.showMessageBox(w, {
+    guardNativeDialog(() => dialog.showMessageBox(w, {
       type: 'info',
       buttons: ['知道了'],
       defaultId: 0,
       message: 'Tidy Desktop 已经在运行',
       detail: '不能同时打开多个实例，已为你切换到正在运行的窗口。'
-    }).finally(() => {
+    })).finally(() => {
       singleInstancePromptOpen = false
     })
   }

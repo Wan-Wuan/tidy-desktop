@@ -33,6 +33,7 @@ export function registerFileHandlers(applyGlobalShortcuts?: (config: Config) => 
     if (config.trayNotified === undefined) config.trayNotified = false
     if (config.searchAutoHideOnBlur === undefined) config.searchAutoHideOnBlur = false
     if (config.startMinimizedToTray === undefined) config.startMinimizedToTray = false
+    if (config.mainAutoHideOnBlur === undefined) config.mainAutoHideOnBlur = false
     return config
   })
 

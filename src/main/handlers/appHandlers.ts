@@ -2,6 +2,7 @@ import { ipcMain, shell, dialog } from 'electron'
 import { execFile, execFileSync, spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
+import { guardNativeDialog } from '../dialogGuard'
 
 /** 安全地将 PowerShell 命令编码为 Base64，避免注入 */
 function encodePsCommand(script: string): string {
@@ -116,9 +117,9 @@ export function registerAppHandlers() {
 
   ipcMain.handle('select-folder', async () => {
     try {
-      const result = await dialog.showOpenDialog({
+      const result = await guardNativeDialog(() => dialog.showOpenDialog({
         properties: ['openDirectory']
-      })
+      }))
       if (result.canceled || result.filePaths.length === 0) {
         return null
       }
@@ -133,14 +134,14 @@ export function registerAppHandlers() {
     try {
       if (command === 'shutdown' || command === 'restart') {
         const actionLabel = command === 'shutdown' ? '关机' : '重启'
-        const result = await dialog.showMessageBox({
+        const result = await guardNativeDialog(() => dialog.showMessageBox({
           type: 'warning',
           buttons: ['取消', `确认${actionLabel}`],
           defaultId: 0,
           cancelId: 0,
           message: `确定要立即${actionLabel}电脑吗？`,
           detail: '未保存的工作可能会丢失。'
-        })
+        }))
         if (result.response !== 1) return false
       }
       switch (command) {

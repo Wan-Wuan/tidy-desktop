@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow, dialog, screen, app, nativeImage, shell, clipbo
 import fs from 'fs'
 import path from 'path'
 import { getBackupDir } from '../backup'
+import { guardNativeDialog } from '../dialogGuard'
 import { APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, CONFIG_DIR, ICONS_DIR, getDefaultConfig, readJsonFile, writeJsonFilesAtomically } from '../config'
 import type { AppsData, CategoriesData, Config, ShortcutImportItem } from '../../shared/types'
 import { sanitizeAppsData, sanitizeCategoriesData, sanitizeConfig } from '../validation'
@@ -247,13 +248,13 @@ export function registerSystemHandlers() {
   ipcMain.handle('confirm', async (_, message: unknown) => {
     const w = mainWindowRef.current
     if (!w || w.isDestroyed()) return false
-    const result = await dialog.showMessageBox(w, {
+    const result = await guardNativeDialog(() => dialog.showMessageBox(w, {
       type: 'question',
       buttons: ['取消', '确定'],
       defaultId: 0,
       cancelId: 0,
       message: typeof message === 'string' ? message.slice(0, 1000) : ''
-    })
+    }))
     return result.response === 1
   })
 
@@ -319,9 +320,9 @@ export function registerSystemHandlers() {
       filters: [{ name: 'JSON', extensions: ['json'] }]
     }
     const owner = mainWindowRef.current
-    const result = owner && !owner.isDestroyed()
-      ? await dialog.showSaveDialog(owner, options)
-      : await dialog.showSaveDialog(options)
+    const result = await guardNativeDialog(() => owner && !owner.isDestroyed()
+      ? dialog.showSaveDialog(owner, options)
+      : dialog.showSaveDialog(options))
     if (result.canceled || !result.filePath) return { success: false }
 
     const payload = {
@@ -342,9 +343,9 @@ export function registerSystemHandlers() {
       filters: [{ name: 'JSON', extensions: ['json'] }]
     } as Electron.OpenDialogOptions
     const owner = mainWindowRef.current
-    const result = owner && !owner.isDestroyed()
-      ? await dialog.showOpenDialog(owner, options)
-      : await dialog.showOpenDialog(options)
+    const result = await guardNativeDialog(() => owner && !owner.isDestroyed()
+      ? dialog.showOpenDialog(owner, options)
+      : dialog.showOpenDialog(options))
     if (result.canceled || result.filePaths.length === 0) return { success: false }
 
     try {
@@ -382,9 +383,9 @@ export function registerSystemHandlers() {
         filters: [{ name: 'JSON', extensions: ['json'] }]
       }
       const owner = mainWindowRef.current
-      const result = owner && !owner.isDestroyed()
-        ? await dialog.showSaveDialog(owner, options)
-        : await dialog.showSaveDialog(options)
+      const result = await guardNativeDialog(() => owner && !owner.isDestroyed()
+        ? dialog.showSaveDialog(owner, options)
+        : dialog.showSaveDialog(options))
       if (result.canceled || !result.filePath) return { success: false }
 
       const iconFiles = fs.existsSync(ICONS_DIR)
