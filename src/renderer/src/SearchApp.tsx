@@ -729,7 +729,8 @@ function SearchApp() {
         </div>
       )}
 
-      {!hasResults && query.trim() && (
+      {/* 搜索引擎激活时输入内容是发给引擎的，不走本地应用过滤，"无匹配"提示没有意义 */}
+      {!hasResults && query.trim() && !activeEngine && (
         <div className="search-no-results">
           <span>没有找到匹配的应用或文件夹</span>
         </div>
