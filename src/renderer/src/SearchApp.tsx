@@ -26,15 +26,12 @@ interface BuiltInCommand {
 }
 
 const MAX_DISPLAY = 6
-const RECENTS_HEADER_HEIGHT = 28
-const INPUT_HEIGHT = 56
+// 结果列表的最大高度由 CSS 决定，窗口高度再由 useLayoutEffect 实测 .search-container
+// 后同步。以下三个常量仅用于计算 .search-results 的 max-height，不参与任何窗口高度计算——
+// 这样"渲染细节"与"窗口控制"彻底解耦，任何 padding/font/border 变动都不会导致圆角被裁。
 const RESULT_ITEM_HEIGHT = 51
 const RESULT_ITEM_GAP = 4
 const RESULTS_PADDING_Y = 8
-const NO_RESULTS_HEIGHT = 44
-const EMPTY_HINT_HEIGHT = 44
-const RESIZE_DEBOUNCE_MS = 80
-const EMPTY_SEARCH_HEIGHT = INPUT_HEIGHT + EMPTY_HINT_HEIGHT
 
 const BUILT_IN_COMMANDS: BuiltInCommand[] = [
   {
@@ -107,15 +104,16 @@ function SearchApp() {
   const queryRef = useRef('')
   const resultsRef = useRef<SearchResult[]>([])
   const resultsContainerRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const appsRef = useRef<AppItem[]>([])
   const isActiveRef = useRef(false)
-  const resizeTimerRef = useRef<NodeJS.Timeout | null>(null)
   const dataReloadTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const currentHeightRef = useRef(EMPTY_SEARCH_HEIGHT)
+  // 0 表示"尚未测量"，首次 useLayoutEffect 会填入实测值并同步窗口
+  const currentHeightRef = useRef(0)
 
   useEffect(() => {
     loadData()
-    window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
+    // 窗口高度不再手算：由下方 useLayoutEffect 实测 .search-container 后同步
     const focusTimer = setTimeout(() => inputRef.current?.focus(), 50)
 
     const removeBlur = window.electronAPI.onBlur(() => {
@@ -125,7 +123,6 @@ function SearchApp() {
     })
 
     const removeReset = window.electronAPI.onResetSearch(async () => {
-      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
       if (dataReloadTimerRef.current) clearTimeout(dataReloadTimerRef.current)
       setQuery('')
       queryRef.current = ''
@@ -133,9 +130,8 @@ function SearchApp() {
       resultsRef.current = []
       setActiveEngine(null)
       setActiveIndex(0)
-      currentHeightRef.current = EMPTY_SEARCH_HEIGHT
       await loadData()
-      window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
+      // 窗口高度由 useLayoutEffect 实测同步
       setTimeout(() => inputRef.current?.focus(), 50)
     })
 
@@ -149,7 +145,6 @@ function SearchApp() {
 
     return () => {
       clearTimeout(focusTimer)
-      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
       if (dataReloadTimerRef.current) clearTimeout(dataReloadTimerRef.current)
       removeBlur()
       removeReset()
@@ -180,43 +175,19 @@ function SearchApp() {
     }
   }, [activeIndex, results])
 
-  // 圆角兜底：实时测量 .search-container 实际渲染高度并同步窗口大小。
-  // 任何"窗口高度 < 内容实际高度"的情况（硬编码常量算错、徽章/字体变化、未来新增区块等）
-  // 都会导致 overflow:hidden 容器被窗口边界裁掉底部圆角。这一步是根治该问题的统一机制，
-  // 让窗口高度永远等于内容高度，替代所有手算的 INPUT_HEIGHT/EMPTY_SEARCH_HEIGHT 常量。
+  // 窗口高度唯一来源：实时测量 .search-container 实际渲染高度并同步窗口。
+  // 任何"窗口高度 < 内容实际高度"的情况（徽章/字体/padding 变化、命令提示条显隐、
+  // 结果列表增减、主题切换、DPI 缩放、未来新增区块等）都会让 overflow:hidden 容器
+  // 被窗口边界裁掉底部 18px 圆角。这里用实测值统一兜底，彻底取代手算高度常量。
   useLayoutEffect(() => {
-    const container = document.querySelector('.search-container') as HTMLElement | null
+    const container = containerRef.current
     if (!container) return
     const height = Math.ceil(container.getBoundingClientRect().height)
     if (height > 0 && height !== currentHeightRef.current) {
       currentHeightRef.current = height
       window.electronAPI.resizeSearchWindow(height)
     }
-  }, [query, results, activeEngine])
-
-  const resizeWindow = useCallback((resultCount: number, hasQuery: boolean = false) => {
-    if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
-    resizeTimerRef.current = setTimeout(() => {
-      const maxDisplay = configRef.current?.ui?.searchMaxResults || MAX_DISPLAY
-      let targetHeight: number
-      if (resultCount > 0) {
-        const count = Math.min(resultCount, maxDisplay)
-        const resultsHeight =
-          RESULTS_PADDING_Y * 2 +
-          count * RESULT_ITEM_HEIGHT +
-          Math.max(0, count - 1) * RESULT_ITEM_GAP
-        targetHeight = INPUT_HEIGHT + resultsHeight
-      } else if (hasQuery) {
-        targetHeight = INPUT_HEIGHT + NO_RESULTS_HEIGHT
-      } else {
-        targetHeight = EMPTY_SEARCH_HEIGHT
-      }
-      if (targetHeight !== currentHeightRef.current) {
-        currentHeightRef.current = targetHeight
-        window.electronAPI.resizeSearchWindow(targetHeight)
-      }
-    }, RESIZE_DEBOUNCE_MS)
-  }, [])
+  }, [query, results, activeEngine, config?.ui?.theme])
 
   const configRef = useRef(config)
   configRef.current = config
@@ -430,15 +401,13 @@ function SearchApp() {
   }, [config])
 
   const resetAll = useCallback(() => {
-    if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
     setQuery('')
     queryRef.current = ''
     setResults([])
     resultsRef.current = []
     setActiveEngine(null)
     setActiveIndex(0)
-    currentHeightRef.current = EMPTY_SEARCH_HEIGHT
-    window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
+    // 窗口高度由 useLayoutEffect 实测同步
   }, [])
 
   const persistApps = async (nextApps: AppItem[]) => {
@@ -502,7 +471,7 @@ function SearchApp() {
     resultsRef.current = nextResults
     setResults(nextResults)
     setActiveIndex(index => Math.max(0, Math.min(index, nextResults.length - 1)))
-    resizeWindow(nextResults.length, !!queryRef.current.trim())
+    // 窗口高度由 useLayoutEffect 实测同步
   }
 
   const openCurrentContainingFolder = async () => {
@@ -575,23 +544,19 @@ function SearchApp() {
     const currentQuery = queryRef.current
     setActiveEngine(null)
     if (!currentQuery.trim()) {
-      // 清空引擎后命令提示条会重新渲染（min-height 44px），必须回到 EMPTY_SEARCH_HEIGHT，
-      // 否则内容超出窗口被 overflow:hidden 裁掉，容器底部圆角消失
-      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
       setResults([])
       resultsRef.current = []
       setActiveIndex(0)
-      currentHeightRef.current = EMPTY_SEARCH_HEIGHT
-      window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
     } else {
+      // 清掉引擎后，之前被引擎"占位"而没参与过滤的查询要重新走一次过滤
       const filtered = filterApps(currentQuery)
       setResults(filtered)
       resultsRef.current = filtered
       setActiveIndex(0)
-      resizeWindow(filtered.length, true)
     }
+    // 窗口高度由 useLayoutEffect 实测同步
     setTimeout(() => inputRef.current?.focus(), 0)
-  }, [filterApps, resizeWindow])
+  }, [filterApps])
 
   const handleSearch = useCallback(() => handleSearchRef.current(), [])
 
@@ -603,15 +568,13 @@ function SearchApp() {
     if (value.endsWith(' ') && config?.searchEngines) {
       const engineCheck = checkSearchEngine(value, config.searchEngines)
       if (engineCheck.isEngine && engineCheck.engine) {
-        if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
         setActiveEngine(engineCheck.engine)
         setQuery('')
         queryRef.current = ''
         setResults([])
         resultsRef.current = []
         setActiveIndex(0)
-        currentHeightRef.current = INPUT_HEIGHT
-        window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
+        // 窗口高度由 useLayoutEffect 实测同步
         return
       }
     }
@@ -621,12 +584,10 @@ function SearchApp() {
     }
 
     if (!value.trim()) {
-      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
       setResults([])
       resultsRef.current = []
       setActiveIndex(0)
-      currentHeightRef.current = EMPTY_SEARCH_HEIGHT
-      window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
+      // 窗口高度由 useLayoutEffect 实测同步
       return
     }
 
@@ -635,12 +596,11 @@ function SearchApp() {
     resultsRef.current = filtered
     const newIndex = 0
     setActiveIndex(newIndex)
-    resizeWindow(filtered.length, !!value.trim())
+    // 窗口高度由 useLayoutEffect 实测同步
   }, [activeEngine, config, filterApps])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
-      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
       // 有内容（结果或输入）时先清空，无内容时才隐藏
       if (resultsRef.current.length > 0 || queryRef.current || activeEngine) {
         setResults([])
@@ -649,8 +609,7 @@ function SearchApp() {
         setQuery('')
         queryRef.current = ''
         if (activeEngine) setActiveEngine(null)
-        currentHeightRef.current = EMPTY_SEARCH_HEIGHT
-        window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
+        // 窗口高度由 useLayoutEffect 实测同步
       } else {
         window.electronAPI.hideSearchWindow()
       }
@@ -685,16 +644,21 @@ function SearchApp() {
         })
       }
     } else if (e.key === 'Backspace' && queryRef.current === '' && activeEngine) {
-      // 复用 clearActiveEngine：它会回到 EMPTY_SEARCH_HEIGHT，
-      // 否则命令提示条（44px）撑出窗口被裁切，容器底部圆角丢失
+      // 复用 clearActiveEngine 统一处理状态清理；窗口高度由 useLayoutEffect 实测同步
       clearActiveEngine()
     }
   }, [activeEngine, handleSearch, clearActiveEngine])
 
   const hasResults = results.length > 0
 
+  // 结果列表最大高度：跟随 searchMaxResults 配置，窗口再由 useLayoutEffect 实测同步。
+  // 这样既保留了"自定义显示条数"的能力，又让高度只有一个来源（CSS），不会与窗口高度打架。
+  const maxDisplay = config?.ui?.searchMaxResults || MAX_DISPLAY
+  const resultsMaxHeight =
+    RESULTS_PADDING_Y * 2 + maxDisplay * RESULT_ITEM_HEIGHT + Math.max(0, maxDisplay - 1) * RESULT_ITEM_GAP
+
   return (
-    <div className={`search-container theme-${config?.ui?.theme || 'aurora'}`}>
+    <div ref={containerRef} className={`search-container theme-${config?.ui?.theme || 'aurora'}`}>
       <div className="search-input-wrapper">
         {/* 搜索引擎徽章与搜索图标互斥：激活引擎时徽章顶替图标，清除后图标回归。
             徽章为纯展示标签（方案 C：纯文字 + 右侧分隔竖线），清除走 Backspace / Esc。 */}
@@ -730,7 +694,11 @@ function SearchApp() {
       </div>
 
       {hasResults && (
-        <div className="search-results" ref={resultsContainerRef}>
+        <div
+          className="search-results"
+          ref={resultsContainerRef}
+          style={{ maxHeight: resultsMaxHeight }}
+        >
           {results.map((app, index) => (
             <div
               key={app.id}
