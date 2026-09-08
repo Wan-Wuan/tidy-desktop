@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="A9uf1c7ZbCjTYG6J8MGaJv">
+<head data-page-node-id="bBtgpHwWSPZsmoZEicW0Zt">
+<meta charset="UTF-8" data-page-node-id="EF9aIAuqjSRSaOZYNDZJMe" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="Da9fYcFEZRJLkseCSCgAe3" />
+<title>搜索引擎徽章样式预览</title>
+<style>
+  :root {
+    --brand-400: 129 140 248;
+    --brand-500: 99 102 241;
+    --brand-600: 79 70 229;
+    --brand-700: 67 56 202;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background: linear-gradient(135deg, #EEF2FF 0%, #F8FAFC 50%, #F1F5F9 100%);
+    min-height: 100vh;
+    padding: 40px 24px 80px;
+    color: #1E293B;
+  }
+  .page-title {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #1E293B;
+  }
+  .page-sub {
+    text-align: center;
+    font-size: 13px;
+    color: #64748B;
+    margin-bottom: 40px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 28px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .demo {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .demo-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .demo-label .tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgb(var(--brand-500) / 0.12);
+    color: rgb(var(--brand-700));
+  }
+  .demo-label .tag.old {
+    background: rgba(100, 116, 139, 0.12);
+    color: #64748B;
+  }
+  .demo-desc {
+    font-size: 12px;
+    color: #64748B;
+    line-height: 1.6;
+    margin-bottom: 2px;
+  }
+
+  /* ============ 搜索窗本体（与线上一致） ============ */
+  .search-container {
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(24px) saturate(1.3);
+    border: 1px solid rgba(224, 231, 255, 0.7);
+    border-radius: 18px;
+    box-shadow:
+      0 8px 40px rgb(var(--brand-600) / 0.1),
+      0 2px 8px rgba(0, 0, 0, 0.04),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    width: 100%;
+    overflow: hidden;
+  }
+  .search-input-wrapper {
+    display: flex;
+    align-items: center;
+    padding: 14px 20px;
+    gap: 12px;
+    border-bottom: 1px solid rgb(var(--brand-500) / 0.06);
+  }
+  .search-icon {
+    color: #6366F1;
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+  .search-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 15px;
+    font-weight: 400;
+    background: transparent;
+    color: #1E293B;
+    min-width: 0;
+    font-family: inherit;
+  }
+  .search-input::placeholder { color: #94A3B8; }
+
+  .search-command-hints {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    color: rgba(71, 85, 105, 0.72);
+    font-size: 12px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .search-command-hints kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    margin: 0 2px;
+    border-radius: 6px;
+    color: rgb(var(--brand-700));
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(199, 210, 254, 0.78);
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  /* ============ 方案 0：当前效果（带地球图标的实心胶囊） ============ */
+  .badge-old {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(135deg, #4F46E5, #6366F1);
+    color: #fff;
+    padding: 4px 5px 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgb(var(--brand-600) / 0.3);
+  }
+  .badge-old .close {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 999px;
+    background: rgba(255,255,255,0.18); color: #fff;
+    border: none; cursor: pointer; padding: 0; line-height: 0;
+  }
+
+  /* ============ 方案 A：淡色融合（推荐） ============ */
+  .badge-a {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgb(var(--brand-500) / 0.10);
+    color: rgb(var(--brand-700));
+    padding: 5px 5px 5px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+    line-height: 1.4;
+    transition: background-color 0.15s ease;
+  }
+  .badge-a:hover { background: rgb(var(--brand-500) / 0.16); }
+  .badge-a .name { padding-right: 2px; }
+  .badge-a .close {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 999px;
+    background: transparent; color: rgb(var(--brand-600) / 0.55);
+    border: none; cursor: pointer; padding: 0; line-height: 0;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .badge-a .close:hover { background: rgb(var(--brand-500) / 0.2); color: rgb(var(--brand-700)); }
+
+  /* ============ 方案 B：描边 ============ */
+  .badge-b {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: transparent;
+    border: 1px solid rgb(var(--brand-500) / 0.32);
+    color: rgb(var(--brand-700));
+    padding: 4px 4px 4px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+    line-height: 1.4;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+  }
+  .badge-b:hover { border-color: rgb(var(--brand-500) / 0.55); background: rgb(var(--brand-500) / 0.05); }
+  .badge-b .name { padding-right: 2px; }
+  .badge-b .close {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 999px;
+    background: transparent; color: rgb(var(--brand-600) / 0.55);
+    border: none; cursor: pointer; padding: 0; line-height: 0;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .badge-b .close:hover { background: rgb(var(--brand-500) / 0.15); color: rgb(var(--brand-700)); }
+
+  /* ============ 方案 C：极简纯文字 + 分隔竖线 ============ */
+  .badge-c {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    color: rgb(var(--brand-700));
+    padding: 4px 12px 4px 0;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    flex-shrink: 0;
+    line-height: 1.4;
+    position: relative;
+  }
+  .badge-c::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 50%;
+    transform: translateY(-50%);
+    width: 1px; height: 16px;
+    background: rgb(var(--brand-500) / 0.22);
+  }
+  .badge-c .close {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 17px; height: 17px; border-radius: 999px;
+    background: transparent; color: rgb(var(--brand-600) / 0.5);
+    border: none; cursor: pointer; padding: 0; line-height: 0;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .badge-c .close:hover { background: rgb(var(--brand-500) / 0.14); color: rgb(var(--brand-700)); }
+
+  /* ============ 方案 D：融入输入行（无背景，字号与输入一致） ============ */
+  .badge-d {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: transparent;
+    color: rgb(var(--brand-700));
+    padding: 3px 6px 3px 0;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 600;
+    flex-shrink: 0;
+    line-height: 1.4;
+  }
+  .badge-d .close {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 17px; height: 17px; border-radius: 999px;
+    background: transparent; color: rgb(var(--brand-600) / 0.45);
+    border: none; cursor: pointer; padding: 0; line-height: 0;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .badge-d .close:hover { background: rgb(var(--brand-500) / 0.14); color: rgb(var(--brand-700)); }
+
+  .note {
+    max-width: 1100px;
+    margin: 44px auto 0;
+    padding: 18px 22px;
+    background: rgba(255,255,255,0.7);
+    border: 1px solid rgba(199, 210, 254, 0.6);
+    border-radius: 14px;
+    font-size: 13px;
+    line-height: 1.8;
+    color: #475569;
+  }
+  .note b { color: #1E293B; }
+  .note ul { margin: 8px 0 0 20px; }
+</style>
+</head>
+<body data-page-node-id="BtrFLOEbSkA2c45fBVyRqN">
+
+<div class="page-title" data-page-node-id="bvuFFV9FE7TdpQTeMwxNOj">搜索引擎徽章样式预览</div>
+<div class="page-sub" data-page-node-id="CPsaWYxAxkY4huG2FmOkGh">已移除地球图标 · 徽章与搜索框融合方案对比（悬停 × 可看交互反馈）</div>
+
+<div class="grid" data-page-node-id="5AqknAbkvDAf9SQPSShW0A">
+
+  <!-- 当前效果 -->
+  <div class="demo" data-page-node-id="7EpNCVFTt789baPNojn4MZ">
+    <div class="demo-label" data-page-node-id="3oOFQZDSMYFi7uvpOgH3GE"><span class="tag old" data-page-node-id="ft3w8qHQSfTJq85DsohKUV">当前</span> 实心胶囊 + 地球图标</div>
+    <div class="demo-desc" data-page-node-id="FLpVWZmiXll1ho1cNJzB4T">作为对照。实心渐变 + 白色文字，视觉上像一枚"浮"在输入框里的独立按钮，与搜索框的浅色调不够融合。</div>
+    <div class="search-container" data-page-node-id="Bm3hwAn6UNfMSpFNX2H5bg">
+      <div class="search-input-wrapper" data-page-node-id="DlmUu8mqTIYuAzHJhKQve4">
+        <span class="badge-old" data-page-node-id="JeB9gm9QgPjL6pWhVMUSS8">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="BG6lShCl3AGdDk5levO3Rw">
+            <circle cx="12" cy="12" r="9" data-page-node-id="mXHp3p7wEwgkWnF2gYM9Hw"/><path d="M3 12h18" data-page-node-id="alQ45ZxXBDWMQ4vND5BMcR"/><path d="M12 3a14 14 0 0 1 0 18" data-page-node-id="b3cS9OEHv7om0gbBZ98sRb"/><path d="M12 3a14 14 0 0 0 0 18" data-page-node-id="gomBYVV8t0BoJOYx6fkska"/>
+          </svg>
+          <span data-page-node-id="Sty4skICIcn1tCNhwuZcTq">Bing</span>
+          <button class="close" aria-label="清除" data-page-node-id="AJK2t5VxD7Tj54z8LMDNu5">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" data-page-node-id="0VzAV8ypiXA3KdqO7Hfq45"><path d="M18 6 6 18" data-page-node-id="FGvUYmOvAMGShlO9El9Frp"/><path d="M6 6l12 12" data-page-node-id="NZFnxky2FtnmQd2RWKKSX9"/></svg>
+          </button>
+        </span>
+        <input class="search-input" placeholder="在 Bing 中搜索..." data-page-node-id="FEw28N9G3g7nUdEaFJw7zg" />
+      </div>
+    </div>
+  </div>
+
+  <!-- 方案 A -->
+  <div class="demo" data-page-node-id="GMXHuLmXwUBLt34cjZA3nY">
+    <div class="demo-label" data-page-node-id="P2m4ubdLS7GD6JjhqU5lSv"><span class="tag" data-page-node-id="JWxonTWCM8eE1uhUHYptBK">方案 A</span> 淡色融合（推荐）</div>
+    <div class="demo-desc" data-page-node-id="w4515GffetisUjjuK36c4D">10% 主色淡底 + 深靛蓝文字，圆角收敛到 8px，字号 13px 贴近正文。像输入行的一部分，不抢视线但可点击感明确。</div>
+    <div class="search-container" data-page-node-id="Po1bQgFpAiDH3cQCFIbQOZ">
+      <div class="search-input-wrapper" data-page-node-id="hQHTYEazx0HZwcxv4XtFxE">
+        <span class="badge-a" data-page-node-id="QgAvjeTDRuICpL8f5F1gXb">
+          <span class="name" data-page-node-id="5REkV9nrBEyApmlmjGewzU">Bing</span>
+          <button class="close" aria-label="清除" data-page-node-id="jJo312HsxlXESElgeOKnj3">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" data-page-node-id="W3wZU93wSGTS93XQ6v7BlL"><path d="M18 6 6 18" data-page-node-id="KZMjJjnPFh9bq7pahl2ONM"/><path d="M6 6l12 12" data-page-node-id="pBQbKV5dreSKR9w1Ak74if"/></svg>
+          </button>
+        </span>
+        <input class="search-input" placeholder="在 Bing 中搜索..." data-page-node-id="RLYrwdLTWeWUy61VS4ZwdI" />
+      </div>
+    </div>
+  </div>
+
+  <!-- 方案 B -->
+  <div class="demo" data-page-node-id="KJWkNWlK22phwAFzEmRAtt">
+    <div class="demo-label" data-page-node-id="4efq061YEjHipeN7gd2b4B"><span class="tag" data-page-node-id="pp4akJUmpmv7K3EzhEcZhD">方案 B</span> 细描边</div>
+    <div class="demo-desc" data-page-node-id="uDPR3cRKOH4MAgPAFyQFKL">透明底 + 32% 主色描边。比 A 更轻，边界清晰，适合希望徽章"克制"一点的风格。</div>
+    <div class="search-container" data-page-node-id="4uy7fr7nH34MCcSS6aiKn8">
+      <div class="search-input-wrapper" data-page-node-id="C8Vu0tnGCBx6O9xLipcKAL">
+        <span class="badge-b" data-page-node-id="x7UDOKVh1g9x4gDsjIQ8BO">
+          <span class="name" data-page-node-id="aKikWcH9slJYDduOCd6yaN">Bing</span>
+          <button class="close" aria-label="清除" data-page-node-id="GU33QfAzTAgV8Dqw2rBuAX">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" data-page-node-id="jDi8wnh0fBihROFK5UDtPk"><path d="M18 6 6 18" data-page-node-id="jfKvLdiKyIOB00mXPd6WgS"/><path d="M6 6l12 12" data-page-node-id="que7u1zK0O1g8AGtKMDXHH"/></svg>
+          </button>
+        </span>
+        <input class="search-input" placeholder="在 Bing 中搜索..." data-page-node-id="DOBPs49rEoY3qAhG2yf3GY" />
+      </div>
+    </div>
+  </div>
+
+  <!-- 方案 C -->
+  <div class="demo" data-page-node-id="igVOuznvGyKUABrSQGQ6LB">
+    <div class="demo-label" data-page-node-id="YTQke4hwjLWf7a5uandwzL"><span class="tag" data-page-node-id="OVPax5vNq1R5btQYYKdEUi">方案 C</span> 纯文字 + 分隔竖线</div>
+    <div class="demo-desc" data-page-node-id="HU2F4bck8CAFWVF1BCUp4q">完全无背景，仅靠颜色和右侧一条 1px 竖线与输入区隔开。融合度最高，像"输入框的前缀标签"。</div>
+    <div class="search-container" data-page-node-id="nGCOBw3fGLWSxxul2VqRRN">
+      <div class="search-input-wrapper" data-page-node-id="2G7oYnyLhMNfYKbpDzxK44">
+        <span class="badge-c" data-page-node-id="5qWBwFEfJpuUkv4wDMHyrc">
+          <span data-page-node-id="1cu1z8ULnV1DgTfV4oyC9A">Bing</span>
+          <button class="close" aria-label="清除" data-page-node-id="drHoHCzg98Yg4cRUCBmVeW">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" data-page-node-id="Wiuq5m9QCdGhd1zoSL9r2Y"><path d="M18 6 6 18" data-page-node-id="Ke1xnqvIlHMUbcfqKVWCis"/><path d="M6 6l12 12" data-page-node-id="1lzaO4UdsqwfISFj8IXVM2"/></svg>
+          </button>
+        </span>
+        <input class="search-input" placeholder="在 Bing 中搜索..." data-page-node-id="LjB8wQICHGAWLPuX8S3a1D" />
+      </div>
+    </div>
+  </div>
+
+  <!-- 方案 D -->
+  <div class="demo" data-page-node-id="CoUTeB2j2Ga6CI5eCpdhHK">
+    <div class="demo-label" data-page-node-id="V5Ba6cvAryCCn6X3rU1Cou"><span class="tag" data-page-node-id="cJrEAmogVXjWBbjGaL50f2">方案 D</span> 完全融入输入行</div>
+    <div class="demo-desc" data-page-node-id="AxrxEmW6qebd5aF5KEviMj">无背景无描边，字号 15px 与输入文字完全一致，× 默认半透明、悬停才显现。最"隐形"，视觉负担最小。</div>
+    <div class="search-container" data-page-node-id="1B68BnSjApQlSm1lTq5k2m">
+      <div class="search-input-wrapper" data-page-node-id="MqeCVi2mCctxyG7ytL3vGF">
+        <span class="badge-d" data-page-node-id="hCCrDTlH4VOJiM3qyxTrKJ">
+          <span data-page-node-id="ASXgXJ1Pbg1bPBAcpmYKoL">Bing</span>
+          <button class="close" aria-label="清除" data-page-node-id="E36vP19L1KDrpAUZxr0NL2">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" data-page-node-id="nzpeUlymbEUnEGTdbCt4hw"><path d="M18 6 6 18" data-page-node-id="zHGJjq7BILvOq3B7TnR201"/><path d="M6 6l12 12" data-page-node-id="HnOi6ieF7lBK87MSBsECT3"/></svg>
+          </button>
+        </span>
+        <input class="search-input" placeholder="在 Bing 中搜索..." data-page-node-id="E1Sm04L0GrwvyLi73XjtHJ" />
+      </div>
+    </div>
+  </div>
+
+  <!-- 清除后的空状态 -->
+  <div class="demo" data-page-node-id="7C8vQdkj2ussmZ3PwfevZL">
+    <div class="demo-label" data-page-node-id="NRvGavDV5ggR0EcQPjrIyf"><span class="tag" data-page-node-id="n0fkGH3OsXgk4Axf89EJY9">参考</span> 清除引擎后的空状态</div>
+    <div class="demo-desc" data-page-node-id="k4HULY17E41n3sm2lt96S9">放大镜图标回归，命令提示条重新出现。此时窗口高度必须回到 <b data-page-node-id="rpMWz5biaceUq7SH9r9cBv">100px</b>（输入 56 + 提示 44），否则底部圆角会被裁掉——这就是上一版"失去圆角"的根因。</div>
+    <div class="search-container" data-page-node-id="k1a9DvdrGOYOT1E3gIGQN8">
+      <div class="search-input-wrapper" data-page-node-id="tOAvEUyvjtEkwXU0ibMqF7">
+        <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="LwzYLnAT5ReVcRAYOLeI4a">
+          <circle cx="11" cy="11" r="8" data-page-node-id="3BYDuYz6q30v3MvuWtiNHj"/><path d="m21 21-4.35-4.35" data-page-node-id="4GDsYRFbAHSc0tPoaDpQKD"/>
+        </svg>
+        <input class="search-input" placeholder="搜索应用或文件夹..." data-page-node-id="FXBB6nmE2k3N2UU1iHyWzF" />
+      </div>
+      <div class="search-command-hints" data-page-node-id="RndbpQQyXOlzFkGDVXmhSd">
+        <span data-page-node-id="1lPokUMn4pvHkg3vDAZU31">输入 <kbd data-page-node-id="64wMRx9iZ5tVZSSQ1jjwmV">&gt;</kbd> 查看快捷命令</span>
+        <span data-page-node-id="vEe18ew7Nythq1dEjal93D"><kbd data-page-node-id="lDGolWPWuIKhemLYFVK11l">Enter</kbd> 打开</span>
+        <span data-page-node-id="duophZ6fTLOV8JkjDvy0qi"><kbd data-page-node-id="VtozPUPpTZEQMBplcuuWnd">Delete</kbd> 隐藏结果</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="note" data-page-node-id="Hd37rfWaqf5965nHhRRpAR">
+  <b data-page-node-id="Z1re9GfIy9ZRKOsTKpfrih">几个可能需要你定夺的点：</b>
+  <ul data-page-node-id="iIKmafF7Re4zmhl3VsHERL">
+    <li data-page-node-id="fC0nrurRBfoGjm9GTL8NMP"><b data-page-node-id="DwHqprn8bbeB2ZQj803Nf0">圆角</b>：A/B 用 8px 直角感，C/D 更贴合输入行。想要更圆可以改回 999px 胶囊。</li>
+    <li data-page-node-id="M9p2At0nMaCRCJbik9H4Wo"><b data-page-node-id="nwO0eA0lrWXlxFSfaSiEOn">字号</b>：A/B 是 13px，C 是 14px，D 与输入一致 15px。字号越大越"融入"。</li>
+    <li data-page-node-id="jp7OMk3KmFjNcAGSEEvE9p"><b data-page-node-id="T8bYvkGQL94XNLcFzNO00o">× 按钮</b>：A/B 默认可见（浅色），D 默认半透明、悬停才明显。要不要一直显示？</li>
+    <li data-page-node-id="L6uzp2j0QYvfIC8wTFScE5"><b data-page-node-id="5WSMpG7Dc6vwQmYwb0twOp">长名称</b>：A/B/C/D 都已预留 ellipsis，名称过长会截断显示，不会撑破布局。</li>
+    <li data-page-node-id="mit7eQfr4qdXTGg2PeuZEM"><b data-page-node-id="8HwFS09cSPoFETVDO5EXAq">颜色</b>：目前跟随主题主色（indigo）。如果你改了主题色，徽章会一起变。</li>
+  </ul>
+</div>
+
+</body>
+</html>

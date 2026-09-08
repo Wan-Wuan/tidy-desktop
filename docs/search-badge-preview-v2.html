@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="7Zvkqfg7Lup28NC2pCFAUf">
+<head data-page-node-id="iCujewrNL071T8A2tC0dFN">
+<meta charset="UTF-8" data-page-node-id="r8iW1GIKMuendgN1QO4zKr" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="KFaF0FOhmpnrfnrJr3vaxl" />
+<title>搜索引擎徽章样式预览 v2（无图标 · 无关闭按钮）</title>
+<style>
+  :root {
+    --brand-400: 129 140 248;
+    --brand-500: 99 102 241;
+    --brand-600: 79 70 229;
+    --brand-700: 67 56 202;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background: linear-gradient(135deg, #EEF2FF 0%, #F8FAFC 50%, #F1F5F9 100%);
+    min-height: 100vh;
+    padding: 40px 24px 80px;
+    color: #1E293B;
+  }
+  .page-title { text-align: center; font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+  .page-sub { text-align: center; font-size: 13px; color: #64748B; margin-bottom: 40px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 28px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .demo { display: flex; flex-direction: column; gap: 10px; }
+  .demo-label {
+    font-size: 13px; font-weight: 700; color: #334155;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .demo-label .tag {
+    font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+    background: rgb(var(--brand-500) / 0.12); color: rgb(var(--brand-700));
+  }
+  .demo-label .tag.old { background: rgba(100,116,139,0.12); color: #64748B; }
+  .demo-desc { font-size: 12px; color: #64748B; line-height: 1.6; margin-bottom: 2px; }
+
+  /* ============ 搜索窗本体（与线上一致） ============ */
+  .search-container {
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(24px) saturate(1.3);
+    border: 1px solid rgba(224, 231, 255, 0.7);
+    border-radius: 18px;
+    box-shadow:
+      0 8px 40px rgb(var(--brand-600) / 0.1),
+      0 2px 8px rgba(0, 0, 0, 0.04),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    width: 100%;
+    overflow: hidden;
+  }
+  .search-input-wrapper {
+    display: flex; align-items: center;
+    padding: 14px 20px; gap: 12px;
+    border-bottom: 1px solid rgb(var(--brand-500) / 0.06);
+  }
+  .search-icon { color: #6366F1; flex-shrink: 0; opacity: 0.6; }
+  .search-input {
+    flex: 1; border: none; outline: none;
+    font-size: 15px; font-weight: 400;
+    background: transparent; color: #1E293B;
+    min-width: 0; font-family: inherit;
+  }
+  .search-input::placeholder { color: #94A3B8; }
+
+  .search-command-hints {
+    min-height: 44px; display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px; color: rgba(71,85,105,0.72);
+    font-size: 12px; overflow-x: auto; white-space: nowrap;
+  }
+  .search-command-hints kbd {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 20px; height: 20px; padding: 0 6px; margin: 0 2px;
+    border-radius: 6px; color: rgb(var(--brand-700));
+    background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(199,210,254,0.78);
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px; font-weight: 700;
+  }
+
+  /* ============ 各方案：纯文字徽章，无图标无关闭按钮 ============ */
+
+  /* A：淡色融合 */
+  .badge-a {
+    display: inline-flex; align-items: center;
+    background: rgb(var(--brand-500) / 0.10);
+    color: rgb(var(--brand-700));
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 13px; font-weight: 600;
+    flex-shrink: 0; line-height: 1.4;
+    white-space: nowrap; max-width: 140px;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* B：细描边 */
+  .badge-b {
+    display: inline-flex; align-items: center;
+    background: transparent;
+    border: 1px solid rgb(var(--brand-500) / 0.32);
+    color: rgb(var(--brand-700));
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 13px; font-weight: 600;
+    flex-shrink: 0; line-height: 1.4;
+    white-space: nowrap; max-width: 140px;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* C：纯文字 + 右侧分隔竖线 */
+  .badge-c {
+    display: inline-flex; align-items: center;
+    background: transparent;
+    color: rgb(var(--brand-700));
+    padding: 4px 12px 4px 0;
+    border-radius: 6px;
+    font-size: 14px; font-weight: 600;
+    flex-shrink: 0; line-height: 1.4;
+    position: relative;
+    white-space: nowrap; max-width: 140px;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .badge-c::after {
+    content: ''; position: absolute;
+    right: 0; top: 50%; transform: translateY(-50%);
+    width: 1px; height: 16px;
+    background: rgb(var(--brand-500) / 0.22);
+  }
+
+  /* D：完全融入输入行（字号与输入一致） */
+  .badge-d {
+    display: inline-flex; align-items: center;
+    background: transparent;
+    color: rgb(var(--brand-700));
+    padding: 3px 8px 3px 0;
+    border-radius: 6px;
+    font-size: 15px; font-weight: 600;
+    flex-shrink: 0; line-height: 1.4;
+    white-space: nowrap; max-width: 140px;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* E：胶囊（圆角 999px） */
+  .badge-e {
+    display: inline-flex; align-items: center;
+    background: rgb(var(--brand-500) / 0.12);
+    color: rgb(var(--brand-700));
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 13px; font-weight: 600;
+    flex-shrink: 0; line-height: 1.4;
+    white-space: nowrap; max-width: 140px;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .note {
+    max-width: 1100px; margin: 44px auto 0;
+    padding: 18px 22px;
+    background: rgba(255,255,255,0.7);
+    border: 1px solid rgba(199,210,254,0.6);
+    border-radius: 14px;
+    font-size: 13px; line-height: 1.8; color: #475569;
+  }
+  .note b { color: #1E293B; }
+  .note ul { margin: 8px 0 0 20px; }
+  .warn { color: #B45309; font-weight: 600; }
+</style>
+</head>
+<body data-page-node-id="j8pFpWWmbRsdkCED6SjHqK">
+
+<div class="page-title" data-page-node-id="eOjGcmAlQjlOyh5bjrAj6j">搜索引擎徽章样式预览 v2</div>
+<div class="page-sub" data-page-node-id="zoHfU3Ip6cRfOEOHz2Wi5G">已移除地球图标 与 × 关闭按钮 · 纯文字徽章，与搜索框融合</div>
+
+<div class="grid" data-page-node-id="JC6h4H1dRP7GYBaVkJnATU">
+
+  <div class="demo" data-page-node-id="AjQqYURFQ1uB7qizm2EVoy">
+    <div class="demo-label" data-page-node-id="DecQYrU7zbShNv8YjQ61A5"><span class="tag" data-page-node-id="09E1pd1SkDEKGksAXTevEQ">方案 A</span> 淡色融合</div>
+    <div class="demo-desc" data-page-node-id="SR3oGNtc9ZIayfWuzGNLst">10% 主色淡底 + 深靛蓝文字，圆角 8px，13px 字号。轻微底色让它可辨识，又不抢戏。</div>
+    <div class="search-container" data-page-node-id="wT3ZORw6ZNhKZxb4ACRW0Y">
+      <div class="search-input-wrapper" data-page-node-id="lZkpBrxrYcIsPoWzlV1rFp">
+        <span class="badge-a" data-page-node-id="pY9OAAodCL8EBw19JkVRh2">Bing</span>
+        <input class="search-input" placeholder="在 Bing 中搜索..." data-page-node-id="JkUfDsq4FYTACQmA3QbRyh" />
+      </div>
+    </div>
+  </div>
+
+  <div class="demo" data-page-node-id="J3LTSAbSDUwp6pTEvTKjIU">
+    <div class="demo-label" data-page-node-id="tfZponV76S4g228W5ecze9"><span class="tag" data-page-node-id="GadebnP0Q2heuNRhVQGJwm">方案 B</span> 细描边</div>
+    <div class="demo-desc" data-page-node-id="c84TDMuP702lBW54GNtdef">透明底 + 32% 主色描边，13px。比 A 更轻，边界清晰。</div>
+    <div class="search-container" data-page-node-id="nvRUljK6pjattcYLgqTZfa">
+      <div class="search-input-wrapper" data-page-node-id="cYGB0ssrv1vJpVcB2HVj3Z">
+        <span class="badge-b" data-page-node-id="1vWrAUJqin6iyYVcI6L6gG">Bing</span>
+        <input class="search-input" placeholder="在 Bing 中搜索..." data-page-node-id="94AhEmsZnAwb7io0WHwoyY" />
+      </div>
+    </div>
+  </div>
+
+  <div class="demo" data-page-node-id="El369Ysz2mkfwBZWhtWSCN">
+    <div class="demo-label" data-page-node-id="91HyQKQkfjeueZJAmODsm3"><span class="tag" data-page-node-id="MLTOl5I7k2WTq1HHi9jGPA">方案 C</span> 纯文字 + 分隔竖线</div>
+    <div class="demo-desc" data-page-node-id="Lj4YW43JOE9amsSHBcwCiu">无背景，仅靠颜色和右侧 1px 竖线与输入区隔开，14px。像"输入框前缀标签"。</div>
+    <div class="search-container" data-page-node-id="EjZdNlBH2RPzPLCWawnEZO">
+      <div class="search-input-wrapper" data-page-node-id="QoJrEexJIHrAekZwrkEdRv">
+        <span class="badge-c" data-page-node-id="QI00xhGfiJZE3NB0MojP3G">Bing</span>
+        <input class="search-input" placeholder="在 Bing 中搜索..." data-page-node-id="Xri8a3PDluF1JakeEFJLhd" />
+      </div>
+    </div>
+  </div>
+
+  <div class="demo" data-page-node-id="yithMJgtH65uEx1uGd1XpW">
+    <div class="demo-label" data-page-node-id="uPPdo7K2r8RFATPag5vIWF"><span class="tag" data-page-node-id="mHlwOOUln6rnkNnM2k5M0k">方案 D</span> 完全融入输入行</div>
+    <div class="demo-desc" data-page-node-id="cSFIl9Jx7aS2YcBqevVrzB">无背景无描边，15px 与输入文字完全一致。最隐形，视觉负担最小。</div>
+    <div class="search-container" data-page-node-id="uCCv8rvT1I5WBX7XypNR2v">
+      <div class="search-input-wrapper" data-page-node-id="1RpVWxGFTtqpN3d3sLiGNO">
+        <span class="badge-d" data-page-node-id="yBBtZi0h4oBPk0fEXFABQA">Bing</span>
+        <input class="search-input" placeholder="在 Bing 中搜索..." data-page-node-id="gSm2azxlA4DMquqe2viWrA" />
+      </div>
+    </div>
+  </div>
+
+  <div class="demo" data-page-node-id="taMt2xPiSYRCDAB6NutiyY">
+    <div class="demo-label" data-page-node-id="fu19eW30Iwt0LU01EEGDOv"><span class="tag" data-page-node-id="ckJ7UwLkxmV53iG79GbKEH">方案 E</span> 胶囊（圆角 999px）</div>
+    <div class="demo-desc" data-page-node-id="EI4D8BoWWau5FBUHEDduUs">12% 主色淡底 + 全圆角胶囊，13px。保留一点"徽章感"，但已无图标无 ×，比原来的实心渐变轻盈很多。</div>
+    <div class="search-container" data-page-node-id="FHGgN34EIZ7tTYVbypPk7R">
+      <div class="search-input-wrapper" data-page-node-id="ZSx0DX52hfhV0krScEzWPu">
+        <span class="badge-e" data-page-node-id="btTsTLcfwtJt5sXmjHWLPn">Bing</span>
+        <input class="search-input" placeholder="在 Bing 中搜索..." data-page-node-id="gUahJCao3eVXCJij5u7Ow7" />
+      </div>
+    </div>
+  </div>
+
+  <div class="demo" data-page-node-id="GEDBenEgrdGOVPoA9wSRsK">
+    <div class="demo-label" data-page-node-id="4oy2llwB0M4OB6UzB9UBhN"><span class="tag old" data-page-node-id="r4KoI6OC27n6WJaPFTozmW">参考</span> 长名称截断效果</div>
+    <div class="demo-desc" data-page-node-id="cnS3GYXA52hYmyBGl0GUfP">引擎名过长时自动 ellipsis 截断，不会撑破布局、不会挤压输入区。上：方案 A，下：方案 E。</div>
+    <div class="search-container" data-page-node-id="XQfRzRb1FHf5F5SDBT4MBK">
+      <div class="search-input-wrapper" data-page-node-id="r5dPCwbmR88GogHlO3svDt">
+        <span class="badge-a" data-page-node-id="9GeYu9uJSI1MR83nzV2qrc">Google 搜索（超长名称测试）</span>
+        <input class="search-input" placeholder="在 Google 搜索 中搜索..." data-page-node-id="e8gAv0GYlL6QaT8K8F0za5" />
+      </div>
+    </div>
+    <div class="search-container" data-page-node-id="f52NLJXHdoFSbp3ZBBH0Yw">
+      <div class="search-input-wrapper" data-page-node-id="Dh4vfMzz8bx7gsu7dB8BZm">
+        <span class="badge-e" data-page-node-id="BqAi6UIXFtUb2HPIXZWRmx">Google 搜索（超长名称测试）</span>
+        <input class="search-input" placeholder="在 Google 搜索 中搜索..." data-page-node-id="mduwaFtV0N0ZvbwoCYD7ee" />
+      </div>
+    </div>
+  </div>
+
+  <div class="demo" data-page-node-id="JpMYgx3GjkcpmMhlGTlJ4L">
+    <div class="demo-label" data-page-node-id="M1t8xWtp5MI7pGw5g8fz8E"><span class="tag old" data-page-node-id="Yt3rLtYVqJmlhpaY2bIKa6">参考</span> 清除后的空状态</div>
+    <div class="demo-desc" data-page-node-id="ZelcnhBK5utumxk1LFYvge">放大镜图标回归 + 命令提示条出现。窗口高度 100px（输入 56 + 提示 44），圆角完整保留。</div>
+    <div class="search-container" data-page-node-id="mD13zR9b6mJMCTocugU2xX">
+      <div class="search-input-wrapper" data-page-node-id="8krf9YL5vfeNCrfuVsAbD2">
+        <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="t6PY5xT5jZFtWWX11DbkGn">
+          <circle cx="11" cy="11" r="8" data-page-node-id="1Jq08G2cKFyswZ56ridkBb"/><path d="m21 21-4.35-4.35" data-page-node-id="MjD6LKBsLkEz5x4B6ZK3PE"/>
+        </svg>
+        <input class="search-input" placeholder="搜索应用或文件夹..." data-page-node-id="PGozp5SGhV1LPR0uU4qHyy" />
+      </div>
+      <div class="search-command-hints" data-page-node-id="lyedGZHNOoyfMwKmnfEEk2">
+        <span data-page-node-id="1zweqc8hbu62X4BQP0ISrx">输入 <kbd data-page-node-id="26YHG7AWfYQsgojDfOkJBw">&gt;</kbd> 查看快捷命令</span>
+        <span data-page-node-id="PsMxLNfjFPyhF3jD2xDe2v"><kbd data-page-node-id="us8JSqEMGG7yGIHZsKzrDM">Enter</kbd> 打开</span>
+        <span data-page-node-id="X9ErzZC7qFMWEFtTFlfFBU"><kbd data-page-node-id="18yXqINirXbeET4RiG8FEK">Delete</kbd> 隐藏结果</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="note" data-page-node-id="kJGrZkHAiZHE4uAaMDBitR">
+  <b data-page-node-id="na7PKz0D2G9FXDQVKuPscK">去掉 × 之后的注意事项：</b>
+  <ul data-page-node-id="2LCTtQ6dSAQRoFAGmfRZbK">
+    <li class="warn" data-page-node-id="0lrz8aSfBuSuUGpSd4P5xB">清除引擎只剩 <b data-page-node-id="8B1shkzN5HP99hmfJtdVt2">Backspace</b>（输入框为空时按）和 <b data-page-node-id="AR1qW7pe73g6trfyZjAfzA">Esc</b> 两条路径，这两个都已正常工作。</li>
+    <li data-page-node-id="0HCxQqEgJtY5lVrUhwA4jS">徽章现在是<b data-page-node-id="kvTVUXLBMPwa8g2zrTd1h0">纯展示元素</b>，不可点击——视觉上也更符合"它就是个状态标签"的直觉。</li>
+    <li data-page-node-id="jfeCPxNYcxJVvHQGY18ch9"><b data-page-node-id="QpImEqxmdlfrpzXy7fSpi1">圆角</b>：A/B 是 8px，C/D 更贴合输入行，E 是 999px 全圆胶囊。</li>
+    <li data-page-node-id="KNqs4Q4mIpHZcuzYnUjser"><b data-page-node-id="nKXwbhVJupjIwAvqD1vIAp">字号</b>：A/B/E 13px，C 14px，D 15px（与输入一致）。</li>
+    <li data-page-node-id="jjemzPXu3o3HicctFt1WwS"><b data-page-node-id="ehaAk9CAW55BEiMyJBqE21">颜色</b>：跟随主题主色，改主题色徽章会一起变。</li>
+  </ul>
+</div>
+
+</body>
+</html>
