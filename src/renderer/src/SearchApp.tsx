@@ -180,6 +180,20 @@ function SearchApp() {
     }
   }, [activeIndex, results])
 
+  // 圆角兜底：实时测量 .search-container 实际渲染高度并同步窗口大小。
+  // 任何"窗口高度 < 内容实际高度"的情况（硬编码常量算错、徽章/字体变化、未来新增区块等）
+  // 都会导致 overflow:hidden 容器被窗口边界裁掉底部圆角。这一步是根治该问题的统一机制，
+  // 让窗口高度永远等于内容高度，替代所有手算的 INPUT_HEIGHT/EMPTY_SEARCH_HEIGHT 常量。
+  useLayoutEffect(() => {
+    const container = document.querySelector('.search-container') as HTMLElement | null
+    if (!container) return
+    const height = Math.ceil(container.getBoundingClientRect().height)
+    if (height > 0 && height !== currentHeightRef.current) {
+      currentHeightRef.current = height
+      window.electronAPI.resizeSearchWindow(height)
+    }
+  }, [query, results, activeEngine])
+
   const resizeWindow = useCallback((resultCount: number, hasQuery: boolean = false) => {
     if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
     resizeTimerRef.current = setTimeout(() => {
@@ -557,6 +571,28 @@ function SearchApp() {
     }
   }
 
+  const clearActiveEngine = useCallback(() => {
+    const currentQuery = queryRef.current
+    setActiveEngine(null)
+    if (!currentQuery.trim()) {
+      // 清空引擎后命令提示条会重新渲染（min-height 44px），必须回到 EMPTY_SEARCH_HEIGHT，
+      // 否则内容超出窗口被 overflow:hidden 裁掉，容器底部圆角消失
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
+      setResults([])
+      resultsRef.current = []
+      setActiveIndex(0)
+      currentHeightRef.current = EMPTY_SEARCH_HEIGHT
+      window.electronAPI.resizeSearchWindow(EMPTY_SEARCH_HEIGHT)
+    } else {
+      const filtered = filterApps(currentQuery)
+      setResults(filtered)
+      resultsRef.current = filtered
+      setActiveIndex(0)
+      resizeWindow(filtered.length, true)
+    }
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }, [filterApps, resizeWindow])
+
   const handleSearch = useCallback(() => handleSearchRef.current(), [])
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -649,26 +685,28 @@ function SearchApp() {
         })
       }
     } else if (e.key === 'Backspace' && queryRef.current === '' && activeEngine) {
-      setActiveEngine(null)
-      currentHeightRef.current = INPUT_HEIGHT
-      window.electronAPI.resizeSearchWindow(INPUT_HEIGHT)
+      // 复用 clearActiveEngine：它会回到 EMPTY_SEARCH_HEIGHT，
+      // 否则命令提示条（44px）撑出窗口被裁切，容器底部圆角丢失
+      clearActiveEngine()
     }
-  }, [activeEngine, handleSearch])
+  }, [activeEngine, handleSearch, clearActiveEngine])
 
   const hasResults = results.length > 0
 
   return (
     <div className={`search-container theme-${config?.ui?.theme || 'aurora'}`}>
       <div className="search-input-wrapper">
-        <svg className="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="11" cy="11" r="8" />
-          <path d="m21 21-4.35-4.35" />
-        </svg>
-
-        {activeEngine && (
-          <div className="search-engine-badge">
-            <span>{activeEngine.name}</span>
-          </div>
+        {/* 搜索引擎徽章与搜索图标互斥：激活引擎时徽章顶替图标，清除后图标回归。
+            徽章为纯展示标签（方案 C：纯文字 + 右侧分隔竖线），清除走 Backspace / Esc。 */}
+        {activeEngine ? (
+          <span className="search-engine-badge" key={activeEngine.key} title={`正在使用 ${activeEngine.name} 搜索`}>
+            {activeEngine.name}
+          </span>
+        ) : (
+          <svg className="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
         )}
 
         <input

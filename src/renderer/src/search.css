@@ -80,18 +80,52 @@ html, body {
   opacity: 0.6;
 }
 
+/* 方案 C：纯文字标签 + 右侧分隔竖线，与输入行自然融合（无图标、无关闭按钮） */
 .search-engine-badge {
-  display: flex;
-  align-items: center;
-  background: linear-gradient(135deg, #4F46E5, #6366F1);
-  color: white;
-  padding: 4px 10px;
+  position: relative;
+  display: block;
+  background: transparent;
+  color: rgb(var(--brand-700));
+  padding: 4px 14px 4px 0;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 600;
   flex-shrink: 0;
+  line-height: 1.4;
   letter-spacing: 0.01em;
-  box-shadow: 0 2px 8px rgb(var(--brand-600) / 0.3);
+  white-space: nowrap;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: search-engine-badge-in 160ms ease-out;
+}
+
+.search-engine-badge::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 18px;
+  background: rgb(var(--brand-500) / 0.22);
+}
+
+@keyframes search-engine-badge-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-engine-badge {
+    animation: none;
+  }
 }
 
 .search-input {
@@ -298,6 +332,15 @@ html, body {
   border-bottom-color: rgb(var(--brand-400) / 0.16);
 }
 
+/* 深色下徽章需提亮，brand-700 在深底上对比度不足 */
+.search-container.theme-dark .search-engine-badge {
+  color: #C7D2FE;
+}
+
+.search-container.theme-dark .search-engine-badge::after {
+  background: rgb(var(--brand-400) / 0.38);
+}
+
 .search-container.theme-dark .search-input,
 .search-container.theme-dark .search-result-name {
   color: #E5E7EB;
@@ -351,6 +394,14 @@ html, body {
 
   .search-container.theme-system .search-input-wrapper {
     border-bottom-color: rgb(var(--brand-400) / 0.16);
+  }
+
+  .search-container.theme-system .search-engine-badge {
+    color: #C7D2FE;
+  }
+
+  .search-container.theme-system .search-engine-badge::after {
+    background: rgb(var(--brand-400) / 0.38);
   }
 
   .search-container.theme-system .search-input,
