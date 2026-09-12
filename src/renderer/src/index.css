@@ -51,10 +51,10 @@
   --aurora-600: #7C3AED;
 
   /* Semantic surfaces — single source of truth for .theme-dark / .theme-system */
-  --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 30%), rgba(252, 251, 248, 0.68);
+  --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0) 32%), rgba(252, 251, 248, 0.52);
   --glass-border: rgba(255, 255, 255, 0.8);
-  --card-bg: rgba(253, 252, 249, 0.72);
-  --card-border: rgba(255, 255, 255, 0.85);
+  --card-bg: rgba(253, 252, 249, 0.58);
+  --card-border: rgba(255, 255, 255, 0.75);
   --subtle-bg: rgba(252, 251, 248, 0.6);
   --subtle-border: rgba(255, 255, 255, 0.75);
   --tile-hover-bg: rgba(255, 255, 255, 0.72);
@@ -132,10 +132,10 @@ body {
   --slate-700: 229 231 235;
   --slate-800: 229 231 235;
 
-  --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 30%), rgba(15, 19, 18, 0.66);
+  --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 32%), rgba(15, 19, 18, 0.54);
   --glass-border: rgba(255, 255, 255, 0.16);
-  --card-bg: rgba(15, 19, 18, 0.62);
-  --card-border: rgba(255, 255, 255, 0.14);
+  --card-bg: rgba(15, 19, 18, 0.5);
+  --card-border: rgba(255, 255, 255, 0.12);
   --subtle-bg: rgba(15, 19, 18, 0.58);
   --subtle-border: rgba(255, 255, 255, 0.1);
   --tile-hover-bg: rgba(255, 255, 255, 0.06);
@@ -193,10 +193,10 @@ body {
     --slate-700: 229 231 235;
     --slate-800: 229 231 235;
 
-    --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 30%), rgba(15, 19, 18, 0.66);
+    --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 32%), rgba(15, 19, 18, 0.54);
     --glass-border: rgba(255, 255, 255, 0.16);
-    --card-bg: rgba(15, 19, 18, 0.62);
-    --card-border: rgba(255, 255, 255, 0.14);
+    --card-bg: rgba(15, 19, 18, 0.5);
+    --card-border: rgba(255, 255, 255, 0.12);
     --subtle-bg: rgba(15, 19, 18, 0.58);
     --subtle-border: rgba(255, 255, 255, 0.1);
     --tile-hover-bg: rgba(255, 255, 255, 0.06);
@@ -476,6 +476,24 @@ body {
   contain: strict;
 }
 
+/* 顶部光井：模拟窗光，与玻璃面板顶缘高光呼应 */
+.aurora-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 70% 45% at 50% -8%, rgba(255, 255, 255, 0.4), transparent 70%);
+}
+
+/* 细噪点：消除大渐变色带，增加玻璃"材质"感 */
+.aurora-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+}
+
 .aurora-orb {
   position: absolute;
   border-radius: 50%;
@@ -485,8 +503,8 @@ body {
 }
 
 .aurora-orb--indigo {
-  width: 400px;
-  height: 400px;
+  width: 470px;
+  height: 470px;
   background: radial-gradient(circle, #818CF8 0%, transparent 70%);
   top: -10%;
   right: -5%;
@@ -494,8 +512,8 @@ body {
 }
 
 .aurora-orb--frost {
-  width: 350px;
-  height: 350px;
+  width: 420px;
+  height: 420px;
   background: radial-gradient(circle, #6090FA 0%, transparent 70%);
   bottom: -15%;
   left: -8%;
@@ -503,12 +521,30 @@ body {
 }
 
 .aurora-orb--violet {
-  width: 280px;
-  height: 280px;
+  width: 340px;
+  height: 340px;
   background: radial-gradient(circle, #A78BFA 0%, transparent 70%);
   top: 40%;
   left: 50%;
   animation: orb-drift-3 22s ease-in-out infinite;
+}
+
+.aurora-orb--amber {
+  width: 360px;
+  height: 360px;
+  background: radial-gradient(circle, #F5B04C 0%, transparent 70%);
+  top: 6%;
+  left: 16%;
+  animation: orb-drift-2 34s ease-in-out infinite reverse;
+}
+
+.aurora-orb--rose {
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, #F0708A 0%, transparent 70%);
+  bottom: -6%;
+  right: 14%;
+  animation: orb-drift-1 28s ease-in-out infinite reverse;
 }
 
 @keyframes orb-drift-1 {
@@ -531,11 +567,38 @@ body {
 
 /* Glass effect — fixed elements (header, footer, modals) */
 .glass {
+  position: relative;
   background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(1.2);
-  -webkit-backdrop-filter: blur(20px) saturate(1.2);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 1px 2px rgb(var(--brand-600) / 0.04), 0 4px 12px rgb(var(--brand-600) / 0.03);
+  backdrop-filter: blur(40px) saturate(1.8) brightness(1.08);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.08);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.06),
+    0 1px 2px rgb(var(--brand-600) / 0.04),
+    0 4px 12px rgb(var(--brand-600) / 0.03);
+}
+
+/* 渐变描边：上亮下暗，玻璃厚度的边缘光 */
+.glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.08) 40%, rgba(15, 23, 42, 0.08));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.glass > * {
+  position: relative;
+  z-index: 2;
 }
 
 /* Glass card — transparent to show container blur */
@@ -686,6 +749,32 @@ body {
 .card-hover:hover {
   transform: translateY(-2px);
   box-shadow: 0 12px 28px rgb(var(--brand-600) / 0.14), 0 3px 8px rgba(15, 23, 42, 0.08);
+}
+
+/* C2 悬停"拿起"：玻璃亮度与边缘光增强 */
+.glass-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-card:hover {
+  backdrop-filter: blur(14px) saturate(1.3) brightness(1.06);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3) brightness(1.06);
+}
+
+/* D1 光泽扫过：hover 时 45° 高光从左滑到右 */
+.glass-card::after {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  background: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, 0.16) 50%, transparent 58%);
+  transform: translateX(-70%);
+  transition: transform 600ms ease;
+  pointer-events: none;
+}
+
+.glass-card:hover::after {
+  transform: translateX(70%);
 }
 .card-hover:active {
   transform: translateY(0) scale(0.98);

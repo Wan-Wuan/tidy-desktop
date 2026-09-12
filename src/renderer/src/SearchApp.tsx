@@ -187,7 +187,7 @@ function SearchApp() {
       currentHeightRef.current = height
       window.electronAPI.resizeSearchWindow(height)
     }
-  }, [query, results, activeEngine, config?.ui?.theme])
+  }, [query, results, activeEngine, config])
 
   const configRef = useRef(config)
   configRef.current = config

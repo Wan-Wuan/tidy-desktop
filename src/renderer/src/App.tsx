@@ -1697,6 +1697,8 @@ function App() {
         <div className="aurora-orb aurora-orb--indigo" />
         <div className="aurora-orb aurora-orb--frost" />
         <div className="aurora-orb aurora-orb--violet" />
+        <div className="aurora-orb aurora-orb--amber" />
+        <div className="aurora-orb aurora-orb--rose" />
       </div>
       <WindowResizeHandles />
       <SidebarResizeHandle
