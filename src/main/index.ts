@@ -308,6 +308,8 @@ function createSearchWindow(showOnReady = true) {
     skipTaskbar: true,
     transparent: true,
     hasShadow: false,
+    // 关闭系统方角圆整：透明窗口由内容自绘 26px 圆角，系统圆整会在四角留下方角伪影
+    roundedCorners: false,
     icon: getAppIcon(),
     webPreferences: {
       nodeIntegration: false,
