@@ -1,30 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <defs>
     <linearGradient id="bg" x1="80" y1="0" x2="440" y2="512" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#2A2622"/><stop offset="1" stop-color="#141210"/>
+      <stop stop-color="#FBF8F1"/><stop offset="1" stop-color="#EDE7DA"/>
     </linearGradient>
     <radialGradient id="halo" cx="0.5" cy="0.4" r="0.62">
       <stop offset="0" stop-color="#F2B419" stop-opacity=".32"/><stop offset="1" stop-color="#F2B419" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="boxin" x1="0" y1="0" x2="0" y2="1">
-      <stop stop-color="#0C0A08"/><stop offset="1" stop-color="#221E19"/>
+      <stop stop-color="#D9D2C2"/><stop offset="1" stop-color="#C9C1AD"/>
     </linearGradient>
     <linearGradient id="boxfront" x1="120" y1="300" x2="392" y2="420" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#3A342C"/><stop offset="1" stop-color="#211D18"/>
+      <stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#EFEADF"/>
     </linearGradient>
-    <linearGradient id="tileA" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFE9A8"/><stop offset="1" stop-color="#F2B419"/></linearGradient>
-    <linearGradient id="tileB" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#F7F2E4"/><stop offset="1" stop-color="#D8CFB8"/></linearGradient>
+    <linearGradient id="tileA" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FF8A7A"/><stop offset="1" stop-color="#E8483C"/></linearGradient>
+    <linearGradient id="tileB" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFD666"/><stop offset="1" stop-color="#F2A419"/></linearGradient>
     <filter id="soft" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
       <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#02110E" flood-opacity=".5"/>
     </filter>
   </defs>
   <rect width="512" height="512" rx="118" fill="url(#bg)"/>
   <rect width="512" height="512" rx="118" fill="url(#halo)"/>
-  <rect x="106" y="228" width="300" height="70" rx="18" fill="url(#boxin)" stroke="#F2B419" stroke-opacity=".4" stroke-width="2"/>
+  <rect x="106" y="228" width="300" height="70" rx="18" fill="url(#boxin)" stroke="#B45309" stroke-opacity=".4" stroke-width="2"/>
   <g filter="url(#soft)">
     <rect x="168" y="150" width="84" height="96" rx="20" fill="url(#tileA)"/>
     <rect x="262" y="142" width="84" height="104" rx="20" fill="url(#tileB)" transform="rotate(6 304 194)"/>
   </g>
   <rect x="96" y="292" width="320" height="112" rx="26" fill="url(#boxfront)"/>
-  <rect x="216" y="330" width="80" height="14" rx="7" fill="#F2B419" opacity=".55"/>
+  <rect x="216" y="330" width="80" height="14" rx="7" fill="#B45309" opacity=".55"/>
 </svg>
