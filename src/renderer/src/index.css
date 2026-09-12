@@ -120,7 +120,8 @@ body {
    无法用单一变量表达的规则（输入框、危险按钮、边框着色等）保留显式覆盖。
    .theme-dark 与 .theme-system（暗色媒体查询）共用同一组值。 */
 .theme-dark {
-  background: linear-gradient(160deg, #111827 0%, #1E1B4B 48%, #0F172A 100%);
+  /* 去除背景色：纯暗底 + 烟熏玻璃面板，与搜索框同款材质 */
+  background: #0C0F0E;
   color: #E5E7EB;
 
   --white: 30 41 59;
@@ -179,9 +180,13 @@ body {
   --summary-border: rgba(52, 211, 153, 0.38);
 }
 
+.theme-dark .aurora-bg {
+  display: none;
+}
+
 @media (prefers-color-scheme: dark) {
   .theme-system {
-    background: linear-gradient(160deg, #111827 0%, #1E1B4B 48%, #0F172A 100%);
+    background: #0C0F0E;
     color: #E5E7EB;
 
     --white: 30 41 59;
@@ -238,6 +243,10 @@ body {
     --progress-track-bg: rgba(30, 41, 59, 0.9);
     --summary-bg: rgba(6, 78, 59, 0.24);
     --summary-border: rgba(52, 211, 153, 0.38);
+  }
+
+  .theme-system .aurora-bg {
+    display: none;
   }
 }
 
@@ -1476,12 +1485,14 @@ body {
    所有玻璃面板的磨砂/透叠/边缘光都清晰可见 */
 .theme-glass {
   background:
-    radial-gradient(ellipse 80% 50% at 82% 8%, rgba(245, 176, 76, 0.5), transparent 62%),
-    linear-gradient(158deg, #07332D 0%, #0D5F52 28%, #147A63 46%, #B45309 82%, #92400E 100%);
+    radial-gradient(ellipse 58% 42% at 14% 2%, rgba(16, 185, 129, 0.42), transparent 60%),
+    radial-gradient(ellipse 52% 38% at 88% 8%, rgba(245, 176, 76, 0.34), transparent 62%),
+    radial-gradient(ellipse 66% 44% at 50% 104%, rgba(217, 119, 6, 0.3), transparent 65%),
+    #0C120F;
 }
 
 .theme-glass .aurora-orb {
-  opacity: 0.5;
+  opacity: 0.35;
 }
 
 .theme-glass .aurora-orb--indigo {
