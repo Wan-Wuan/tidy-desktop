@@ -2103,19 +2103,6 @@ function App() {
         </div>
       </main>
 
-      <footer className="app-footer glass px-6 py-2 text-xs text-slate-400 flex justify-between border-t border-brand-100/30">
-        <span>Esc 关闭窗口 · 方向键选择 · Enter 打开 · 右键更多操作</span>
-        <span className="flex items-center gap-3">
-          <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-white/60 text-slate-500 font-mono text-[10px] border border-brand-100/40">{config?.hotkey || 'Alt+Space'}</kbd>
-            显示/隐藏
-          </span>
-          <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-white/60 text-slate-500 font-mono text-[10px] border border-brand-100/40">{config?.searchHotkey || 'Ctrl+K'}</kbd>
-            搜索
-          </span>
-        </span>
-      </footer>
 
       {selectedAppIds.length > 0 && (
         <div className="glass fixed bottom-16 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-xl border border-brand-200/80 px-4 py-2.5 shadow-xl">
