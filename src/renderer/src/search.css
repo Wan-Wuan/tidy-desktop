@@ -1,4 +1,5 @@
-/* 与 index.css 保持一致的调色板变量（搜索窗是独立 document，需自带一份基础值） */
+/* 深色烟熏液态玻璃搜索窗 —— 无条件暗色玻璃材质（用户选定方向）
+   基础调色板变量：搜索窗是独立 document，需自带一份基础值 */
 :root {
   --brand-50: 238 242 255;
   --brand-100: 224 231 255;
@@ -21,6 +22,11 @@
   --slate-700: 51 65 85;
   --slate-800: 30 41 59;
   --slate-900: 15 23 42;
+
+  /* 玻璃文本色板（暗色玻璃专用） */
+  --glass-text: 242 247 245;
+  --glass-text-dim: 148 163 168;
+  --glass-mint: 125 240 221;
 }
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
@@ -51,41 +57,80 @@ html, body {
   background: transparent;
 }
 
+/* ── 烟熏玻璃容器：中度磨砂 + 高光边 + 悬浮投影 ── */
 .search-container {
-  background: rgba(255, 255, 255, 0.88);
-  backdrop-filter: blur(24px) saturate(1.3);
-  -webkit-backdrop-filter: blur(24px) saturate(1.3);
-  border: 1px solid rgba(224, 231, 255, 0.7);
-  border-radius: 18px;
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02) 42%, rgba(255, 255, 255, 0.05)),
+    rgba(15, 19, 18, 0.72);
+  backdrop-filter: blur(32px) saturate(1.5);
+  -webkit-backdrop-filter: blur(32px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 26px;
   box-shadow:
-    0 8px 40px rgb(var(--brand-600) / 0.1),
-    0 2px 8px rgba(0, 0, 0, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    0 24px 70px rgba(0, 0, 0, 0.5),
+    0 8px 24px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05);
   width: 100%;
   max-width: 600px;
   overflow: hidden;
 }
 
+/* 顶部高光渐变带 —— 液态玻璃的标志性光感 */
+.search-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0) 24%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.search-container > * {
+  position: relative;
+  z-index: 1;
+}
+
 .search-input-wrapper {
   display: flex;
   align-items: center;
-  padding: 14px 20px;
+  padding: 15px 22px;
   gap: 12px;
-  border-bottom: 1px solid rgb(var(--brand-500) / 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
 }
 
 .search-icon {
-  color: #6366F1;
+  color: var(--glass-mint);
   flex-shrink: 0;
-  opacity: 0.6;
+  opacity: 0.8;
+  filter: drop-shadow(0 0 6px rgba(125, 240, 221, 0.35));
 }
 
-/* 方案 C：纯文字标签 + 右侧分隔竖线，与输入行自然融合（无图标、无关闭按钮） */
+.search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 15px;
+  font-weight: 400;
+  background: transparent;
+  color: rgb(var(--glass-text));
+  caret-color: var(--glass-mint);
+  min-width: 0;
+}
+
+.search-input::placeholder {
+  color: rgb(var(--glass-text) / 0.4);
+  font-weight: 400;
+}
+
+/* 引擎徽章：纯文字标签 + 右侧分隔竖线 */
 .search-engine-badge {
   position: relative;
   display: block;
   background: transparent;
-  color: rgb(var(--brand-700));
+  color: var(--glass-mint);
   padding: 4px 14px 4px 0;
   border-radius: 6px;
   font-size: 15px;
@@ -108,7 +153,7 @@ html, body {
   transform: translateY(-50%);
   width: 1px;
   height: 18px;
-  background: rgb(var(--brand-500) / 0.22);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 @keyframes search-engine-badge-in {
@@ -128,22 +173,7 @@ html, body {
   }
 }
 
-.search-input {
-  flex: 1;
-  border: none;
-  outline: none;
-  font-size: 15px;
-  font-weight: 400;
-  background: transparent;
-  color: #1E293B;
-  min-width: 0;
-}
-
-.search-input::placeholder {
-  color: #94A3B8;
-  font-weight: 400;
-}
-
+/* ── 结果列表：整体玻璃化 ── */
 .search-results {
   max-height: 342px;
   overflow-y: auto;
@@ -151,7 +181,7 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 8px;
+  padding: 10px;
   overscroll-behavior: contain;
   scroll-behavior: auto;
 }
@@ -164,8 +194,9 @@ html, body {
   padding: 8px 12px;
   gap: 12px;
   cursor: pointer;
-  border-radius: 12px;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
   opacity: 0;
   animation: search-item-in 200ms ease-out forwards;
 }
@@ -184,22 +215,27 @@ html, body {
 }
 
 .search-result-item:hover {
-  background: rgb(var(--brand-500) / 0.06);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .search-result-item.active {
-  background: rgb(var(--brand-500) / 0.08);
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .search-result-item.active .search-result-name {
-  color: #4F46E5;
+  color: #FFFFFF;
 }
 
+/* 图标底座：暗色玻璃小方块 */
 .search-result-icon {
   width: 34px;
   height: 34px;
-  background: linear-gradient(135deg, #EEF2FF, #E0E7FF);
-  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -207,12 +243,14 @@ html, body {
 }
 
 .search-result-icon.folder {
-  background: linear-gradient(135deg, #FFF7ED, #FED7AA);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.22), rgba(251, 146, 60, 0.14));
+  border-color: rgba(251, 191, 36, 0.2);
 }
 
 .search-result-icon.action {
-  background: linear-gradient(135deg, #ECFDF5, #D1FAE5);
-  color: #047857;
+  background: linear-gradient(135deg, rgba(125, 240, 221, 0.2), rgba(94, 234, 212, 0.08));
+  border-color: rgba(125, 240, 221, 0.22);
+  color: var(--glass-mint);
   font-weight: 800;
   font-size: 12px;
 }
@@ -239,7 +277,7 @@ html, body {
   font-size: 14px;
   font-weight: 500;
   line-height: 18px;
-  color: #1E293B;
+  color: rgb(var(--glass-text));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -249,7 +287,7 @@ html, body {
 .search-result-path {
   font-size: 11px;
   line-height: 15px;
-  color: #94A3B8;
+  color: rgb(var(--glass-text) / 0.42);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -260,8 +298,8 @@ html, body {
 }
 
 .search-result-category {
-  background: rgb(var(--brand-500) / 0.08);
-  color: #4F46E5;
+  background: rgba(125, 240, 221, 0.12);
+  color: var(--glass-mint);
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 10px;
@@ -272,28 +310,20 @@ html, body {
 .search-no-results {
   padding: 14px 16px;
   text-align: center;
-  color: #94A3B8;
+  color: rgb(var(--glass-text) / 0.45);
   font-size: 13px;
   font-weight: 400;
-  border-top: 1px solid rgb(var(--brand-500) / 0.06);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.search-container.theme-dark {
-  background: rgba(15, 23, 42, 0.9);
-  border-color: rgb(var(--brand-400) / 0.32);
-  box-shadow:
-    0 16px 48px rgba(0, 0, 0, 0.34),
-    0 2px 10px rgb(var(--brand-500) / 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
+/* ── 空态快捷键提示 ── */
 .search-command-hints {
   min-height: 44px;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 14px;
-  color: rgba(71, 85, 105, 0.72);
+  padding: 8px 16px;
+  color: rgb(var(--glass-text) / 0.48);
   font-size: 12px;
   overflow-x: auto;
   white-space: nowrap;
@@ -308,138 +338,13 @@ html, body {
   padding: 0 6px;
   margin: 0 2px;
   border-radius: 6px;
-  color: rgb(var(--brand-700));
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(199, 210, 254, 0.78);
+  color: rgb(var(--glass-text));
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
   font-weight: 700;
-}
-
-.search-container.theme-dark .search-command-hints,
-.search-container.theme-system .search-command-hints {
-  color: #94A3B8;
-}
-
-.search-container.theme-dark .search-command-hints kbd,
-.search-container.theme-system .search-command-hints kbd {
-  color: #C7D2FE;
-  background: rgba(30, 41, 59, 0.72);
-  border-color: rgb(var(--brand-400) / 0.32);
-}
-
-.search-container.theme-dark .search-input-wrapper {
-  border-bottom-color: rgb(var(--brand-400) / 0.16);
-}
-
-/* 深色下徽章需提亮，brand-700 在深底上对比度不足 */
-.search-container.theme-dark .search-engine-badge {
-  color: #C7D2FE;
-}
-
-.search-container.theme-dark .search-engine-badge::after {
-  background: rgb(var(--brand-400) / 0.38);
-}
-
-.search-container.theme-dark .search-input,
-.search-container.theme-dark .search-result-name {
-  color: #E5E7EB;
-}
-
-.search-container.theme-dark .search-input::placeholder,
-.search-container.theme-dark .search-result-path,
-.search-container.theme-dark .search-no-results {
-  color: #94A3B8;
-}
-
-.search-container.theme-dark .search-result-item:hover {
-  background: rgb(var(--brand-400) / 0.12);
-}
-
-.search-container.theme-dark .search-result-item.active {
-  background: rgb(var(--brand-400) / 0.18);
-}
-
-.search-container.theme-dark .search-result-item.active .search-result-name,
-.search-container.theme-dark .search-result-category {
-  color: #C7D2FE;
-}
-
-.search-container.theme-dark .search-result-icon {
-  background: linear-gradient(135deg, rgb(var(--brand-600) / 0.28), rgb(var(--brand-500) / 0.2));
-}
-
-.search-container.theme-dark .search-result-icon.folder {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.24), rgba(251, 146, 60, 0.18));
-}
-
-.search-container.theme-dark .search-result-icon.action {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(45, 212, 191, 0.16));
-  color: #A7F3D0;
-}
-
-.search-container.theme-dark .search-result-category {
-  background: rgb(var(--brand-400) / 0.18);
-}
-
-@media (prefers-color-scheme: dark) {
-  .search-container.theme-system {
-    background: rgba(15, 23, 42, 0.9);
-    border-color: rgb(var(--brand-400) / 0.32);
-    box-shadow:
-      0 16px 48px rgba(0, 0, 0, 0.34),
-      0 2px 10px rgb(var(--brand-500) / 0.16),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  }
-
-  .search-container.theme-system .search-input-wrapper {
-    border-bottom-color: rgb(var(--brand-400) / 0.16);
-  }
-
-  .search-container.theme-system .search-engine-badge {
-    color: #C7D2FE;
-  }
-
-  .search-container.theme-system .search-engine-badge::after {
-    background: rgb(var(--brand-400) / 0.38);
-  }
-
-  .search-container.theme-system .search-input,
-  .search-container.theme-system .search-result-name {
-    color: #E5E7EB;
-  }
-
-  .search-container.theme-system .search-input::placeholder,
-  .search-container.theme-system .search-result-path,
-  .search-container.theme-system .search-no-results {
-    color: #94A3B8;
-  }
-
-  .search-container.theme-system .search-result-item:hover {
-    background: rgb(var(--brand-400) / 0.12);
-  }
-
-  .search-container.theme-system .search-result-item.active {
-    background: rgb(var(--brand-400) / 0.18);
-  }
-
-  .search-container.theme-system .search-result-item.active .search-result-name,
-  .search-container.theme-system .search-result-category {
-    color: #C7D2FE;
-  }
-
-  .search-container.theme-system .search-result-icon {
-    background: linear-gradient(135deg, rgb(var(--brand-600) / 0.28), rgb(var(--brand-500) / 0.2));
-  }
-
-  .search-container.theme-system .search-result-icon.action {
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(45, 212, 191, 0.16));
-    color: #A7F3D0;
-  }
-
-  .search-container.theme-system .search-result-category {
-    background: rgb(var(--brand-400) / 0.18);
-  }
 }
 
 ::-webkit-scrollbar {
@@ -451,12 +356,12 @@ html, body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: rgb(var(--brand-500) / 0.15);
+  background-color: rgba(255, 255, 255, 0.16);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(var(--brand-500) / 0.3);
+  background-color: rgba(255, 255, 255, 0.28);
 }
 
 @media (prefers-reduced-motion: reduce) {
