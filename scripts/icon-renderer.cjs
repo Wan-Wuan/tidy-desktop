@@ -6,8 +6,9 @@ const fs = require('fs')
 app.whenReady().then(async () => {
   try {
     const root = process.cwd()
-    const svgPath = path.join(root, 'build', 'app-icon.svg')
-    const workDir = path.join(root, 'build', 'icons')
+    // 可选参数：argv[2]=SVG 路径 argv[3]=输出目录（默认生成正式图标）
+    const svgPath = process.argv[2] ? path.resolve(process.argv[2]) : path.join(root, 'build', 'app-icon.svg')
+    const workDir = process.argv[3] ? path.resolve(process.argv[3]) : path.join(root, 'build', 'icons')
     fs.rmSync(workDir, { recursive: true, force: true })
     fs.mkdirSync(workDir, { recursive: true })
 

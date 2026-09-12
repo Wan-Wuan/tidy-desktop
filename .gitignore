@@ -10,3 +10,6 @@ Thumbs.db
 .workbuddy/
 build/icons/
 gitee-check.json
+build/icon-candidates/
+__pycache__/
+*.pyc
