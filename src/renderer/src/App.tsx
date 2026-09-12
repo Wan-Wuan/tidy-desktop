@@ -1660,6 +1660,7 @@ function App() {
     })
   }, [runUiCommand])
 
+  const toolbarIconOnly = config?.ui?.toolbarIconOnly === true
   const activeLayout = config?.ui?.layout || 'horizon-workspace'
   const sidebarWidth = sidebarWidthDraft ?? config?.ui?.sidebarWidth ?? 240
   const shellStyle = { '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties
@@ -1721,7 +1722,7 @@ function App() {
           <h1 className="text-lg font-display font-bold text-brand-700 tracking-tight">Tidy Desktop</h1>
         </div>
         <div className="app-header-actions flex min-w-0 items-center justify-end">
-          <div className="header-actions-group">
+          <div className={`header-actions-group ${toolbarIconOnly ? 'header-actions-icon-only' : ''}`}>
             <button
               onClick={() => setShowAddApp(true)}
               aria-label="添加应用"
