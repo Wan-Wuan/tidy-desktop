@@ -169,12 +169,6 @@ function App() {
     appsRef.current = apps
   }, [apps])
 
-  // 标题栏覆盖层配色跟随主题（Windows 原生窗口按钮）
-  useEffect(() => {
-    const theme = config?.ui?.theme || 'aurora'
-    window.electronAPI.setTitleBarOverlay(theme).catch(() => {})
-  }, [config?.ui?.theme])
-
   // 主题色（accent）：写入 brand 色阶 CSS 变量；留空回落到默认靛蓝
   useEffect(() => {
     const accent = config?.ui?.accentColor?.trim()
@@ -1713,7 +1707,7 @@ function App() {
         onCommit={(width) => void commitSidebarWidth(width)}
       />
 
-      <header className="app-header glass mx-4 mt-3 px-5 py-3 sticky top-3 z-20 rounded-2xl">
+      <header className="app-header glass px-5 py-3 sticky top-0 z-20 rounded-b-2xl">
         <div className="app-header-primary flex items-center justify-between gap-3">
         <div className="app-brand flex shrink-0 items-center gap-3">
           <img

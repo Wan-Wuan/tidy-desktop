@@ -31,16 +31,6 @@ function getSearchWindowLayout(): { width: number; verticalRatio: number } {
 }
 const SHORTCUT_RETRY_DELAY_MS = 1200
 
-// 各主题的标题栏覆盖层配色（按钮底色随应用主题，保持视觉一体）
-function titleBarOverlayFor(config: Config) {
-  const theme = config?.ui?.theme || 'aurora'
-  const dark = theme === 'dark' || theme === 'glass' ||
-    (theme === 'system' && require('electron').nativeTheme.shouldUseDarkColors)
-  return dark
-    ? { color: '#0C0F0E', symbolColor: '#E5E7EB', height: 36 }
-    : { color: '#F5F2EA', symbolColor: '#1F2937', height: 36 }
-}
-
 function getAppIcon() {
   return nativeImage.createFromPath(path.join(__dirname, '../../../build/icon-256.png'))
 }
@@ -130,9 +120,10 @@ function createWindow() {
     x: x ?? undefined,
     y: y ?? undefined,
     show: false,
-    // 隐藏原生标题条：窗口内容顶到边缘，右上角保留系统最小化/最大化/关闭按钮
+    // 完全无边框：无标题栏与系统按钮，拖拽/双击最大化走头部拖拽区，
+    // 关闭走 Esc / 托盘菜单 / 任务栏
+    frame: false,
     titleBarStyle: 'hidden',
-    titleBarOverlay: titleBarOverlayFor(config),
     resizable: true,
     title: 'tidy_desktop',
     icon: getAppIcon(),
@@ -142,6 +133,17 @@ function createWindow() {
       webSecurity: true,
       preload: path.join(__dirname, 'preload.js')
     }
+  })
+
+  // 无边框窗口最大化时填充工作区（不遮挡任务栏），还原时回到原尺寸
+  let normalBounds: Electron.Rectangle | null = null
+  win.on('maximize', () => {
+    normalBounds = win.getNormalBounds()
+    const display = screen.getDisplayMatching(win.getBounds())
+    win.setBounds(display.workArea)
+  })
+  win.on('unmaximize', () => {
+    if (normalBounds) win.setBounds(normalBounds)
   })
 
   let windowSizeSaveTimer: NodeJS.Timeout | null = null

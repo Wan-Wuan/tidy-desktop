@@ -884,9 +884,6 @@ body {
 }
 
 /* 右上角为系统窗口按钮覆盖层留位 */
-.app-header-actions {
-  padding-right: 128px;
-}
 
 .app-header-primary {
   min-height: 38px;
