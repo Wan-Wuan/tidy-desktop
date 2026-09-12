@@ -1,26 +1,40 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Tidy Desktop app icon">
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Tidy Desktop app icon">
   <defs>
-    <linearGradient id="bg" x1="78" y1="54" x2="440" y2="464" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#173532"/>
-      <stop offset=".58" stop-color="#10201F"/>
-      <stop offset="1" stop-color="#071312"/>
+    <linearGradient id="bg" x1="72" y1="36" x2="448" y2="484" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8A90FB"/>
+      <stop offset=".48" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#6D28D9"/>
     </linearGradient>
-    <linearGradient id="panel" x1="128" y1="126" x2="380" y2="374" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#F4FFFC"/>
-      <stop offset="1" stop-color="#D9EEE8"/>
+    <radialGradient id="glow" cx="0.26" cy="0.14" r="0.95">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".3"/>
+      <stop offset=".55" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="tileWhite" x1="125" y1="125" x2="241" y2="241" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".98"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity=".82"/>
     </linearGradient>
+    <linearGradient id="amber" x1="271" y1="125" x2="387" y2="241" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD34D"/>
+      <stop offset="1" stop-color="#FF9F45"/>
+    </linearGradient>
+    <filter id="tileShadow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#1E1B4B" flood-opacity=".3"/>
+    </filter>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <rect x="102" y="96" width="308" height="292" rx="58" fill="url(#panel)"/>
-  <rect x="128" y="131" width="256" height="222" rx="38" fill="#ECFAF6"/>
-  <circle cx="158" cy="120" r="9" fill="#FF6B5F"/>
-  <circle cx="188" cy="120" r="9" fill="#FFCA58"/>
-  <circle cx="218" cy="120" r="9" fill="#65D36E"/>
-  <rect x="150" y="164" width="88" height="72" rx="20" fill="#25BBA6"/>
-  <rect x="274" y="164" width="88" height="72" rx="20" fill="#4E7FFF"/>
-  <rect x="150" y="274" width="88" height="72" rx="20" fill="#FFB545"/>
-  <rect x="274" y="274" width="88" height="72" rx="20" fill="#76E4C7"/>
-  <path d="M150 252h212" fill="none" stroke="#143D39" stroke-width="13" stroke-linecap="round" opacity=".18"/>
-  <path d="M158 388c54 45 143 50 207 12" fill="none" stroke="#6EF1D4" stroke-width="24" stroke-linecap="round"/>
-  <path d="M335 384l40 14-30 34" fill="none" stroke="#F4FFFC" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <rect width="512" height="512" rx="118" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="118" fill="url(#glow)"/>
+
+  <g filter="url(#tileShadow)">
+    <rect x="125" y="125" width="116" height="116" rx="30" fill="url(#tileWhite)"/>
+    <rect x="125" y="271" width="116" height="116" rx="30" fill="#FFFFFF" opacity=".86"/>
+    <rect x="271" y="271" width="116" height="116" rx="30" fill="#FFFFFF" opacity=".78"/>
+    <g transform="rotate(-8 329 183)">
+      <rect x="271" y="125" width="116" height="116" rx="30" fill="url(#amber)"/>
+      <path d="M329 155c4.5 17 8.5 21 25.5 25.5-17 4.5-21 8.5-25.5 25.5-4.5-17-8.5-21-25.5-25.5 17-4.5 21-8.5 25.5-25.5Z" fill="#FFFFFF" opacity=".95"/>
+    </g>
+  </g>
+
+  <path d="M424 78c2.6 9.8 4.9 12.1 14.7 14.7-9.8 2.6-12.1 4.9-14.7 14.7-2.6-9.8-4.9-12.1-14.7-14.7 9.8-2.6 12.1-4.9 14.7-14.7Z" fill="#FFFFFF" opacity=".85"/>
+  <path d="M96 396c2 7.5 3.8 9.3 11.3 11.3-7.5 2-9.3 3.8-11.3 11.3-2-7.5-3.8-9.3-11.3-11.3 7.5-2 9.3-3.8 11.3-11.3Z" fill="#FFFFFF" opacity=".55"/>
 </svg>

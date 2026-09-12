@@ -4,8 +4,7 @@ import {
   FolderPlus,
   GearSix,
   MagicWand,
-  Plus,
-  SquaresFour
+  Plus
 } from '@phosphor-icons/react'
 import { AppItem, AutoCategoryRule, Category, Subcategory, Config, ShortcutImportItem, UiCommand } from '../../shared/types'
 import { isFolderPath, parseSteamUrl } from '../../shared/utils'
@@ -1709,9 +1708,13 @@ function App() {
       <header className="app-header glass mx-4 mt-3 px-5 py-3 sticky top-3 z-20 rounded-2xl">
         <div className="app-header-primary flex items-center justify-between gap-3">
         <div className="app-brand flex shrink-0 items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-md shadow-brand-500/20">
-            <SquaresFour size={18} color="white" weight="fill" aria-hidden="true" />
-          </div>
+          <img
+            src="./favicon.svg"
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            className="w-8 h-8 rounded-lg shadow-md shadow-brand-500/20"
+          />
           <h1 className="text-lg font-display font-bold text-brand-700 tracking-tight">Tidy Desktop</h1>
         </div>
         <div className="app-header-actions flex min-w-0 items-center justify-end gap-2">

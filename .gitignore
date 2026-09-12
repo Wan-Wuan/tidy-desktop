@@ -8,3 +8,4 @@ Thumbs.db
 *.mp4
 .claude/
 .workbuddy/
+build/icons/
