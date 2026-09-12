@@ -97,21 +97,28 @@ async function resolveLatestUpdate(): Promise<ResolvedUpdate | null> {
     { name: 'github', apiUrl: GITHUB_API }
   ]
 
+  // 双平台都探测完毕后，取版本号更高的源（两平台发布节奏可能不一致）
+  const candidates: ResolvedUpdate[] = []
+
   for (const source of sources) {
     try {
       const release = await fetchJson<any>(source.apiUrl)
       const version = (release.tag_name || '').replace(/^v/i, '')
       if (!version || compareVersions(version, app.getVersion()) <= 0) continue
-
       const installer = await getInstallerAsset(release, source.name)
       if (!installer) {
         errors.push(`${source.name} release is missing a verified installer`)
         continue
       }
-      return { version, installer, releaseNotes: release.body || '', source: source.name }
+      candidates.push({ version, installer, releaseNotes: release.body || '', source: source.name })
     } catch (error: any) {
       errors.push(`${source.name}: ${error.message || 'request failed'}`)
     }
+  }
+
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => compareVersions(b.version, a.version))
+    return candidates[0]
   }
 
   if (errors.length === sources.length) {
