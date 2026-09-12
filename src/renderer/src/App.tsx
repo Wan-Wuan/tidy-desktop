@@ -1660,7 +1660,7 @@ function App() {
     })
   }, [runUiCommand])
 
-  const toolbarIconOnly = config?.ui?.toolbarIconOnly === true
+  const toolbarIconOnly = config?.ui?.toolbarIconOnly !== false
   const activeLayout = config?.ui?.layout || 'horizon-workspace'
   const sidebarWidth = sidebarWidthDraft ?? config?.ui?.sidebarWidth ?? 240
   const shellStyle = { '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties

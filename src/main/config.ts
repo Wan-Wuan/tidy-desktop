@@ -114,7 +114,7 @@ export function getDefaultConfig() {
       searchTheme: 'dark' as const,
       searchOpacity: 0.72,
       searchHintsVisible: true,
-      toolbarIconOnly: false,
+      toolbarIconOnly: true,
     },
     defaultEngine: 'b',
     onboardingCompleted: false,
