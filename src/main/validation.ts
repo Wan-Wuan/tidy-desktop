@@ -18,6 +18,7 @@ const LAYOUTS = new Set(['command-rail', 'horizon-workspace', 'studio-split'])
 const QUICK_ACTIONS = new Set(['shutdown', 'restart', 'lock', 'settings', 'calculator', 'notepad', 'clipboard'])
 const CLOSE_ACTIONS = new Set(['tray', 'quit'])
 const SORT_MODES = new Set(['manual', 'name', 'launchCount', 'recent'])
+const SEARCH_THEMES = new Set(['dark', 'light'])
 const MAX_ITEMS = 5000
 const MAX_STRING_LENGTH = 8192
 const MAX_ICON_LENGTH = 2_000_000
@@ -80,7 +81,12 @@ function sanitizeUiSettings(value: unknown, defaults: UISettings): UISettings {
     searchMaxResults: Math.min(12, Math.max(4, Math.round(asFiniteNumber(value.searchMaxResults, defaults.searchMaxResults || 6)))),
     sortMode: SORT_MODES.has(asString(value.sortMode, defaults.sortMode || 'manual', 20))
       ? asString(value.sortMode, defaults.sortMode || 'manual', 20) as UISettings['sortMode']
-      : 'manual'
+      : 'manual',
+    searchTheme: SEARCH_THEMES.has(asString(value.searchTheme, defaults.searchTheme || 'dark', 10))
+      ? asString(value.searchTheme, defaults.searchTheme || 'dark', 10) as UISettings['searchTheme']
+      : 'dark',
+    searchOpacity: Math.min(0.95, Math.max(0.5, asFiniteNumber(value.searchOpacity, defaults.searchOpacity || 0.72))),
+    searchHintsVisible: asBoolean(value.searchHintsVisible, defaults.searchHintsVisible !== false)
   }
 }
 

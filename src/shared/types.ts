@@ -47,6 +47,9 @@ export interface UISettings {
   searchVerticalRatio?: number
   searchMaxResults?: number
   sortMode?: 'manual' | 'name' | 'launchCount' | 'recent'
+  searchTheme?: 'dark' | 'light'
+  searchOpacity?: number
+  searchHintsVisible?: boolean
 }
 
 export interface AutoCategoryRule {

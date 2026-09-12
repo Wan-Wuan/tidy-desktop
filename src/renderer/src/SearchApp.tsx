@@ -192,6 +192,10 @@ function SearchApp() {
   const configRef = useRef(config)
   configRef.current = config
 
+  const searchTheme = config?.ui?.searchTheme || 'dark'
+  const searchOpacity = config?.ui?.searchOpacity || 0.72
+  const hintsVisible = config?.ui?.searchHintsVisible !== false
+
   // 主题色（accent）：搜索窗是独立 document，需要自行注入
   useEffect(() => {
     const accent = config?.ui?.accentColor?.trim()
@@ -658,7 +662,11 @@ function SearchApp() {
     RESULTS_PADDING_Y * 2 + maxDisplay * RESULT_ITEM_HEIGHT + Math.max(0, maxDisplay - 1) * RESULT_ITEM_GAP
 
   return (
-    <div ref={containerRef} className={`search-container theme-${config?.ui?.theme || 'aurora'}`}>
+    <div
+      ref={containerRef}
+      className={`search-container theme-${config?.ui?.theme || 'aurora'} ${searchTheme === 'light' ? 'search-container--light' : ''}`}
+      style={{ '--glass-alpha': searchOpacity } as React.CSSProperties}
+    >
       <div className="search-input-wrapper">
         {/* 搜索引擎徽章与搜索图标互斥：激活引擎时徽章顶替图标，清除后图标回归。
             徽章为纯展示标签（方案 C：纯文字 + 右侧分隔竖线），清除走 Backspace / Esc。 */}
@@ -735,7 +743,7 @@ function SearchApp() {
           <span>没有找到匹配的应用或文件夹</span>
         </div>
       )}
-      {!hasResults && !query.trim() && !activeEngine && (
+      {!hasResults && !query.trim() && !activeEngine && hintsVisible && (
         <div className="search-command-hints">
           <span>输入 <kbd>&gt;</kbd> 查看快捷命令</span>
           <span><kbd>Enter</kbd> 打开</span>

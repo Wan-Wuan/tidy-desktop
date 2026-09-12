@@ -333,6 +333,50 @@ export const SettingsModal = React.memo(function SettingsModal({
                       }}
                     />
                   </Row>
+                  <Row label="玻璃主题">
+                    <Segmented
+                      options={[
+                        { value: 'dark', label: '深色烟熏' },
+                        { value: 'light', label: '浅色云瓷' }
+                      ]}
+                      value={ui.searchTheme || 'dark'}
+                      onChange={(v) => {
+                        const next = { ...ui, searchTheme: v }
+                        setUi(next)
+                        saveConfig({ ui: next })
+                      }}
+                    />
+                  </Row>
+                  <Row label="玻璃透明度" desc="搜索窗表面的不透明程度">
+                    <Range
+                      min={50}
+                      max={95}
+                      step={5}
+                      value={Math.round((ui.searchOpacity || 0.72) * 100)}
+                      display={Math.round((ui.searchOpacity || 0.72) * 100)}
+                      unit="%"
+                      onChange={(v) => {
+                        const next = { ...ui, searchOpacity: v / 100 }
+                        setUi(next)
+                        saveConfig({ ui: next })
+                      }}
+                      onReset={Math.round((ui.searchOpacity || 0.72) * 100) !== 72 ? () => {
+                        const next = { ...ui, searchOpacity: 0.72 }
+                        setUi(next)
+                        saveConfig({ ui: next })
+                      } : null}
+                    />
+                  </Row>
+                  <Row label="显示底部提示" desc="快捷键提示行；关闭后搜索框更紧凑">
+                    <Toggle
+                      on={ui.searchHintsVisible !== false}
+                      onChange={() => {
+                        const next = !(ui.searchHintsVisible !== false)
+                        setUi({ ...ui, searchHintsVisible: next })
+                        saveConfig({ ui: { ...ui, searchHintsVisible: next } })
+                      }}
+                    />
+                  </Row>
                   <Row label="搜索框宽度">
                     <Range
                       min={380}

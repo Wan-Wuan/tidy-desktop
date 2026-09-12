@@ -110,7 +110,10 @@ export function getDefaultConfig() {
       searchWidth: 600,
       searchVerticalRatio: 0.3,
       searchMaxResults: 6,
-      sortMode: 'manual' as const
+      sortMode: 'manual' as const,
+      searchTheme: 'dark' as const,
+      searchOpacity: 0.72,
+      searchHintsVisible: true
     },
     defaultEngine: 'b',
     onboardingCompleted: false,

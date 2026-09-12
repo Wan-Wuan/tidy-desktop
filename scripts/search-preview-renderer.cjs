@@ -9,10 +9,11 @@ app.whenReady().then(async () => {
     const css = fs.readFileSync(path.join(root, 'src', 'renderer', 'src', 'search.css'), 'utf8')
     const workDir = path.join(root, 'build', 'icons')
     fs.mkdirSync(workDir, { recursive: true })
+    const themeClass = process.argv[3] === 'light' ? 'search-container--light' : ''
     const html = `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style>
-      <style>body{width:620px;height:430px;overflow:hidden}#stage{position:absolute;left:10px;top:10px;width:600px}</style></head>
+      <style>body{width:620px;height:430px;overflow:hidden}body::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,#0F3D2E 0%,#134E4A 45%,#7C3AED 100%)}#stage{position:absolute;left:10px;top:10px;width:600px}</style></head>
       <body><div id="stage">
-      <div class="search-container">
+      <div class="search-container ${themeClass}">
         <div class="search-input-wrapper">
           <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           <input class="search-input" placeholder="搜索应用或文件夹...">
@@ -39,6 +40,12 @@ app.whenReady().then(async () => {
     })
     await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
     await new Promise(r => setTimeout(r, 500))
+    const info = await win.webContents.executeJavaScript(`(() => {
+      const el = document.querySelector('.search-container')
+      const cs = getComputedStyle(el)
+      return JSON.stringify({ cls: el.className, bg: cs.backgroundColor, color: cs.color, alpha: cs.getPropertyValue('--glass-alpha') })
+    })()`)
+    console.log('[debug]', info)
     const image = await win.webContents.capturePage({ x: 0, y: 0, width: 620, height: 430 })
     fs.writeFileSync(path.join(workDir, 'search-preview.png'), image.toPNG())
     console.log('search preview written')
