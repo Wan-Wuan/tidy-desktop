@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, dialog, screen, app, nativeImage, shell, clipboard } from 'electron'
+import { ipcMain, BrowserWindow, dialog, screen, app, nativeImage, shell, clipboard, nativeTheme } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import { getBackupDir } from '../backup'
@@ -173,6 +173,22 @@ export function registerSystemHandlers() {
     const w = mainWindowRef.current
     if (w && !w.isDestroyed() && event.sender === w.webContents) {
       mainWindowResizeSession = null
+    }
+  })
+
+  // 主题切换时由渲染层调用：更新标题栏覆盖层（原生窗口按钮）配色
+  ipcMain.handle('set-titlebar-overlay', (_, theme: unknown) => {
+    const win = mainWindowRef.current
+    if (!win || win.isDestroyed()) return false
+    const dark = theme === 'dark' || theme === 'glass' ||
+      (theme === 'system' && nativeTheme.shouldUseDarkColors)
+    try {
+      win.setTitleBarOverlay(dark
+        ? { color: '#0C0F0E', symbolColor: '#E5E7EB', height: 36 }
+        : { color: '#F5F2EA', symbolColor: '#1F2937', height: 36 })
+      return true
+    } catch {
+      return false
     }
   })
 

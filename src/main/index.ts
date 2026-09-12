@@ -31,6 +31,16 @@ function getSearchWindowLayout(): { width: number; verticalRatio: number } {
 }
 const SHORTCUT_RETRY_DELAY_MS = 1200
 
+// 各主题的标题栏覆盖层配色（按钮底色随应用主题，保持视觉一体）
+function titleBarOverlayFor(config: Config) {
+  const theme = config?.ui?.theme || 'aurora'
+  const dark = theme === 'dark' || theme === 'glass' ||
+    (theme === 'system' && require('electron').nativeTheme.shouldUseDarkColors)
+  return dark
+    ? { color: '#0C0F0E', symbolColor: '#E5E7EB', height: 36 }
+    : { color: '#F5F2EA', symbolColor: '#1F2937', height: 36 }
+}
+
 function getAppIcon() {
   return nativeImage.createFromPath(path.join(__dirname, '../../../build/icon-256.png'))
 }
@@ -120,7 +130,9 @@ function createWindow() {
     x: x ?? undefined,
     y: y ?? undefined,
     show: false,
-    frame: true,
+    // 隐藏原生标题条：窗口内容顶到边缘，右上角保留系统最小化/最大化/关闭按钮
+    titleBarStyle: 'hidden',
+    titleBarOverlay: titleBarOverlayFor(config),
     resizable: true,
     title: 'tidy_desktop',
     icon: getAppIcon(),

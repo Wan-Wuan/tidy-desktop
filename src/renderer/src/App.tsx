@@ -169,6 +169,12 @@ function App() {
     appsRef.current = apps
   }, [apps])
 
+  // 标题栏覆盖层配色跟随主题（Windows 原生窗口按钮）
+  useEffect(() => {
+    const theme = config?.ui?.theme || 'aurora'
+    window.electronAPI.setTitleBarOverlay(theme).catch(() => {})
+  }, [config?.ui?.theme])
+
   // 主题色（accent）：写入 brand 色阶 CSS 变量；留空回落到默认靛蓝
   useEffect(() => {
     const accent = config?.ui?.accentColor?.trim()

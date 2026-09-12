@@ -44,6 +44,7 @@ declare global {
       runUiCommand: (command: UiCommand) => Promise<boolean>
       selectFolder: () => Promise<string | null>
       hideMainWindow: () => Promise<void>
+      setTitleBarOverlay: (theme: string) => Promise<boolean>
       beginMainWindowResize: (edge: 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw', screenX: number, screenY: number) => Promise<boolean>
       updateMainWindowResize: (screenX: number, screenY: number) => void
       endMainWindowResize: () => void

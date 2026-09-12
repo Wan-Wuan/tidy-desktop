@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showSearchWindow: () => ipcRenderer.invoke('show-search-window'),
   hideSearchWindow: () => ipcRenderer.invoke('hide-search-window'),
   hideMainWindow: () => ipcRenderer.invoke('hide-main-window'),
+  setTitleBarOverlay: (theme: string) => ipcRenderer.invoke('set-titlebar-overlay', theme),
   beginMainWindowResize: (edge: string, screenX: number, screenY: number) => ipcRenderer.invoke('begin-main-window-resize', edge, screenX, screenY),
   updateMainWindowResize: (screenX: number, screenY: number) => ipcRenderer.send('update-main-window-resize', screenX, screenY),
   endMainWindowResize: () => ipcRenderer.send('end-main-window-resize'),

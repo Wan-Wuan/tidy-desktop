@@ -871,6 +871,21 @@ body {
   grid-row: 1;
   position: relative;
   top: auto;
+  /* 隐藏标题栏后：头部即窗口拖拽区 */
+  -webkit-app-region: drag;
+}
+
+.app-header button,
+.app-header a,
+.app-header input,
+.app-header select,
+.app-header img {
+  -webkit-app-region: no-drag;
+}
+
+/* 右上角为系统窗口按钮覆盖层留位 */
+.app-header-actions {
+  padding-right: 128px;
 }
 
 .app-header-primary {
