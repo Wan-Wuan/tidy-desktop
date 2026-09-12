@@ -13,7 +13,7 @@ import type {
 
 const APP_TYPES = new Set(['app', 'folder', 'steam'])
 const CARD_SIZES = new Set(['small', 'medium', 'large'])
-const THEMES = new Set(['aurora', 'light', 'dark', 'system'])
+const THEMES = new Set(['aurora', 'light', 'dark', 'system', 'glass'])
 const LAYOUTS = new Set(['command-rail', 'horizon-workspace', 'studio-split'])
 const QUICK_ACTIONS = new Set(['shutdown', 'restart', 'lock', 'settings', 'calculator', 'notepad', 'clipboard'])
 const CLOSE_ACTIONS = new Set(['tray', 'quit'])

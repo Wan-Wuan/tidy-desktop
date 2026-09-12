@@ -39,7 +39,7 @@ export interface UISettings {
   showIcon: boolean
   showName: boolean
   borderRadius: number
-  theme?: 'aurora' | 'light' | 'dark' | 'system'
+  theme?: 'aurora' | 'light' | 'dark' | 'system' | 'glass'
   layout?: 'command-rail' | 'horizon-workspace' | 'studio-split'
   sidebarWidth?: number
   accentColor?: string

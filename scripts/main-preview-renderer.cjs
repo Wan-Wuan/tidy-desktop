@@ -9,10 +9,10 @@ app.whenReady().then(async () => {
     const assetsDir = path.join(root, 'dist', 'renderer', 'assets')
     const cssFile = fs.readdirSync(assetsDir).filter(f => f.startsWith('main-') && f.endsWith('.css'))[0]
     const css = fs.readFileSync(path.join(assetsDir, cssFile), 'utf8')
-    const themeClass = process.argv[2] === 'light' ? 'theme-light' : 'theme-dark'
-    const outFile = path.join(root, 'build', 'icons', 'main-preview-' + (process.argv[2] === 'light' ? 'light' : 'dark') + '.png')
+    const themeClass = 'theme-' + (process.argv[2] || 'dark')
+    const outFile = path.join(root, 'build', 'icons', 'main-preview-' + (process.argv[2] || 'dark') + '.png')
 
-    const tile = (color) => '<div class="app-tile glass-card card-hover" style="height:120px"><div style="width:48px;height:48px;border-radius:14px;background:' + color + ';margin:8px auto 0"></div><p style="text-align:center;font-size:12px;color:#64748B;margin-top:10px">应用</p></div>'
+    const tile = (color) => '<div class="app-tile glass-card card-hover" style="height:120px"><div style="width:48px;height:48px;border-radius:14px;background:' + color + ';margin:8px auto 0"></div><p style="text-align:center;font-size:12px;color:rgb(var(--slate-600));margin-top:10px">应用</p></div>'
     const html = `<!doctype html><html><head><meta charset="utf-8"><style>${css}
       body{width:900px;height:640px;overflow:hidden}
       .mock-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;padding:4px 20px}
@@ -33,12 +33,12 @@ app.whenReady().then(async () => {
           <strong style="font-size:16px">Tidy Desktop</strong>
         </div>
         <div style="display:flex;gap:8px">
-          <span style="padding:6px 14px;border-radius:9px;background:#4F46E5;color:#fff;font-size:12px">添加应用</span>
+          <span style="padding:6px 14px;border-radius:9px;background:rgb(var(--brand-600));color:#fff;font-size:12px">添加应用</span>
           <span style="padding:6px 14px;border-radius:9px;background:rgba(255,255,255,.5);font-size:12px">设置</span>
         </div>
       </header>
       <div class="category-nav mock-pills">
-        <span class="mock-pill" style="background:#4F46E5;color:#fff">全部</span>
+        <span class="mock-pill" style="background:rgb(var(--brand-600));color:#fff">全部</span>
         <span class="mock-pill" style="background:rgba(255,255,255,.6)">编程</span>
         <span class="mock-pill" style="background:rgba(255,255,255,.6)">娱乐</span>
         <span class="mock-pill" style="background:rgba(255,255,255,.6)">工具</span>

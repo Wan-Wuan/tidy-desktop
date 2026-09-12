@@ -1470,3 +1470,69 @@ body {
     display: none;
   }
 }
+
+/* ═══ 玻璃主题：高饱和祖母绿→琥珀背景 + 全显霜玻璃 ═══
+   专为展示液态玻璃而设：背景色彩浓烈、明暗跨度大，
+   所有玻璃面板的磨砂/透叠/边缘光都清晰可见 */
+.theme-glass {
+  background:
+    radial-gradient(ellipse 80% 50% at 82% 8%, rgba(245, 176, 76, 0.5), transparent 62%),
+    linear-gradient(158deg, #07332D 0%, #0D5F52 28%, #147A63 46%, #B45309 82%, #92400E 100%);
+}
+
+.theme-glass .aurora-orb {
+  opacity: 0.5;
+}
+
+.theme-glass .aurora-orb--indigo {
+  background: radial-gradient(circle, #34D399 0%, transparent 70%);
+}
+
+.theme-glass .aurora-orb--frost {
+  background: radial-gradient(circle, #5EEAD4 0%, transparent 70%);
+}
+
+.theme-glass .aurora-orb--violet {
+  background: radial-gradient(circle, #D97706 0%, transparent 70%);
+}
+
+.theme-glass .aurora-orb--amber {
+  background: radial-gradient(circle, #FCD34D 0%, transparent 70%);
+}
+
+.theme-glass .aurora-orb--rose {
+  background: radial-gradient(circle, #FB7185 0%, transparent 70%);
+}
+
+.theme-glass .aurora-bg::before {
+  background: radial-gradient(ellipse 70% 42% at 50% -8%, rgba(255, 255, 255, 0.55), transparent 70%);
+}
+
+.theme-glass {
+  --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.06) 32%, rgba(255, 255, 255, 0.2)), rgba(255, 255, 255, 0.3);
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --card-bg: rgba(255, 255, 255, 0.52);
+  --card-border: rgba(255, 255, 255, 0.62);
+  --slate-400: 100 116 139;
+  --slate-500: 71 85 105;
+  --slate-600: 45 55 72;
+  --slate-700: 35 45 62;
+  --brand-500: 5 150 105;
+  --brand-600: 4 120 87;
+  --brand-700: 3 102 74;
+  --subtle-bg: rgba(255, 255, 255, 0.28);
+  --subtle-border: rgba(255, 255, 255, 0.4);
+  --tile-hover-bg: rgba(255, 255, 255, 0.55);
+  --tile-hover-border: rgba(255, 255, 255, 0.8);
+  --panel-bg: rgba(255, 255, 255, 0.46);
+  --panel-border: rgba(255, 255, 255, 0.55);
+  --menu-bg: rgba(252, 251, 248, 0.92);
+  --menu-border: rgba(255, 255, 255, 0.6);
+  --menu-sub-bg: rgba(255, 255, 255, 0.45);
+  --rail-bg: rgba(255, 255, 255, 0.32);
+  --rail-border: rgba(255, 255, 255, 0.45);
+  --studio-bg: rgba(255, 255, 255, 0.32);
+  --studio-border: rgba(255, 255, 255, 0.45);
+  --grip-bg: rgba(255, 255, 255, 0.65);
+  --grip-border: rgba(255, 255, 255, 0.65);
+}

@@ -498,6 +498,7 @@ export const SettingsModal = React.memo(function SettingsModal({
                     <Segmented
                       options={[
                         { value: 'aurora', label: '极光' },
+                        { value: 'glass', label: '玻璃' },
                         { value: 'light', label: '浅色' },
                         { value: 'dark', label: '深色' },
                         { value: 'system', label: '跟随系统' }
