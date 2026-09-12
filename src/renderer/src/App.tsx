@@ -4,7 +4,8 @@ import {
   FolderPlus,
   GearSix,
   MagicWand,
-  Plus
+  Plus,
+  X
 } from '@phosphor-icons/react'
 import { AppItem, AutoCategoryRule, Category, Subcategory, Config, ShortcutImportItem, UiCommand } from '../../shared/types'
 import { isFolderPath, parseSteamUrl } from '../../shared/utils'
@@ -1756,6 +1757,14 @@ function App() {
             >
               <GearSix size={15} weight="bold" aria-hidden="true" />
               <span className="max-[899px]:hidden">设置</span>
+            </button>
+            <button
+              onClick={() => window.electronAPI.hideMainWindow()}
+              aria-label="关闭窗口"
+              title="关闭窗口"
+              className="header-action header-action-close"
+            >
+              <X size={15} weight="bold" aria-hidden="true" />
             </button>
           </div>
           <UpdateButton state={updateState} version={updateVersion} progress={updateProgress ?? undefined} />

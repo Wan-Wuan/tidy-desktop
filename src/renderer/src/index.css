@@ -921,6 +921,11 @@ body {
   background: rgb(var(--slate-500) / 0.2);
 }
 
+.header-action-close:hover {
+  background: rgba(239, 68, 68, 0.16);
+  color: #EF4444;
+}
+
 @media (max-width: 899px) {
   .header-action {
     padding: 8px 12px;
