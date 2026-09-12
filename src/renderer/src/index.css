@@ -1485,10 +1485,10 @@ body {
    所有玻璃面板的磨砂/透叠/边缘光都清晰可见 */
 .theme-glass {
   background:
-    radial-gradient(ellipse 58% 42% at 14% 2%, rgba(16, 185, 129, 0.42), transparent 60%),
-    radial-gradient(ellipse 52% 38% at 88% 8%, rgba(245, 176, 76, 0.34), transparent 62%),
-    radial-gradient(ellipse 66% 44% at 50% 104%, rgba(217, 119, 6, 0.3), transparent 65%),
-    #0C120F;
+    radial-gradient(ellipse 58% 42% at 14% 2%, rgba(52, 211, 153, 0.5), transparent 60%),
+    radial-gradient(ellipse 52% 38% at 88% 8%, rgba(245, 176, 76, 0.44), transparent 62%),
+    radial-gradient(ellipse 66% 44% at 50% 104%, rgba(217, 119, 6, 0.42), transparent 65%),
+    linear-gradient(158deg, #122A22 0%, #17352C 50%, #2A2118 100%);
 }
 
 .theme-glass .aurora-orb {
@@ -1520,29 +1520,29 @@ body {
 }
 
 .theme-glass {
-  --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.06) 32%, rgba(255, 255, 255, 0.2)), rgba(255, 255, 255, 0.3);
+  --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12) 32%, rgba(255, 255, 255, 0.26)), rgba(255, 255, 255, 0.42);
   --glass-border: rgba(255, 255, 255, 0.6);
-  --card-bg: rgba(255, 255, 255, 0.52);
-  --card-border: rgba(255, 255, 255, 0.62);
-  --slate-400: 100 116 139;
-  --slate-500: 71 85 105;
-  --slate-600: 45 55 72;
-  --slate-700: 35 45 62;
+  --card-bg: rgba(255, 255, 255, 0.68);
+  --card-border: rgba(255, 255, 255, 0.72);
+  --slate-400: 71 85 105;
+  --slate-500: 51 65 85;
+  --slate-600: 30 41 59;
+  --slate-700: 15 23 42;
   --brand-500: 5 150 105;
   --brand-600: 4 120 87;
-  --brand-700: 3 102 74;
-  --subtle-bg: rgba(255, 255, 255, 0.28);
+  --brand-700: 6 78 59;
+  --subtle-bg: rgba(255, 255, 255, 0.42);
   --subtle-border: rgba(255, 255, 255, 0.4);
-  --tile-hover-bg: rgba(255, 255, 255, 0.55);
+  --tile-hover-bg: rgba(255, 255, 255, 0.68);
   --tile-hover-border: rgba(255, 255, 255, 0.8);
-  --panel-bg: rgba(255, 255, 255, 0.46);
+  --panel-bg: rgba(255, 255, 255, 0.62);
   --panel-border: rgba(255, 255, 255, 0.55);
   --menu-bg: rgba(252, 251, 248, 0.92);
   --menu-border: rgba(255, 255, 255, 0.6);
   --menu-sub-bg: rgba(255, 255, 255, 0.45);
-  --rail-bg: rgba(255, 255, 255, 0.32);
+  --rail-bg: rgba(255, 255, 255, 0.48);
   --rail-border: rgba(255, 255, 255, 0.45);
-  --studio-bg: rgba(255, 255, 255, 0.32);
+  --studio-bg: rgba(255, 255, 255, 0.48);
   --studio-border: rgba(255, 255, 255, 0.45);
   --grip-bg: rgba(255, 255, 255, 0.65);
   --grip-border: rgba(255, 255, 255, 0.65);
