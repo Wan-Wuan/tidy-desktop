@@ -908,16 +908,17 @@ body {
 }
 
 .header-action + .header-action {
-  border-left: 1px solid var(--subtle-border);
+  border-left: 1px solid rgb(var(--slate-400) / 0.35);
 }
 
+/* 悬停：底色与文字色随主题翻转（浅色=加深，深色=提亮） */
 .header-action:hover {
-  background: var(--tile-hover-bg);
-  color: rgb(var(--slate-900));
+  background: rgb(var(--slate-500) / 0.14);
+  color: rgb(var(--slate-700));
 }
 
 .header-action:active {
-  background: var(--glass-row-hover, rgba(15, 23, 42, 0.12));
+  background: rgb(var(--slate-500) / 0.2);
 }
 
 @media (max-width: 899px) {
