@@ -32,11 +32,11 @@ app.whenReady().then(async () => {
           <img src="file:///${root.split('\\').join('/')}/public/favicon.svg" width="30" height="30" style="border-radius:8px">
           <strong style="font-size:16px">Tidy Desktop</strong>
         </div>
-        <div class="header-actions-group">
-          <span class="header-action"><b>+</b> 添加应用</span>
-          <span class="header-action">添加文件夹</span>
-          <span class="header-action">整理中心</span>
-          <span class="header-action">设置</span>
+        <div class="header-actions-group ${process.argv[3] === 'icon' ? 'header-actions-icon-only' : ''}">
+          <span class="header-action"><b>+</b><span>添加应用</span></span>
+          <span class="header-action"><span>添加文件夹</span></span>
+          <span class="header-action"><span>整理中心</span></span>
+          <span class="header-action"><span>设置</span></span>
         </div>
       </header>
       <div class="category-nav mock-pills">

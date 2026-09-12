@@ -50,6 +50,7 @@ export interface UISettings {
   searchTheme?: 'dark' | 'light'
   searchOpacity?: number
   searchHintsVisible?: boolean
+  toolbarIconOnly?: boolean
 }
 
 export interface AutoCategoryRule {

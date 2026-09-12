@@ -86,7 +86,8 @@ function sanitizeUiSettings(value: unknown, defaults: UISettings): UISettings {
       ? asString(value.searchTheme, defaults.searchTheme || 'dark', 10) as UISettings['searchTheme']
       : 'dark',
     searchOpacity: Math.min(0.95, Math.max(0.5, asFiniteNumber(value.searchOpacity, defaults.searchOpacity || 0.72))),
-    searchHintsVisible: asBoolean(value.searchHintsVisible, defaults.searchHintsVisible !== false)
+    searchHintsVisible: asBoolean(value.searchHintsVisible, defaults.searchHintsVisible !== false),
+    toolbarIconOnly: asBoolean(value.toolbarIconOnly, defaults.toolbarIconOnly === true)
   }
 }
 

@@ -113,7 +113,8 @@ export function getDefaultConfig() {
       sortMode: 'manual' as const,
       searchTheme: 'dark' as const,
       searchOpacity: 0.72,
-      searchHintsVisible: true
+      searchHintsVisible: true,
+      toolbarIconOnly: false,
     },
     defaultEngine: 'b',
     onboardingCompleted: false,

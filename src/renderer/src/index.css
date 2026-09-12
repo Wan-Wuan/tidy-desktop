@@ -926,6 +926,15 @@ body {
   color: #EF4444;
 }
 
+/* 无字模式：工具条只显示图标 */
+.header-actions-icon-only .header-action {
+  padding: 9px 13px;
+}
+
+.header-actions-icon-only .header-action span {
+  display: none;
+}
+
 @media (max-width: 899px) {
   .header-action {
     padding: 8px 12px;

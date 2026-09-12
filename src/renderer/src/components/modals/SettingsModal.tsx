@@ -494,6 +494,16 @@ export const SettingsModal = React.memo(function SettingsModal({
                       </label>
                     </div>
                   </Row>
+                  <Row label="选项卡无字模式" desc="头部工具条只显示图标，更紧凑">
+                    <Toggle
+                      on={ui.toolbarIconOnly === true}
+                      onChange={() => {
+                        const next = !(ui.toolbarIconOnly === true)
+                        setUi({ ...ui, toolbarIconOnly: next })
+                        saveConfig({ ui: { ...ui, toolbarIconOnly: next } })
+                      }}
+                    />
+                  </Row>
                   <Row label="主题模式">
                     <Segmented
                       options={[
