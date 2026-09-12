@@ -32,9 +32,11 @@ app.whenReady().then(async () => {
           <img src="file:///${root.split('\\').join('/')}/public/favicon.svg" width="30" height="30" style="border-radius:8px">
           <strong style="font-size:16px">Tidy Desktop</strong>
         </div>
-        <div style="display:flex;gap:8px">
-          <span style="padding:6px 14px;border-radius:9px;background:rgb(var(--brand-600));color:#fff;font-size:12px">添加应用</span>
-          <span style="padding:6px 14px;border-radius:9px;background:rgba(255,255,255,.5);font-size:12px">设置</span>
+        <div class="header-actions-group">
+          <span class="header-action"><b>+</b> 添加应用</span>
+          <span class="header-action">添加文件夹</span>
+          <span class="header-action">整理中心</span>
+          <span class="header-action">设置</span>
         </div>
       </header>
       <div class="category-nav mock-pills">

@@ -883,6 +883,49 @@ body {
   -webkit-app-region: no-drag;
 }
 
+/* macOS 风格连体工具条：统一底色、细分隔线，替代四色按钮 */
+.header-actions-group {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--subtle-bg);
+  border: 1px solid var(--subtle-border);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+}
+
+.header-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(var(--slate-700));
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.header-action + .header-action {
+  border-left: 1px solid var(--subtle-border);
+}
+
+.header-action:hover {
+  background: var(--tile-hover-bg);
+  color: rgb(var(--slate-900));
+}
+
+.header-action:active {
+  background: var(--glass-row-hover, rgba(15, 23, 42, 0.12));
+}
+
+@media (max-width: 899px) {
+  .header-action {
+    padding: 8px 12px;
+  }
+}
+
 /* 右上角为系统窗口按钮覆盖层留位 */
 
 .app-header-primary {

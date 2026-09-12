@@ -1719,51 +1719,45 @@ function App() {
           />
           <h1 className="text-lg font-display font-bold text-brand-700 tracking-tight">Tidy Desktop</h1>
         </div>
-        <div className="app-header-actions flex min-w-0 items-center justify-end gap-2">
-          <button
-            onClick={() => setShowAddApp(true)}
-            aria-label="添加应用"
-            title="添加应用"
-            className="focus-ring cursor-pointer px-2.5 min-[900px]:px-3.5 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 text-sm font-medium transition-colors duration-200 shadow-sm shadow-brand-500/20 hover:shadow-md hover:shadow-brand-500/30"
-          >
-            <span className="flex items-center gap-1.5">
+        <div className="app-header-actions flex min-w-0 items-center justify-end">
+          <div className="header-actions-group">
+            <button
+              onClick={() => setShowAddApp(true)}
+              aria-label="添加应用"
+              title="添加应用"
+              className="header-action"
+            >
               <Plus size={15} weight="bold" aria-hidden="true" />
               <span className="max-[899px]:hidden">添加应用</span>
-            </span>
-          </button>
-          <button
-            onClick={handleAddFolder}
-            aria-label="添加文件夹"
-            title="添加文件夹"
-            className="focus-ring cursor-pointer px-2.5 min-[900px]:px-3.5 py-2 bg-frost-500 text-white rounded-lg hover:bg-frost-600 text-sm font-medium transition-colors duration-200 shadow-sm shadow-frost-400/20"
-          >
-            <span className="flex items-center gap-1.5">
+            </button>
+            <button
+              onClick={handleAddFolder}
+              aria-label="添加文件夹"
+              title="添加文件夹"
+              className="header-action"
+            >
               <FolderPlus size={15} weight="bold" aria-hidden="true" />
               <span className="max-[899px]:hidden">添加文件夹</span>
-            </span>
-          </button>
-          <button
-            onClick={() => setShowSmartOrganize(true)}
-            aria-label="整理中心"
-            title="整理中心"
-            className="focus-ring cursor-pointer px-2.5 min-[900px]:px-3.5 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-sm font-medium transition-colors duration-200 shadow-sm shadow-emerald-500/20 hover:shadow-md hover:shadow-emerald-500/25"
-          >
-            <span className="flex items-center gap-1.5">
+            </button>
+            <button
+              onClick={() => setShowSmartOrganize(true)}
+              aria-label="整理中心"
+              title="整理中心"
+              className="header-action"
+            >
               <MagicWand size={15} weight="bold" aria-hidden="true" />
               <span className="max-[899px]:hidden">整理中心</span>
-            </span>
-          </button>
-          <button
-            onClick={() => setShowSettings(true)}
-            aria-label="设置"
-            title="设置"
-            className="focus-ring cursor-pointer px-2.5 min-[900px]:px-3.5 py-2 bg-white/80 text-slate-700 rounded-lg hover:bg-slate-900 hover:text-white text-sm font-medium transition-colors duration-200 border border-slate-200/80"
-          >
-            <span className="flex items-center gap-1.5">
+            </button>
+            <button
+              onClick={() => setShowSettings(true)}
+              aria-label="设置"
+              title="设置"
+              className="header-action"
+            >
               <GearSix size={15} weight="bold" aria-hidden="true" />
               <span className="max-[899px]:hidden">设置</span>
-            </span>
-          </button>
+            </button>
+          </div>
           <UpdateButton state={updateState} version={updateVersion} progress={updateProgress ?? undefined} />
         </div>
         </div>
