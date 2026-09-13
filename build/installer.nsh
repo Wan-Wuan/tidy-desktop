@@ -7,21 +7,20 @@
   Pop $0
   ${if} $0 == 0
     Sleep 800
-    StrCpy $1 0
-    retry_force_kill:
-      nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T 1>nul 2>nul`
-      Pop $0
-      ${if} $0 == 0
-        IntOp $1 $1 + 1
-        ${if} $1 > 10
-          MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY retry_force_kill
-          Quit
-        ${endIf}
+  ${endIf}
+  StrCpy $1 0
+  retry_force_kill:
+    nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T 1>nul 2>nul`
+    Pop $0
+    ${if} $0 == 0
+      IntOp $1 $1 + 1
+      ${if} $1 <= 10
         Sleep 500
         Goto retry_force_kill
       ${endIf}
+      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY retry_force_kill
+      Quit
     ${endIf}
-  ${endIf}
 !macroend
 
 !macro customInstall
