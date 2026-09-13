@@ -6,7 +6,9 @@ directories:
   output: release
 files:
   - dist/**/*
+  # 主窗口/托盘图标的兜底来源（Windows 运行时优先读 extraResources 里的 ico）
   - build/icon-256.png
+  - build/app-icon.ico
   - package.json
 extraResources:
   - from: build/app-icon.ico

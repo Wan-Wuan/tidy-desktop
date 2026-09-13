@@ -1,4 +1,5 @@
 import { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen, dialog, shell, ipcMain, Notification } from 'electron'
+import fs from 'fs'
 import path from 'path'
 import type { Config, UiCommand } from '../shared/types'
 import { ensureDataDir, readJsonFile, writeJsonFile, getDefaultConfig, CONFIG_DIR, CONFIG_FILE, APPS_FILE, CATEGORIES_FILE } from './config'
@@ -31,8 +32,52 @@ function getSearchWindowLayout(): { width: number; verticalRatio: number } {
 }
 const SHORTCUT_RETRY_DELAY_MS = 1200
 
-function getAppIcon() {
-  return nativeImage.createFromPath(path.join(__dirname, '../../../build/icon-256.png'))
+/**
+ * 应用图标。
+ *
+ * Windows 的任务栏/托盘只认 .ico：把 PNG 交给 BrowserWindow 时窗口图标不会生效，
+ * 任务栏会退回进程默认图标（开发模式即 Electron 内置图标），表现为"应用内图标是新的、
+ * 任务栏图标还是 Electron"。因此这里按平台挑候选，逐个校验可读性后再缓存。
+ */
+let cachedAppIcon: Electron.NativeImage | null = null
+
+function getAppIcon(): Electron.NativeImage {
+  if (cachedAppIcon) return cachedAppIcon
+
+  // 首选带版本号的文件名：Windows 任务栏按「图标路径」缓存按钮图标，路径不变时
+  // 旧版本留下的错误缓存不会因覆盖安装而失效；每个版本写独立文件可强制重新解码。
+  const names = process.platform === 'win32'
+    ? [`app-icon-${app.getVersion()}.ico`, 'app-icon.ico', 'icon.ico', 'icon-256.png']
+    : ['icon-256.png', 'app-icon.ico']
+
+  // 打包后 extraResources 把 ico 放在 resources/build/（普通文件路径，最稳）；
+  // asar 内再留一份兜底，兼容早期只把图标打进 asar 的构建产物。
+  const dirs = app.isPackaged
+    ? [path.join(process.resourcesPath, 'build'), path.join(__dirname, '../../../build')]
+    : [path.join(__dirname, '../../../build')]
+
+  for (const dir of dirs) {
+    for (const name of names) {
+      const file = path.join(dir, name)
+      if (!fs.existsSync(file)) continue
+      const icon = nativeImage.createFromPath(file)
+      if (!icon.isEmpty()) {
+        cachedAppIcon = icon
+        return icon
+      }
+    }
+  }
+
+  console.warn('[icon] 未找到可用的应用图标，将回退到进程默认图标')
+  cachedAppIcon = nativeImage.createEmpty()
+  return cachedAppIcon
+}
+
+/** 无边框窗口在 Windows 上不会套用构造参数里的 icon，创建后需显式再设置一次 */
+function applyAppIcon(win: BrowserWindow) {
+  if (process.platform === 'darwin') return
+  const icon = getAppIcon()
+  if (!icon.isEmpty()) win.setIcon(icon)
 }
 
 /** 第一次把窗口关到托盘时给一条系统通知，避免用户以为程序已经退出 */
@@ -134,6 +179,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js')
     }
   })
+
+  applyAppIcon(win)
 
   // 无边框窗口最大化时填充工作区（不遮挡任务栏），还原时回到原尺寸
   let normalBounds: Electron.Rectangle | null = null
@@ -332,6 +379,8 @@ function createSearchWindow(showOnReady = true) {
       preload: path.join(__dirname, 'preload.js')
     }
   })
+
+  applyAppIcon(win)
 
   attachWindowSecurity(win)
 
@@ -544,7 +593,9 @@ app.on('ready', () => {
 
   Menu.setApplicationMenu(null)
   ensureDataDir()
-  app.setAppUserModelId('com.tidy-desktop.app')
+  // 任务栏按钮图标按 AUMID 走持久化缓存：开发态若与发行版共用 AUMID，
+  // electron.exe 的默认图标会把发行版的图标缓存再次污染，开发态用独立 AUMID 隔离。
+  app.setAppUserModelId(app.isPackaged ? 'com.tidy-desktop.app' : 'com.tidy-desktop.app.dev')
   runStartupBackup({
     files: [CONFIG_FILE, APPS_FILE, CATEGORIES_FILE],
     backupDir: getBackupDir(CONFIG_DIR)
