@@ -47,11 +47,15 @@ try {
   $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
   "[$ts] Waiting for app PID ${currentPid} to exit..." | Out-File -FilePath $logFile -Encoding UTF8
 
-  try {
-    Wait-Process -Id ${currentPid} -Timeout 30
-  } catch {
-    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-    "[$ts] Wait timed out or process already exited; continuing installer." | Out-File -FilePath $logFile -Append -Encoding UTF8
+  # 等到应用进程真正退出再安装（上限 120s）。旧实现 Wait-Process -Timeout 30
+  # 超时后照样安装，exe 被占用会导致"安装没有完成"。
+  $deadline = (Get-Date).AddSeconds(120)
+  while ((Get-Process -Id ${currentPid} -ErrorAction SilentlyContinue) -and ((Get-Date) -lt $deadline)) {
+    Start-Sleep -Milliseconds 500
+  }
+  if (Get-Process -Id ${currentPid} -ErrorAction SilentlyContinue) {
+    "[$ts] App still running after 120s; aborting install." | Out-File -FilePath $logFile -Append -Encoding UTF8
+    exit 1
   }
 
   $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'

@@ -1,3 +1,29 @@
+!macro customCheckAppRunning
+  ; 本应用"关闭窗口 = 最小化到托盘"，进程对 WM_CLOSE 不会真正退出；
+  ; 默认检测流程对这类托盘常驻应用会以"安装没有完成"告终。
+  ; 这里直接结束安装目录下的应用进程：先请求退出，再强制结束，确保升级总能完成。
+  DetailPrint `Checking for running "${PRODUCT_NAME}"...`
+  nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /T 1>nul 2>nul`
+  Pop $0
+  ${if} $0 == 0
+    Sleep 800
+    StrCpy $1 0
+    retry_force_kill:
+      nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T 1>nul 2>nul`
+      Pop $0
+      ${if} $0 == 0
+        IntOp $1 $1 + 1
+        ${if} $1 > 10
+          MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY retry_force_kill
+          Quit
+        ${endIf}
+        Sleep 500
+        Goto retry_force_kill
+      ${endIf}
+    ${endIf}
+  ${endIf}
+!macroend
+
 !macro customInstall
   ; 开发调试残留清理：dev 实例的通知功能会让 Chromium 在开始菜单创建 Electron.lnk，
   ; 旧版代码下它携带与发布应用相同的 AUMID，Explorer 解析任务栏按钮图标时
