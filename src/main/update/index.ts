@@ -72,7 +72,8 @@ async function getInstallerAsset(
   if (!exeAsset?.browser_download_url) return null
 
   let sha256 = parseSha256Digest(exeAsset.digest)
-  if (!sha256 && source === 'gitee' && exeAsset.name) {
+  if (!sha256 && exeAsset.name) {
+    // GitHub API 偶发不返回 digest 字段；两个渠道的发布物都附带 .sha256 文件，作为兜底
     const checksumAsset = assets.find((asset) =>
       asset.name === `${exeAsset.name}.sha256` &&
       asset.browser_download_url &&
@@ -220,7 +221,11 @@ export function registerUpdateHandlers() {
         return { success: true, filePath: updateFile }
       }
 
-      cleanupDownloadCache()
+      // 仅当缓存元数据与本次目标不符时清理；同版本的半成品文件保留用于断点续传
+      const cachedMeta = readDownloadCacheMeta()
+      if (cachedMeta && (cachedMeta.version !== version || cachedMeta.downloadUrl !== installerAsset.downloadUrl)) {
+        cleanupDownloadCache()
+      }
 
       await downloadWithRetry(installerAsset.downloadUrl, updateFile, (progress) => {
         if (!sender.isDestroyed()) {
@@ -229,6 +234,8 @@ export function registerUpdateHandlers() {
       })
       const actualSha256 = await hashFileSha256(updateFile)
       if (actualSha256 !== installerAsset.sha256) {
+        // 内容对不上说明断点不可信，删掉后下次从头下载
+        cleanupDownloadCache()
         throw new Error('Downloaded installer failed SHA-256 verification')
       }
       writeDownloadCacheMeta({
@@ -240,7 +247,7 @@ export function registerUpdateHandlers() {
 
       return { success: true, filePath: updateFile }
     } catch (err: any) {
-      cleanupDownloadCache()
+      // 网络类失败保留断点文件，用户再次点击时从断点续传（sha 不匹配已在上方清理）
       return { success: false, error: err.message || 'Download failed' }
     } finally {
       downloading = false

@@ -118,10 +118,12 @@ export function downloadFile(
   return new Promise((resolve, reject) => {
     let settled = false
 
-    const fail = (err: Error) => {
+    // 网络类失败默认保留半成品文件，下一次重试通过 Range 续传；
+    // 只在协议层错误（重定向异常、HTTP 状态异常）时清空重来。
+    const fail = (err: Error, keepPartial = false) => {
       if (settled) return
       settled = true
-      cleanupFile(dest)
+      if (!keepPartial) cleanupFile(dest)
       reject(err)
     }
 
@@ -136,7 +138,7 @@ export function downloadFile(
       existingSize = 0
     }
 
-    const follow = (downloadUrl: string, redirectsLeft: number) => {
+    const follow = (downloadUrl: string, redirectsLeft: number, freshRestart = false) => {
       if (redirectsLeft <= 0) {
         fail(new Error('Too many redirects'))
         return
@@ -155,10 +157,19 @@ export function downloadFile(
           const redirect = res.headers.location
           if (redirect && redirect.startsWith('https://')) {
             res.resume()
-            follow(redirect, redirectsLeft - 1)
+            follow(redirect, redirectsLeft - 1, freshRestart)
             return
           }
           fail(new Error('Invalid redirect'))
+          return
+        }
+
+        // 416 = 断点超出文件长度（上次中断在末尾/文件已变化），清掉从头下一轮
+        if (res.statusCode === 416 && existingSize > 0 && !freshRestart) {
+          existingSize = 0
+          cleanupFile(dest)
+          res.resume()
+          follow(downloadUrl, redirectsLeft - 1, true)
           return
         }
 
@@ -192,7 +203,7 @@ export function downloadFile(
           if (settled) return
           // Validate total size if known
           if (total > 0 && transferred !== total) {
-            fail(new Error(`Download incomplete: ${transferred}/${total} bytes`))
+            fail(new Error(`Download incomplete: ${transferred}/${total} bytes`), true)
             return
           }
           settled = true
@@ -201,19 +212,19 @@ export function downloadFile(
 
         file.on('error', () => {
           res.destroy()
-          fail(new Error('Write failed'))
+          fail(new Error('Write failed'), true)
         })
 
-        res.on('error', () => {
+        res.on('error', (err) => {
           file.destroy()
-          fail(new Error('Download stream error'))
+          fail(err, true)
         })
       })
 
-      req.on('error', (err) => fail(err))
+      req.on('error', (err) => fail(err, true))
       req.setTimeout(120000, () => {
         req.destroy()
-        fail(new Error('download timeout'))
+        fail(new Error('download timeout'), true)
       })
     }
 
@@ -225,7 +236,7 @@ export async function downloadWithRetry(
   url: string,
   dest: string,
   onProgress?: (progress: DownloadProgress) => void,
-  maxRetries = 3
+  maxRetries = 5
 ): Promise<void> {
   let lastError: Error | null = null
 
