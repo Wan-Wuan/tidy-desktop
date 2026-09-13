@@ -1,4 +1,11 @@
 !macro customInstall
+  ; 开发调试残留清理：dev 实例的通知功能会让 Chromium 在开始菜单创建 Electron.lnk，
+  ; 旧版代码下它携带与发布应用相同的 AUMID，Explorer 解析任务栏按钮图标时
+  ; 会按 AUMID 匹配到这个快捷方式、显示 electron.exe 的默认图标。
+  ${if} ${FileExists} "$SMPROGRAMS\Electron.lnk"
+    Delete "$SMPROGRAMS\Electron.lnk"
+  ${endIf}
+
   ${if} ${FileExists} "$INSTDIR\resources\build\app-icon.ico"
     ; 图标文件按版本号落盘：Windows 任务栏按「图标路径」缓存按钮图标，且不因覆盖安装、
     ; SHChangeNotify、Explorer 重启而失效（旧版本 ≤2.6.6 的非法 ICO 会把错误图标永久
