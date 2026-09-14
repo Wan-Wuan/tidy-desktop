@@ -692,7 +692,10 @@ body {
   background: var(--card-bg);
 }
 
-.glass-card:not([data-dragover]):not([data-selected]) {
+/* ⚠️ 必须同时排除 :focus-visible。
+   两条 :not() 把本规则抬到了 0,3,0，而键盘焦点环 `.focus-ring:focus-visible`
+   只有 0,2,0 —— 不排除的话，卡片获得键盘焦点时焦点环会被这条静态阴影盖掉。 */
+.glass-card:not([data-dragover]):not([data-selected]):not(:focus-visible) {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgb(var(--brand-600) / 0.05);
 }
 
@@ -820,8 +823,14 @@ body {
 .focus-ring {
   outline: none;
 }
+/* 用 !important 保护键盘焦点环。
+   项目里有多条自定义规则靠 box-shadow 画自己的效果（卡片静态阴影、分类按钮、
+   子分类激活态…），权重普遍 0,2,0 以上，且位置更靠后——不加 !important 的话
+   焦点环会在这些元素上被整条盖掉，键盘用户看不到自己在哪。
+   （.app-tile[data-dragging] 的 box-shadow:none 同为 !important 且更靠后，
+   拖拽态仍按预期覆盖，但拖拽中的元素本来也不会拿到 focus-visible。） */
 .focus-ring:focus-visible {
-  box-shadow: 0 0 0 2px rgb(var(--white) / 0.8), 0 0 0 4px rgb(var(--brand-500) / 0.5);
+  box-shadow: 0 0 0 2px rgb(var(--white) / 0.8), 0 0 0 4px rgb(var(--brand-500) / 0.5) !important;
 }
 
 /* ── Animation utilities ── */
@@ -1106,8 +1115,9 @@ body {
   color: rgb(var(--brand-700));
 }
 
-.layout-command-rail .category-nav > button[data-active="true"],
-.layout-command-rail .category-nav > button[data-active="true"]:hover {
+/* 激活态同样要让位给拖拽高亮：拖到"当前已选中的分类"上时也要能看出可放置 */
+.layout-command-rail .category-nav > button[data-active="true"]:not([data-dragover]),
+.layout-command-rail .category-nav > button[data-active="true"]:hover:not([data-dragover]) {
   background: rgb(var(--brand-600));
   border-color: transparent;
   color: #ffffff;
@@ -1125,8 +1135,8 @@ body {
   color: rgb(var(--brand-300));
 }
 
-.theme-dark.layout-command-rail .category-nav > button[data-active="true"],
-.theme-dark.layout-command-rail .category-nav > button[data-active="true"]:hover {
+.theme-dark.layout-command-rail .category-nav > button[data-active="true"]:not([data-dragover]),
+.theme-dark.layout-command-rail .category-nav > button[data-active="true"]:hover:not([data-dragover]) {
   background: rgb(var(--brand-600));
   border-color: transparent;
   color: #ffffff;
@@ -1144,8 +1154,8 @@ body {
     color: rgb(var(--brand-300));
   }
 
-  .theme-system.layout-command-rail .category-nav > button[data-active="true"],
-  .theme-system.layout-command-rail .category-nav > button[data-active="true"]:hover {
+  .theme-system.layout-command-rail .category-nav > button[data-active="true"]:not([data-dragover]),
+  .theme-system.layout-command-rail .category-nav > button[data-active="true"]:hover:not([data-dragover]) {
     background: rgb(var(--brand-600));
     border-color: transparent;
     color: #ffffff;
@@ -1245,9 +1255,11 @@ body {
 
 /* 排除拖拽悬停/选中态：这两个状态靠 Tailwind 的 ring-* / shadow-* / bg-* 表现，
    而它们的权重只有 0,1,0，会被本规则（0,2,0）整条盖掉，反馈等于不存在。 */
-.layout-command-rail .app-tile:not([data-dragover]):not([data-selected]),
-.layout-horizon-workspace .app-tile:not([data-dragover]):not([data-selected]),
-.layout-studio-split .app-tile:not([data-dragover]):not([data-selected]) {
+/* 同样排除 :focus-visible：本规则设了 box-shadow: none，
+   会把键盘焦点环（.focus-ring:focus-visible，仅 0,2,0）一并抹掉。 */
+.layout-command-rail .app-tile:not([data-dragover]):not([data-selected]):not(:focus-visible),
+.layout-horizon-workspace .app-tile:not([data-dragover]):not([data-selected]):not(:focus-visible),
+.layout-studio-split .app-tile:not([data-dragover]):not([data-selected]):not(:focus-visible) {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
@@ -1305,7 +1317,8 @@ body {
   font-weight: 650;
 }
 
-.layout-horizon-workspace .subcategory-nav > button[data-active="true"] {
+/* 这条是 box-shadow，会直接压掉拖拽高亮的 ring-2（ring 也是 box-shadow） */
+.layout-horizon-workspace .subcategory-nav > button[data-active="true"]:not([data-dragover]) {
   box-shadow: 0 0 0 2px rgb(var(--brand-500) / 0.16), 0 4px 12px rgb(var(--brand-600) / 0.12);
 }
 
@@ -1416,8 +1429,8 @@ body {
   color: rgb(var(--brand-300));
 }
 
-.theme-dark.layout-horizon-workspace .category-nav > button[data-active="true"],
-.theme-dark.layout-horizon-workspace .subcategory-nav > button[data-active="true"] {
+.theme-dark.layout-horizon-workspace .category-nav > button[data-active="true"]:not([data-dragover]),
+.theme-dark.layout-horizon-workspace .subcategory-nav > button[data-active="true"]:not([data-dragover]) {
   background: rgb(var(--brand-600));
   border-color: transparent;
   color: #ffffff;
@@ -1437,8 +1450,8 @@ body {
     color: rgb(var(--brand-300));
   }
 
-  .theme-system.layout-horizon-workspace .category-nav > button[data-active="true"],
-  .theme-system.layout-horizon-workspace .subcategory-nav > button[data-active="true"] {
+  .theme-system.layout-horizon-workspace .category-nav > button[data-active="true"]:not([data-dragover]),
+  .theme-system.layout-horizon-workspace .subcategory-nav > button[data-active="true"]:not([data-dragover]) {
     background: rgb(var(--brand-600));
     border-color: transparent;
     color: #ffffff;
@@ -1783,6 +1796,14 @@ body {
 .theme-glass .subcategory-nav .text-slate-400,
 .theme-glass .app-content .text-slate-400 {
   color: rgba(226, 232, 240, 0.82);
+}
+
+/* ⚠️ 上面那条 .app-content 会连带命中卡片内的文字——卡片在玻璃主题下是
+   "白玻璃底 + 深色字"，而 AppCard 的三个操作按钮（编辑/删除/发送）正是
+   text-slate-400，被提亮后就成了白底白字。这里把卡片内的恢复成深色。
+   权重与上面相同（0,3,0），靠位置更后生效。 */
+.theme-glass .app-tile .text-slate-400 {
+  color: rgb(var(--slate-400));
 }
 
 /* 分类/子分类按钮原本是 50%~60% 白底，在深色高饱和背景上混出来发灰，

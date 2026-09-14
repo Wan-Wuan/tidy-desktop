@@ -267,6 +267,12 @@ function App() {
         window.clearTimeout(iconBackfillTimerRef.current)
         iconBackfillTimerRef.current = null
       }
+      // 看门狗是个 30 秒的长定时器，卸载时必须清掉，
+      // 否则它会在组件销毁后触发 clearDragState（对已卸载组件 setState）
+      if (dragWatchdogRef.current) {
+        window.clearTimeout(dragWatchdogRef.current)
+        dragWatchdogRef.current = null
+      }
     }
   }, [])
 
@@ -302,6 +308,14 @@ function App() {
       setCopyToast(null)
       copyToastTimerRef.current = null
     }, 1800)
+  }, [])
+  useEffect(() => {
+    return () => {
+      if (copyToastTimerRef.current) {
+        window.clearTimeout(copyToastTimerRef.current)
+        copyToastTimerRef.current = null
+      }
+    }
   }, [])
   const [activeSubcategoryId, setActiveSubcategoryId] = useState<string | null>(null)
   const [sidebarWidthDraft, setSidebarWidthDraft] = useState<number | null>(null)
@@ -414,6 +428,9 @@ function App() {
       setTimeout(() => { suppressAppContextMenuRef.current = false }, 700)
       const el = document.elementFromPoint(e.clientX, e.clientY)
       const target = findDropTarget(el)
+      // 先收尾再执行移动：下面的操作会 setApps 换分组、移动源卡片 DOM，
+      // 事后再清容易漏（之前就漏了 dragOverAppRef / groupInsertPlanRef）
+      clearDragState()
       if (target) {
         if (target.type === 'app' && target.id !== appId) {
           await handleReorderApp(appId, target.id)
@@ -425,14 +442,6 @@ function App() {
           await handleMoveAppToSubcategory(appId, target.id === '__none__' ? null : target.id)
         }
       }
-      setDraggedAppId(null)
-      setDragOverAppId(null)
-      setDragOverCategory(null)
-      setDragOverSubId(null)
-      setDragOverGroupSubId(null)
-      rightDragTargetRef.current = null
-      dragOverGroupRef.current = null
-      draggedAppIdRef.current = null
     }
 
     document.addEventListener('mousemove', handleRightDragMove)
@@ -1577,7 +1586,12 @@ function App() {
     dragCounterRef.current = 0
     isExternalDragRef.current = false
 
-    if (draggedAppIdRef.current) return
+    // 拖应用落到网格空白处（不属于任何分组/卡片）时走到这里。
+    // 不能只 return——拖拽态要等 100ms 后的 dragend 才清，这段时间预览贴图还挂在屏幕上
+    if (draggedAppIdRef.current) {
+      clearDragState()
+      return
+    }
 
     // Check for Steam URL in dragged text (e.g. dragging from browser)
     const textData = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/uri-list')
@@ -1643,7 +1657,7 @@ function App() {
       await extractIconsForApps(newApps)
     }
     showDropResult(result)
-  }, [])
+  }, [clearDragState])
 
   const handleReorderApp = async (sourceId: string, targetId: string, insertAfter = false) => {
     const currentApps = appsRef.current
@@ -2016,10 +2030,12 @@ function App() {
                 }
               }}
               className={`focus-ring cursor-pointer px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${
-                isCatActive
-                  ? 'bg-brand-600 text-white shadow-md shadow-brand-500/25'
-                  : dragOverCategory === cat.id
-                    ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
+                /* 拖拽悬停的判断必须排在 isCatActive 前面：
+                   否则拖到"当前已选中的分类"上时走的是激活分支，不会变绿 */
+                dragOverCategory === cat.id
+                  ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
+                  : isCatActive
+                    ? 'bg-brand-600 text-white shadow-md shadow-brand-500/25'
                     : 'bg-white/60 text-slate-700 hover:bg-brand-600 hover:text-white hover:border-brand-600 border border-brand-100/50'
               }`}
             >

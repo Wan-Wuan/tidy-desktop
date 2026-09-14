@@ -30,6 +30,15 @@ function buildFileDropBuffer(filePaths: string[]): Buffer {
   return buffer
 }
 
+/**
+ * 确认剪贴板里确实存在"文件拖放"格式。
+ * Windows 上 Chromium 可能把它登记成 CF_HDROP，也可能规范化成 FileNameW——
+ * 只认前者会把成功误判成失败，每次都退回慢速的外部命令，等于白优化。
+ */
+function hasFileDropFormat(): boolean {
+  return clipboard.availableFormats().some(f => /^(cf_hdrop|filenamew)$/i.test(f))
+}
+
 /** 原生写 CF_HDROP 失败时的兜底：异步跑 PowerShell，不用 execFileSync 阻塞主进程 */
 function copyFileViaPowerShell(filePath: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -222,7 +231,7 @@ export function registerAppHandlers() {
       // 直接写 Windows 的 CF_HDROP：不用起 PowerShell，主进程也不会被阻塞。
       // 以前走 execFileSync 拉起 powershell，冷启动几百毫秒且会卡住整个界面。
       clipboard.writeBuffer(CF_HDROP, buildFileDropBuffer([filePath]))
-      if (clipboard.availableFormats().includes(CF_HDROP)) return true
+      if (hasFileDropFormat()) return true
       return await copyFileViaPowerShell(filePath)
     } catch (error) {
       console.error('Failed to copy file to clipboard:', error)
@@ -240,7 +249,7 @@ export function registerAppHandlers() {
       }
       // 解码不了的矢量图（SVG 等）退化为复制文件本身，至少还能粘贴出去
       clipboard.writeBuffer(CF_HDROP, buildFileDropBuffer([filePath]))
-      return clipboard.availableFormats().includes(CF_HDROP)
+      return hasFileDropFormat()
     } catch (error) {
       console.error('Failed to copy image to clipboard:', error)
       return false
