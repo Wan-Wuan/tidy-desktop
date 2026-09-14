@@ -85,6 +85,10 @@ function App() {
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [dragOverAppId, setDragOverAppId] = useState<string | null>(null)
+  const [draggedSubId, setDraggedSubId] = useState<string | null>(null)
+  const [dragOverSubId, setDragOverSubId] = useState<string | null>(null)
+  /** 拖应用悬停在网格里的子分类分组上时的目标分组（'__none__' 表示未归类分组） */
+  const [dragOverGroupSubId, setDragOverGroupSubId] = useState<string | null>(null)
   const [undoSnapshot, setUndoSnapshot] = useState<UndoSnapshot | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const dropZoneRef = useRef<HTMLDivElement>(null)
@@ -101,11 +105,46 @@ function App() {
   const rightDragRef = useRef<{ appId: string; active: boolean; startX: number; startY: number } | null>(null)
   /** 右键拖拽当前悬停的放置目标（'type:id'），用于避免 mousemove 里重复 setState */
   const rightDragTargetRef = useRef<string | null>(null)
+  /** 拖拽看门狗：drop 与 dragend 双双丢失时兜底收尾，避免预览贴图永久残留 */
+  const dragWatchdogRef = useRef<number | null>(null)
   const dragGhostRef = useRef<HTMLDivElement | null>(null)
   const iconBackfillTimerRef = useRef<number | null>(null)
 
   // 创建跟随鼠标的幽灵卡片（HTML5拖拽和右键拖拽共用）
   const { createDragGhost, moveDragGhost, removeDragGhost } = useDragGhost(appsRef, config?.ui)
+
+  /* dragover 每秒触发几十次，若每次都 setState 会让整个网格反复重渲染并卡死。
+     用 ref 记住当前目标，只有真正切换到另一个分组时才更新 state。 */
+  const dragOverGroupRef = useRef<string | null>(null)
+  /* group onDragOver 里算出的精确插入位置（最近卡片 + 鼠标 x 在卡片左/右半）。
+     用 ref 避免高频 setState；只在真正换到另一张卡片或前后改变时才更新。 */
+  const groupInsertPlanRef = useRef<{ groupKey: string; targetId: string; insertAfter: boolean } | null>(null)
+  /* 与 dragOverGroupRef 同样的 ref 守卫，给 dragOverAppId 用：
+     dragover 高频触发，同一目标卡片内移动不必反复 setState。 */
+  const dragOverAppRef = useRef<string | null>(null)
+
+  /* 统一的拖拽收尾。
+     ⚠️ 跨子分类拖动会让应用换到别的分组，源卡片的 DOM 被 React 移动/重建，
+     于是 dragend 丢失——所有"靠 dragend 清理"的逻辑都会失效，预览贴图会永久
+     留在屏幕上。所以 drop 处理里必须主动调它，而且要在任何 await 之前调，
+     不能把清理挂在异步操作后面。 */
+  const clearDragState = useCallback(() => {
+    if (dragWatchdogRef.current) {
+      window.clearTimeout(dragWatchdogRef.current)
+      dragWatchdogRef.current = null
+    }
+    removeDragGhost()
+    draggedAppIdRef.current = null
+    dragOverGroupRef.current = null
+    dragOverAppRef.current = null
+    groupInsertPlanRef.current = null
+    rightDragTargetRef.current = null
+    setDraggedAppId(null)
+    setDragOverAppId(null)
+    setDragOverCategory(null)
+    setDragOverSubId(null)
+    setDragOverGroupSubId(null)
+  }, [removeDragGhost])
 
   const captureUndoSnapshot = (label: string) => {
     setUndoSnapshot({
@@ -205,17 +244,10 @@ function App() {
       }
     }
     const handleGlobalDragEnd = () => {
-      removeDragGhost()
-      if (dragTimeoutRef.current) {
-        clearTimeout(dragTimeoutRef.current)
-        dragTimeoutRef.current = null
-      }
       dragCounterRef.current = 0
       isExternalDragRef.current = false
-      setDraggedAppId(null)
-      setDragOverCategory(null)
-      setDragOverAppId(null)
-      draggedAppIdRef.current = null
+      // 全局兜底：把所有拖拽态（含预览贴图）一次性收干净
+      clearDragState()
     }
     document.addEventListener('dragleave', resetExternalDrag)
     document.addEventListener('dragend', handleGlobalDragEnd)
@@ -223,7 +255,7 @@ function App() {
       document.removeEventListener('dragleave', resetExternalDrag)
       document.removeEventListener('dragend', handleGlobalDragEnd)
     }
-  }, [])
+  }, [clearDragState])
 
   useEffect(() => {
     return () => {
@@ -258,20 +290,6 @@ function App() {
       document.removeEventListener('mouseup', handleMouseUp)
     }
   }, [])
-
-  const [draggedSubId, setDraggedSubId] = useState<string | null>(null)
-  const [dragOverSubId, setDragOverSubId] = useState<string | null>(null)
-  /** 拖应用悬停在网格里的子分类分组上时的目标分组（'__none__' 表示未归类分组） */
-  const [dragOverGroupSubId, setDragOverGroupSubId] = useState<string | null>(null)
-  /* dragover 每秒触发几十次，若每次都 setState 会让整个网格反复重渲染并卡死。
-     用 ref 记住当前目标，只有真正切换到另一个分组时才更新 state。 */
-  const dragOverGroupRef = useRef<string | null>(null)
-  /* group onDragOver 里算出的精确插入位置（最近卡片 + 鼠标 x 在卡片左/右半）。
-     用 ref 避免高频 setState；只在真正换到另一张卡片或前后改变时才更新。 */
-  const groupInsertPlanRef = useRef<{ groupKey: string; targetId: string; insertAfter: boolean } | null>(null)
-  /* 与 dragOverGroupRef 同样的 ref 守卫，给 dragOverAppId 用：
-     dragover 高频触发，同一目标卡片内移动不必反复 setState。 */
-  const dragOverAppRef = useRef<string | null>(null)
 
   /* 复制结果的轻提示：以前用 alert()，会弹出系统模态框打断操作 */
   const [copyToast, setCopyToast] = useState<string | null>(null)
@@ -427,24 +445,6 @@ function App() {
 
   /* dragend 兜底：万一源节点被异常移除，React 的 onDragEnd 就收不到事件，
      拖拽状态会永久卡住（表现为排序整个失灵）。在 document 上再兜一层。 */
-  useEffect(() => {
-    const resetDragState = () => {
-      removeDragGhost()
-      draggedAppIdRef.current = null
-      dragOverGroupRef.current = null
-      dragOverAppRef.current = null
-      groupInsertPlanRef.current = null
-      rightDragTargetRef.current = null
-      setDraggedAppId(null)
-      setDragOverAppId(null)
-      setDragOverCategory(null)
-      setDragOverSubId(null)
-      setDragOverGroupSubId(null)
-    }
-    document.addEventListener('dragend', resetDragState)
-    return () => document.removeEventListener('dragend', resetDragState)
-  }, [removeDragGhost])
-
   useEffect(() => {
     if (!categoryContextMenu) return
     const closeMenu = () => setCategoryContextMenu(null)
@@ -1232,6 +1232,13 @@ function App() {
     emptyImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs='
     e.dataTransfer.setDragImage(emptyImg, 0, 0)
     createDragGhost(app.id, e.clientX, e.clientY)
+    // 看门狗：跨分组拖动会让源卡片换分组、DOM 被重建，drop 与 dragend 有可能
+    // 双双丢失。到点仍没收尾就强制清理，绝不让预览贴图留在屏幕上。
+    if (dragWatchdogRef.current) window.clearTimeout(dragWatchdogRef.current)
+    dragWatchdogRef.current = window.setTimeout(() => {
+      dragWatchdogRef.current = null
+      clearDragState()
+    }, 30000)
   }
 
   const handleCardDragOver = (e: React.DragEvent, app: AppItem) => {
@@ -1254,18 +1261,13 @@ function App() {
        否则一律插到该卡片前面，与鼠标位置对不上。 */
     const plan = groupInsertPlanRef.current as { groupKey: string; targetId: string; insertAfter: boolean } | null
     const insertAfter = plan?.targetId === app.id ? plan.insertAfter : false
-    setDragOverAppId(null)
-    setDragOverCategory(null)
-    dragOverGroupRef.current = null
-    dragOverAppRef.current = null
-    groupInsertPlanRef.current = null
-    setDragOverGroupSubId(null)
     const sourceId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
+    // 必须在 await 之前收尾：handleReorderApp 内部会 setApps 移动卡片，
+    // 源节点一移动 dragend 就没了，事后再清理就来不及
+    clearDragState()
     if (sourceId && sourceId !== app.id) {
       await handleReorderApp(sourceId, app.id, insertAfter)
     }
-    draggedAppIdRef.current = null
-    setDraggedAppId(null)
   }
 
   const handleCardDragEnd = () => {
@@ -1274,16 +1276,10 @@ function App() {
       clearTimeout(dragTimeoutRef.current)
     }
     dragOverGroupRef.current = null
+    // 稍等一拍再收尾：drop 先于 dragend 触发，让 drop 的落点处理先跑完
     dragTimeoutRef.current = setTimeout(() => {
-      draggedAppIdRef.current = null
-      dragOverAppRef.current = null
-      groupInsertPlanRef.current = null
-      setDraggedAppId(null)
-      setDragOverCategory(null)
-      setDragOverAppId(null)
-      setDragOverSubId(null)
-      setDragOverGroupSubId(null)
       dragTimeoutRef.current = null
+      clearDragState()
     }, 100)
   }
 
@@ -2251,27 +2247,22 @@ function App() {
                   }}
                   onDrop={async (e) => {
                     const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-                    // 不是应用拖拽（例如外部文件）：把拖拽态收干净，
-                    // 否则 isDraggingApp 一直为真，空子分类占位块会永久挂在界面上。
+                    /* ⚠️ 顺序很重要：必须先读出落点、再清理。
+                       之前是先清空后读取，导致 plan 恒为 null，
+                       每次 drop 都退化成"追加到末尾"。 */
+                    const plan = groupInsertPlanRef.current as { groupKey: string; targetId: string; insertAfter: boolean } | null
+                    // 不是应用拖拽（例如外部文件）：收掉自己的拖拽态，但不阻止默认行为，
+                    // 让事件继续冒泡给外层的外部文件拖入逻辑处理
                     if (!appId) {
-                      dragOverGroupRef.current = null
-                      setDragOverGroupSubId(null)
-                      groupInsertPlanRef.current = null
-                      setDraggedAppId(null)
+                      clearDragState()
                       return
                     }
                     e.preventDefault()
                     e.stopPropagation()
-                    /* ⚠️ 顺序很重要：必须先读出落点、再清理 ref。
-                       之前是先清空后读取，导致 plan 恒为 null，
-                       每次 drop 都退化成"追加到末尾"——拖到中间也被丢到末尾，
-                       看起来就像"卡住"。 */
-                    const plan = groupInsertPlanRef.current as { groupKey: string; targetId: string; insertAfter: boolean } | null
-                    dragOverGroupRef.current = null
-                    setDragOverGroupSubId(null)
-                    groupInsertPlanRef.current = null
-                    // 主动收掉幽灵：只依赖 dragend 时，若拖拽被中断幽灵会残留在屏幕上
-                    removeDragGhost()
+                    /* 在 await 之前收尾：handleReorderApp 里的 setApps 会把应用
+                       挪到别的分组、源卡片 DOM 被重建，dragend 随之丢失——
+                       那时再清理就晚了，预览贴图会永久留在屏幕上。 */
+                    clearDragState()
                     if (plan && plan.groupKey === groupKey && plan.targetId !== appId) {
                       // 按 onDragOver 算出的精确落点插入：拖到哪就停在哪
                       await handleReorderApp(appId, plan.targetId, plan.insertAfter)
@@ -2285,11 +2276,6 @@ function App() {
                         await handleMoveAppToSubcategory(appId, group.sub?.id ?? null)
                       }
                     }
-                    draggedAppIdRef.current = null
-                    setDraggedAppId(null)
-                    setDragOverAppId(null)
-                    setDragOverCategory(null)
-                    setDragOverSubId(null)
                   }}
                 >
                   {group.sub && (
