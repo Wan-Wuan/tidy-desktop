@@ -140,6 +140,7 @@ function App() {
     groupInsertPlanRef.current = null
     rightDragTargetRef.current = null
     setDraggedAppId(null)
+    setDraggedSubId(null)
     setDragOverAppId(null)
     setDragOverCategory(null)
     setDragOverSubId(null)
@@ -1449,6 +1450,7 @@ function App() {
     <button
       key={sub.id}
       data-subcategory-id={sub.id}
+      data-dragover={dragOverSubId === sub.id ? 'true' : undefined}
       draggable
       onContextMenu={(e) => openCategoryContextMenu(e, { type: 'subcategory', id: sub.id })}
       onClick={() => {
@@ -1484,17 +1486,14 @@ function App() {
       onDrop={async (e) => {
         e.preventDefault()
         e.stopPropagation()
-        setDragOverSubId(null)
-        if (draggedSubId && draggedSubId !== sub.id) {
-          await handleReorderSubcategory(draggedSubId, sub.id)
-          setDraggedSubId(null)
-        } else {
-          const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-          if (appId) {
-            await handleMoveAppToSubcategory(appId, sub.id)
-            draggedAppIdRef.current = null
-            setDraggedAppId(null)
-          }
+        // 先把要做的事取出来，再统一收尾（拖到别的子分类会换分组、丢 dragend）
+        const reorderSubId = draggedSubId && draggedSubId !== sub.id ? draggedSubId : null
+        const appId = reorderSubId ? null : (draggedAppIdRef.current || e.dataTransfer.getData('text/plain'))
+        clearDragState()
+        if (reorderSubId) {
+          await handleReorderSubcategory(reorderSubId, sub.id)
+        } else if (appId) {
+          await handleMoveAppToSubcategory(appId, sub.id)
         }
       }}
       onDragEnd={() => {
@@ -1966,6 +1965,7 @@ function App() {
           <div key={cat.id} className="flex flex-col items-stretch gap-1.5 flex-shrink-0">
             <button
               data-category-id={cat.id}
+              data-dragover={dragOverCategory === cat.id ? 'true' : undefined}
               data-active={isCatActive}
               aria-current={isCatActive ? 'page' : undefined}
               onClick={() => { setActiveCategory(cat.id) }}
@@ -1985,13 +1985,14 @@ function App() {
               onDrop={async (e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                setDragOverCategory(null)
+                // 先取出要移动的应用，再统一收尾——拖到别的分类会换分组、
+                // 源卡片 DOM 被重建、dragend 丢失，拖完再清就晚了，贴图会留在屏幕上
+                const internalAppId = draggedAppIdRef.current
+                clearDragState()
 
                 // 优先处理内部拖拽（包括原生拖拽放回应用内的情况）
-                if (draggedAppIdRef.current) {
-                  await handleMoveAppToCategory(draggedAppIdRef.current, cat.id)
-                  draggedAppIdRef.current = null
-                  setDraggedAppId(null)
+                if (internalAppId) {
+                  await handleMoveAppToCategory(internalAppId, cat.id)
                   return
                 }
 

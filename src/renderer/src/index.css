@@ -1097,7 +1097,10 @@ body {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
-.layout-command-rail .category-nav > button:hover {
+/* 排除拖拽悬停态：本规则是 0,3,1，而 Tailwind 的 bg-emerald-500（拖拽目标高亮）
+   只有 0,1,0，会被整条压掉——拖应用悬停到分类上时看不出能不能放。
+   加 :not() 让位给拖拽高亮。 */
+.layout-command-rail .category-nav > button:hover:not([data-dragover]) {
   background: #ffffff;
   border-color: rgb(var(--brand-600) / 0.45);
   color: rgb(var(--brand-700));
@@ -1117,7 +1120,7 @@ body {
   color: #cbd5e1;
 }
 
-.theme-dark.layout-command-rail .category-nav > button:hover {
+.theme-dark.layout-command-rail .category-nav > button:hover:not([data-dragover]) {
   background: rgba(30, 41, 59, 0.95);
   color: rgb(var(--brand-300));
 }
@@ -1136,7 +1139,7 @@ body {
     color: #cbd5e1;
   }
 
-  .theme-system.layout-command-rail .category-nav > button:hover {
+  .theme-system.layout-command-rail .category-nav > button:hover:not([data-dragover]) {
     background: rgba(30, 41, 59, 0.95);
     color: rgb(var(--brand-300));
   }
@@ -1407,8 +1410,8 @@ body {
   color: #cbd5e1;
 }
 
-.theme-dark.layout-horizon-workspace .category-nav > button:hover,
-.theme-dark.layout-horizon-workspace .subcategory-nav > button:hover {
+.theme-dark.layout-horizon-workspace .category-nav > button:hover:not([data-dragover]),
+.theme-dark.layout-horizon-workspace .subcategory-nav > button:hover:not([data-dragover]) {
   background: rgba(30, 41, 59, 0.92);
   color: rgb(var(--brand-300));
 }
@@ -1428,8 +1431,8 @@ body {
     color: #cbd5e1;
   }
 
-  .theme-system.layout-horizon-workspace .category-nav > button:hover,
-  .theme-system.layout-horizon-workspace .subcategory-nav > button:hover {
+  .theme-system.layout-horizon-workspace .category-nav > button:hover:not([data-dragover]),
+  .theme-system.layout-horizon-workspace .subcategory-nav > button:hover:not([data-dragover]) {
     background: rgba(30, 41, 59, 0.92);
     color: rgb(var(--brand-300));
   }
