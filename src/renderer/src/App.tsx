@@ -269,7 +269,6 @@ function App() {
   /* group onDragOver 里算出的精确插入位置（最近卡片 + 鼠标 x 在卡片左/右半）。
      用 ref 避免高频 setState；只在真正换到另一张卡片或前后改变时才更新。 */
   const groupInsertPlanRef = useRef<{ groupKey: string; targetId: string; insertAfter: boolean } | null>(null)
-  const [groupInsertPlan, setGroupInsertPlan] = useState<{ groupKey: string; targetId: string; insertAfter: boolean } | null>(null)
   /* 与 dragOverGroupRef 同样的 ref 守卫，给 dragOverAppId 用：
      dragover 高频触发，同一目标卡片内移动不必反复 setState。 */
   const dragOverAppRef = useRef<string | null>(null)
@@ -441,7 +440,6 @@ function App() {
       setDragOverCategory(null)
       setDragOverSubId(null)
       setDragOverGroupSubId(null)
-      setGroupInsertPlan(null)
     }
     document.addEventListener('dragend', resetDragState)
     return () => document.removeEventListener('dragend', resetDragState)
@@ -1251,16 +1249,20 @@ function App() {
   const handleCardDrop = async (e: React.DragEvent, app: AppItem) => {
     e.preventDefault()
     e.stopPropagation()
+    /* 先读落点再清理（同 group onDrop 的坑）：
+       拖到卡片右半时 group 已算出 insertAfter=true，这里要沿用，
+       否则一律插到该卡片前面，与鼠标位置对不上。 */
+    const plan = groupInsertPlanRef.current as { groupKey: string; targetId: string; insertAfter: boolean } | null
+    const insertAfter = plan?.targetId === app.id ? plan.insertAfter : false
     setDragOverAppId(null)
     setDragOverCategory(null)
     dragOverGroupRef.current = null
     dragOverAppRef.current = null
     groupInsertPlanRef.current = null
     setDragOverGroupSubId(null)
-    setGroupInsertPlan(null)
     const sourceId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
     if (sourceId && sourceId !== app.id) {
-      await handleReorderApp(sourceId, app.id)
+      await handleReorderApp(sourceId, app.id, insertAfter)
     }
     draggedAppIdRef.current = null
     setDraggedAppId(null)
@@ -1281,7 +1283,6 @@ function App() {
       setDragOverAppId(null)
       setDragOverSubId(null)
       setDragOverGroupSubId(null)
-      setGroupInsertPlan(null)
       dragTimeoutRef.current = null
     }, 100)
   }
@@ -2170,6 +2171,9 @@ function App() {
                     if (!draggedAppIdRef.current) return
                     e.preventDefault()
                     e.dataTransfer.dropEffect = 'move'
+                    // 这里也更新一次预览位置：鼠标落在 grid gap 上时卡片不会触发
+                    // onDragOver，只靠外层冒泡不够稳（外层的 stopPropagation 一变就断）
+                    moveDragGhost(e.clientX, e.clientY)
 
                     const draggedId = draggedAppIdRef.current
                     const container = e.currentTarget as HTMLElement
@@ -2207,7 +2211,6 @@ function App() {
                       const cur = groupInsertPlanRef.current
                       if (cur?.groupKey !== groupKey || cur?.targetId !== targetId || cur?.insertAfter !== insertAfter) {
                         groupInsertPlanRef.current = { groupKey, targetId, insertAfter }
-                        setGroupInsertPlan({ groupKey, targetId, insertAfter })
                         // 高亮目标卡片（isDragOver 用的是 dragOverAppId）
                         if (dragOverAppRef.current !== targetId) {
                           dragOverAppRef.current = targetId
@@ -2228,7 +2231,6 @@ function App() {
                           setDragOverAppId(null)
                         }
                         groupInsertPlanRef.current = null
-                        setGroupInsertPlan(null)
                       }
                     }
                   }}
@@ -2237,7 +2239,6 @@ function App() {
                     const cur = groupInsertPlanRef.current
                     if (cur?.groupKey === groupKey) {
                       groupInsertPlanRef.current = null
-                      setGroupInsertPlan(null)
                       if (dragOverAppRef.current !== null) {
                         dragOverAppRef.current = null
                         setDragOverAppId(null)
@@ -2256,30 +2257,29 @@ function App() {
                       dragOverGroupRef.current = null
                       setDragOverGroupSubId(null)
                       groupInsertPlanRef.current = null
-                      setGroupInsertPlan(null)
                       setDraggedAppId(null)
                       return
                     }
                     e.preventDefault()
                     e.stopPropagation()
+                    /* ⚠️ 顺序很重要：必须先读出落点、再清理 ref。
+                       之前是先清空后读取，导致 plan 恒为 null，
+                       每次 drop 都退化成"追加到末尾"——拖到中间也被丢到末尾，
+                       看起来就像"卡住"。 */
+                    const plan = groupInsertPlanRef.current as { groupKey: string; targetId: string; insertAfter: boolean } | null
                     dragOverGroupRef.current = null
                     setDragOverGroupSubId(null)
                     groupInsertPlanRef.current = null
-                    setGroupInsertPlan(null)
                     // 主动收掉幽灵：只依赖 dragend 时，若拖拽被中断幽灵会残留在屏幕上
                     removeDragGhost()
-                    // 优先用 onDragOver 算出的精确落点：拖到哪就停在哪
-                    const plan = groupInsertPlanRef.current as { groupKey: string; targetId: string; insertAfter: boolean } | null
-                    let didReorder = false
                     if (plan && plan.groupKey === groupKey && plan.targetId !== appId) {
-                      didReorder = true
+                      // 按 onDragOver 算出的精确落点插入：拖到哪就停在哪
                       await handleReorderApp(appId, plan.targetId, plan.insertAfter)
                     } else {
                       // 没拿到精确落点（多半发生在极快拖到释放）：
                       // 退回到末尾追加，保证功能不丢
                       const lastApp = group.apps[group.apps.length - 1]
                       if (lastApp && lastApp.id !== appId) {
-                        didReorder = true
                         await handleReorderApp(appId, lastApp.id, true)
                       } else {
                         await handleMoveAppToSubcategory(appId, group.sub?.id ?? null)
