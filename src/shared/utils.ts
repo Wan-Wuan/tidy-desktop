@@ -77,21 +77,87 @@ export function checkSearchEngine(
   return { isEngine: false }
 }
 
-/**
- * 文档文件扩展名
- */
-export const DOC_FILE_EXTS = ['.ppt', '.pptx', '.doc', '.docx', '.xls', '.xlsx', '.pdf', '.txt', '.rtf', '.csv']
+/* ── 文件类型白名单 ──
+   全项目唯一来源：拖入添加、图标提取、复制/拖拽按钮都从这里取，
+   以前 App.tsx 里另有一份本地副本，加类型时很容易漏改。 */
 
-/**
- * 图片文件扩展名
- */
-export const IMAGE_FILE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp', '.ico', '.tiff', '.tif']
+/** 可执行 / 快捷方式 */
+export const EXEC_FILE_EXTS = [
+  '.exe', '.lnk', '.msi', '.bat', '.cmd', '.vbs', '.ps1', '.com', '.scr', '.appref-ms', '.url'
+]
+
+/** 文档与文本：可一键复制到剪贴板发送 */
+export const DOC_FILE_EXTS = [
+  // 办公文档
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.xlsm', '.ppt', '.pptx', '.rtf', '.csv', '.txt', '.odt', '.ods', '.odp',
+  // 标记语言与网页
+  '.md', '.markdown', '.mdown', '.html', '.htm', '.xhtml', '.mhtml', '.vue',
+  // 数据与配置
+  '.json', '.jsonc', '.xml', '.yaml', '.yml', '.toml', '.ini', '.conf', '.cfg', '.properties', '.reg',
+  // 代码与脚本
+  '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.svelte', '.astro',
+  '.py', '.java', '.kt', '.kts', '.c', '.h', '.cpp', '.hpp', '.cc', '.cs', '.go', '.rs', '.rb', '.php', '.swift', '.scala', '.lua', '.r', '.pl',
+  '.sql', '.sh', '.bash', '.zsh', '.fish', '.gradle', '.cmake', '.make', '.mk',
+  // 日志 / 纯文本
+  '.log', '.tex', '.bib', '.org', '.rst', '.adoc', '.nfo', '.diff', '.patch', '.srt', '.vtt', '.lrc'
+]
+
+/** 图片：可直接复制图片内容粘贴，或拖到外部应用 */
+export const IMAGE_FILE_EXTS = [
+  '.jpg', '.jpeg', '.jpe', '.jfif', '.pjpeg', '.png', '.gif', '.bmp', '.svg', '.webp',
+  '.ico', '.tiff', '.tif', '.heic', '.heif', '.avif', '.emf', '.wmf', '.psd', '.sketch'
+]
+
+/** 压缩包 */
+export const ARCHIVE_FILE_EXTS = [
+  '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz', '.tgz', '.iso', '.cab', '.lz', '.lzma', '.zst'
+]
+
+/** 音视频（图片格式已归入 IMAGE_FILE_EXTS，不在此重复） */
+export const MEDIA_FILE_EXTS = [
+  '.mp3', '.mp4', '.wav', '.avi', '.mkv', '.flv', '.wmv', '.mov', '.m4a', '.m4v',
+  '.aac', '.flac', '.ogg', '.oga', '.opus', '.webm', '.mpg', '.mpeg', '.3gp', '.aiff', '.mid', '.midi', '.amr'
+]
+
+/** 字体 */
+export const FONT_FILE_EXTS = ['.ttf', '.otf', '.woff', '.woff2', '.eot', '.fon']
+
+/** 拖入添加时判定"支持的文件"的全集 */
+export const ALL_FILE_EXTS = [
+  ...EXEC_FILE_EXTS,
+  ...DOC_FILE_EXTS,
+  ...IMAGE_FILE_EXTS,
+  ...ARCHIVE_FILE_EXTS,
+  ...MEDIA_FILE_EXTS,
+  ...FONT_FILE_EXTS
+]
+
+const extSet = (list: string[]) => new Set(list)
+
+export const EXEC_FILE_EXTS_SET = extSet(EXEC_FILE_EXTS)
+export const DOC_FILE_EXTS_SET = extSet(DOC_FILE_EXTS)
+export const IMAGE_FILE_EXTS_SET = extSet(IMAGE_FILE_EXTS)
+export const ARCHIVE_FILE_EXTS_SET = extSet(ARCHIVE_FILE_EXTS)
+export const MEDIA_FILE_EXTS_SET = extSet(MEDIA_FILE_EXTS)
+export const FONT_FILE_EXTS_SET = extSet(FONT_FILE_EXTS)
+export const ALL_FILE_EXTS_SET = extSet(ALL_FILE_EXTS)
+
+/** 取路径的扩展名（小写，含点）；无扩展名返回空串 */
+export function getFileExtension(filePath: string): string {
+  const lower = filePath.toLowerCase()
+  const dot = lower.lastIndexOf('.')
+  if (dot === -1) return ''
+  const slash = lower.lastIndexOf('/')
+  const backslash = lower.lastIndexOf('\\')
+  // 点号出现在路径分隔符之前说明它属于目录名，不是扩展名
+  if (dot < slash || dot < backslash) return ''
+  return lower.substring(dot)
+}
 
 /**
  * 判断 AppItem 是否为图片文件
  */
 export function isImageFile(app: { type?: string; path: string }): boolean {
   if (app.type !== 'app') return false
-  const ext = app.path.toLowerCase().substring(app.path.lastIndexOf('.'))
-  return IMAGE_FILE_EXTS.includes(ext)
+  return IMAGE_FILE_EXTS_SET.has(getFileExtension(app.path))
 }

@@ -8,7 +8,7 @@ import {
   X
 } from '@phosphor-icons/react'
 import { AppItem, AutoCategoryRule, Category, Subcategory, Config, ShortcutImportItem, UiCommand } from '../../shared/types'
-import { isFolderPath, parseSteamUrl } from '../../shared/utils'
+import { isFolderPath, parseSteamUrl, ALL_FILE_EXTS_SET, getFileExtension } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { buildShortcutTargetMap, getDroppedPathIdentities, getDroppedPaths, normalizeDroppedPath } from './utils/dropPaths'
 import { hasDisplayableIcon, needsIconUpdate } from './utils/iconUtils'
@@ -99,11 +99,13 @@ function App() {
   const isExternalDragRef = useRef(false)
   const nativeDragPathRef = useRef<string | null>(null)
   const rightDragRef = useRef<{ appId: string; active: boolean; startX: number; startY: number } | null>(null)
+  /** 右键拖拽当前悬停的放置目标（'type:id'），用于避免 mousemove 里重复 setState */
+  const rightDragTargetRef = useRef<string | null>(null)
   const dragGhostRef = useRef<HTMLDivElement | null>(null)
   const iconBackfillTimerRef = useRef<number | null>(null)
 
   // 创建跟随鼠标的幽灵卡片（HTML5拖拽和右键拖拽共用）
-  const { createDragGhost, moveDragGhost, removeDragGhost } = useDragGhost(appsRef)
+  const { createDragGhost, moveDragGhost, removeDragGhost } = useDragGhost(appsRef, config?.ui)
 
   const captureUndoSnapshot = (label: string) => {
     setUndoSnapshot({
@@ -259,6 +261,23 @@ function App() {
 
   const [draggedSubId, setDraggedSubId] = useState<string | null>(null)
   const [dragOverSubId, setDragOverSubId] = useState<string | null>(null)
+  /** 拖应用悬停在网格里的子分类分组上时的目标分组（'__none__' 表示未归类分组） */
+  const [dragOverGroupSubId, setDragOverGroupSubId] = useState<string | null>(null)
+  /* dragover 每秒触发几十次，若每次都 setState 会让整个网格反复重渲染并卡死。
+     用 ref 记住当前目标，只有真正切换到另一个分组时才更新 state。 */
+  const dragOverGroupRef = useRef<string | null>(null)
+
+  /* 复制结果的轻提示：以前用 alert()，会弹出系统模态框打断操作 */
+  const [copyToast, setCopyToast] = useState<string | null>(null)
+  const copyToastTimerRef = useRef<number | null>(null)
+  const showCopyToast = useCallback((message: string) => {
+    setCopyToast(message)
+    if (copyToastTimerRef.current) window.clearTimeout(copyToastTimerRef.current)
+    copyToastTimerRef.current = window.setTimeout(() => {
+      setCopyToast(null)
+      copyToastTimerRef.current = null
+    }, 1800)
+  }, [])
   const [activeSubcategoryId, setActiveSubcategoryId] = useState<string | null>(null)
   const [sidebarWidthDraft, setSidebarWidthDraft] = useState<number | null>(null)
   const [categoryContextMenu, setCategoryContextMenu] = useState<CategoryContextMenu | null>(null)
@@ -289,13 +308,15 @@ function App() {
   useEffect(() => {
     // 右键自定义拖拽（HTML5 draggable 不支持右键）：普通应用右键拖到应用/分类/子分类上完成排序或归类；
     // 图片/文档的右键拖拽走系统原生拖拽（发送到外部应用），不经过这里
-    const findDropTarget = (el: Element | null): { type: 'app' | 'category' | 'subcategory'; id: string } | null => {
+    const findDropTarget = (el: Element | null): { type: 'app' | 'category' | 'subcategory' | 'subcategory-drop'; id: string } | null => {
       if (!el) return null
       let node: Element | null = el
       for (let i = 0; i < 5 && node; i++) {
         if (node.hasAttribute?.('data-app-id')) return { type: 'app', id: node.getAttribute('data-app-id')! }
         if (node.hasAttribute?.('data-category-id')) return { type: 'category', id: node.getAttribute('data-category-id')! }
         if (node.hasAttribute?.('data-subcategory-id')) return { type: 'subcategory', id: node.getAttribute('data-subcategory-id')! }
+        // 网格里的子分类分组区（右键拖拽也能往里归类）
+        if (node.hasAttribute?.('data-subcategory-drop')) return { type: 'subcategory-drop', id: node.getAttribute('data-subcategory-drop')! }
         node = node.parentElement
       }
       return null
@@ -315,25 +336,44 @@ function App() {
       }
       moveDragGhost(e.clientX, e.clientY)
       const el = document.elementFromPoint(e.clientX, e.clientY)
-      const target = findDropTarget(el)
+      const rawTarget = findDropTarget(el)
+      const target = rawTarget && rawTarget.type === 'app' && rawTarget.id === rightDragRef.current!.appId
+        ? null
+        : rawTarget
+      /* mousemove 同样是每秒几十次，目标没变就一个 setState 都别发，
+         否则整个网格会被反复重渲染到卡死。 */
+      const targetKey = target ? `${target.type}:${target.id}` : null
+      if (rightDragTargetRef.current === targetKey) return
+      rightDragTargetRef.current = targetKey
+
       if (!target) {
         setDragOverAppId(null)
         setDragOverCategory(null)
         setDragOverSubId(null)
+        setDragOverGroupSubId(null)
         return
       }
-      if (target.type === 'app' && target.id !== rightDragRef.current!.appId) {
+      if (target.type === 'app') {
         setDragOverAppId(target.id)
         setDragOverCategory(null)
         setDragOverSubId(null)
+        setDragOverGroupSubId(null)
       } else if (target.type === 'category') {
         setDragOverCategory(target.id)
         setDragOverAppId(null)
         setDragOverSubId(null)
+        setDragOverGroupSubId(null)
       } else if (target.type === 'subcategory') {
         setDragOverSubId(target.id)
         setDragOverAppId(null)
         setDragOverCategory(null)
+        setDragOverGroupSubId(null)
+      } else if (target.type === 'subcategory-drop') {
+        setDragOverGroupSubId(target.id)
+        dragOverGroupRef.current = target.id
+        setDragOverAppId(null)
+        setDragOverCategory(null)
+        setDragOverSubId(null)
       }
     }
 
@@ -356,12 +396,17 @@ function App() {
           await handleMoveAppToCategory(appId, target.id)
         } else if (target.type === 'subcategory') {
           await handleMoveAppToSubcategory(appId, target.id)
+        } else if (target.type === 'subcategory-drop') {
+          await handleMoveAppToSubcategory(appId, target.id === '__none__' ? null : target.id)
         }
       }
       setDraggedAppId(null)
       setDragOverAppId(null)
       setDragOverCategory(null)
       setDragOverSubId(null)
+      setDragOverGroupSubId(null)
+      rightDragTargetRef.current = null
+      dragOverGroupRef.current = null
       draggedAppIdRef.current = null
     }
 
@@ -575,11 +620,7 @@ function App() {
     const success = isDocFile(app)
       ? await window.electronAPI.copyFileToClipboard(app.path)
       : await window.electronAPI.copyImageToClipboard(app.path)
-    if (success) {
-      alert('已复制到剪贴板，可以在微信等应用中粘贴发送。')
-    } else {
-      alert('复制失败，请重试。')
-    }
+    showCopyToast(success ? `已复制「${app.name}」，可粘贴发送` : '复制失败，请重试')
   }
 
 
@@ -773,11 +814,8 @@ function App() {
     let duplicateCount = 0
     let unsupportedCount = 0
 
-    const execExts = ['.exe', '.lnk', '.msi', '.bat', '.cmd', '.vbs', '.ps1']
-    const docExts = ['.ppt', '.pptx', '.doc', '.docx', '.xls', '.xlsx', '.pdf', '.txt', '.rtf', '.csv']
-    const archiveExts = ['.zip', '.rar', '.7z', '.tar', '.gz', '.bz2']
-    const mediaExts = ['.mp3', '.mp4', '.wav', '.avi', '.mkv', '.flv', '.wmv', '.mov', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg']
-    const allFileExts = [...execExts, ...docExts, ...archiveExts, ...mediaExts]
+    // 统一从 shared/utils 取白名单，不要在这里再维护一份副本
+    const allFileExts = ALL_FILE_EXTS_SET
 
     if (filePaths.length === 0) return { apps: newApps, duplicateCount, unsupportedCount }
     const shortcutPaths = [...currentApps.map(app => app.path), ...filePaths]
@@ -801,8 +839,8 @@ function App() {
       }
       const pathKey = identities[0]
       const info = pathInfoByPath.get(filePath)
-      const ext = info?.extension || filePath.toLowerCase().substring(filePath.lastIndexOf('.'))
-      const isKnownFile = allFileExts.includes(ext)
+      const ext = info?.extension || getFileExtension(filePath)
+      const isKnownFile = allFileExts.has(ext)
       const isDirectory = !!info?.isDirectory
 
       if (info?.isFile && isKnownFile) {
@@ -1185,6 +1223,8 @@ function App() {
     e.stopPropagation()
     setDragOverAppId(null)
     setDragOverCategory(null)
+    dragOverGroupRef.current = null
+    setDragOverGroupSubId(null)
     const sourceId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
     if (sourceId && sourceId !== app.id) {
       await handleReorderApp(sourceId, app.id)
@@ -1198,11 +1238,14 @@ function App() {
     if (dragTimeoutRef.current) {
       clearTimeout(dragTimeoutRef.current)
     }
+    dragOverGroupRef.current = null
     dragTimeoutRef.current = setTimeout(() => {
       draggedAppIdRef.current = null
       setDraggedAppId(null)
       setDragOverCategory(null)
       setDragOverAppId(null)
+      setDragOverSubId(null)
+      setDragOverGroupSubId(null)
       dragTimeoutRef.current = null
     }, 100)
   }
@@ -1329,16 +1372,20 @@ function App() {
   }, [sortMode])
 
   // 与主区域渲染共用同一份分组数据：键盘导航按此顺序在卡片间移动焦点
+  const isDraggingApp = draggedAppId !== null
+
   const groupedApps = useMemo(() => {
     const groups: { sub: Subcategory | null; apps: AppItem[] }[] = []
     const noSub = sortAppsForDisplay(filteredApps.filter(a => !a.subcategoryId))
     if (noSub.length > 0) groups.push({ sub: null, apps: noSub })
     for (const s of displaySubcategories) {
       const sApps = sortAppsForDisplay(filteredApps.filter(a => a.subcategoryId === s.id))
-      if (sApps.length > 0) groups.push({ sub: s, apps: sApps })
+      // 拖动应用时把"还没有任何应用"的子分类也渲染出来：
+      // 否则网格里根本没有这一块，用户没法把应用归到空子分类上。
+      if (sApps.length > 0 || isDraggingApp) groups.push({ sub: s, apps: sApps })
     }
     return groups
-  }, [filteredApps, displaySubcategories, sortAppsForDisplay])
+  }, [filteredApps, displaySubcategories, sortAppsForDisplay, isDraggingApp])
 
   useEffect(() => {
     setActiveSubcategoryId(null)
@@ -1390,6 +1437,9 @@ function App() {
           const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
           if (appId) {
             e.dataTransfer.dropEffect = 'move'
+            // 拖应用归类到子分类时同样要高亮：之前只在拖子分类排序时设置，
+            // 导致把应用拖上来毫无反馈，看不出这里可以放。
+            setDragOverSubId(sub.id)
           }
         }
       }}
@@ -1417,7 +1467,9 @@ function App() {
       }}
       className={`focus-ring cursor-pointer px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors duration-200 ${
         dragOverSubId === sub.id
-          ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
+          ? draggedAppId
+            ? 'bg-brand-600 text-white scale-105 shadow-lg shadow-brand-500/30 ring-2 ring-brand-300'
+            : 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
           : draggedSubId === sub.id
             ? 'opacity-40 scale-95'
             : activeSubcategoryId === sub.id
@@ -1557,17 +1609,35 @@ function App() {
     showDropResult(result)
   }, [])
 
-  const handleReorderApp = async (sourceId: string, targetId: string) => {
-    // 非手动排序模式下拖拽只用于移动分类，不改变顺序
-    if ((config?.ui?.sortMode || 'manual') !== 'manual') return
+  const handleReorderApp = async (sourceId: string, targetId: string, insertAfter = false) => {
     const currentApps = appsRef.current
     const sourceIndex = currentApps.findIndex(a => a.id === sourceId)
     const targetIndex = currentApps.findIndex(a => a.id === targetId)
     if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return
 
+    const source = currentApps[sourceIndex]
+    const target = currentApps[targetIndex]
+    // 落点决定归属：拖到哪个子分类的应用旁边，就归入那个子分类。
+    // 以前只挪数组位置不改 subcategoryId，导致应用排到了新位置却仍显示在原分组里，
+    // 看上去像"拖过去又被弹回来"。
+    const nextSubcategoryId = target.subcategoryId ?? null
+    const groupChanged = (source.subcategoryId ?? null) !== nextSubcategoryId
+
+    // 非手动排序：顺序由排序规则决定，拖拽只用来改归属
+    if ((config?.ui?.sortMode || 'manual') !== 'manual') {
+      if (groupChanged) await handleMoveAppToSubcategory(sourceId, nextSubcategoryId)
+      return
+    }
+
     const updated = [...currentApps]
-    const [moved] = updated.splice(sourceIndex, 1)
-    updated.splice(targetIndex, 0, moved)
+    updated.splice(sourceIndex, 1)
+    // 移除 source 后重新定位 target，避免 source 在前时插错一位
+    const insertAt = updated.findIndex(a => a.id === targetId)
+    if (insertAt === -1) return
+    updated.splice(insertAfter ? insertAt + 1 : insertAt, 0, {
+      ...source,
+      subcategoryId: nextSubcategoryId
+    })
     appsRef.current = updated
     setApps(updated)
     await window.electronAPI.saveApps({ apps: updated })
@@ -2045,13 +2115,79 @@ function App() {
         {(() => {
           return (
             <div>
-              {groupedApps.map((group, gi) => (
-                <div key={group.sub?.id || '__none__'} id={group.sub ? `subcat-${group.sub.id}` : undefined} className={gi > 0 ? 'mt-6' : ''}>
+              {groupedApps.map((group, gi) => {
+                const groupKey = group.sub?.id || '__none__'
+                const isGroupDropTarget = dragOverGroupSubId === groupKey
+                return (
+                <div
+                  key={groupKey}
+                  id={group.sub ? `subcat-${group.sub.id}` : undefined}
+                  data-subcategory-drop={groupKey}
+                  className={`${gi > 0 ? 'mt-6' : ''} rounded-xl transition-colors duration-150 ${
+                    isGroupDropTarget ? 'bg-brand-500/10' : ''
+                  }`}
+                  onDragOver={(e) => {
+                    // 只在拖应用时接管：卡片自身的 onDragOver 会 stopPropagation，
+                    // 所以拖到卡片上仍是排序，落到标题栏/卡片间隙才是归类。
+                    if (!draggedAppIdRef.current) return
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    // 必须设 dropEffect，但只在目标切换时才 setState——
+                    // 否则每秒几十次的 dragover 会把整个网格重渲到卡死。
+                    if (dragOverGroupRef.current !== groupKey) {
+                      dragOverGroupRef.current = groupKey
+                      setDragOverGroupSubId(groupKey)
+                    }
+                  }}
+                  onDragLeave={(e) => {
+                    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+                    if (dragOverGroupRef.current === groupKey) {
+                      dragOverGroupRef.current = null
+                      setDragOverGroupSubId(null)
+                    }
+                  }}
+                  onDrop={async (e) => {
+                    const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
+                    // 不是应用拖拽（例如外部文件）：把拖拽态收干净，
+                    // 否则 isDraggingApp 一直为真，空子分类占位块会永久挂在界面上。
+                    if (!appId) {
+                      dragOverGroupRef.current = null
+                      setDragOverGroupSubId(null)
+                      setDraggedAppId(null)
+                      return
+                    }
+                    e.preventDefault()
+                    e.stopPropagation()
+                    dragOverGroupRef.current = null
+                    setDragOverGroupSubId(null)
+                    // 主动收掉幽灵：只依赖 dragend 时，若拖拽被中断幽灵会残留在屏幕上
+                    removeDragGhost()
+                    // 落点在这一组里：排到该组最后一项之后，位置和落点才对得上
+                    const lastApp = group.apps[group.apps.length - 1]
+                    if (lastApp && lastApp.id !== appId) {
+                      await handleReorderApp(appId, lastApp.id, true)
+                    } else {
+                      await handleMoveAppToSubcategory(appId, group.sub?.id ?? null)
+                    }
+                    draggedAppIdRef.current = null
+                    setDraggedAppId(null)
+                    setDragOverAppId(null)
+                    setDragOverCategory(null)
+                    setDragOverSubId(null)
+                  }}
+                >
                   {group.sub && (
-                    <div className="flex items-center gap-2.5 mb-3 px-1">
+                    <div className={`flex items-center gap-2.5 mb-3 px-2 py-1 rounded-lg transition-colors ${
+                      isGroupDropTarget ? 'bg-brand-500/15' : ''
+                    }`}>
                       <span className="text-sm">{group.sub.icon}</span>
                       <span className="text-sm font-semibold font-display text-brand-700">{group.sub.name}</span>
                       <div className="flex-1 h-px bg-gradient-to-r from-brand-200/60 to-transparent"></div>
+                      {isGroupDropTarget && (
+                        <span className="shrink-0 text-[11px] font-medium text-brand-600">
+                          {group.sub ? '放到此处归入' : '放到此处移出子分类'}
+                        </span>
+                      )}
                     </div>
                   )}
                   <div className={`grid gap-3 stagger-enter ${
@@ -2084,8 +2220,18 @@ function App() {
                       />
                     ))}
                   </div>
+                  {isDraggingApp && group.apps.length === 0 && (
+                    <div className={`rounded-xl border-2 border-dashed px-4 py-5 text-center text-xs transition-colors ${
+                      isGroupDropTarget
+                        ? 'border-brand-500 bg-brand-500/10 text-brand-600'
+                        : 'border-brand-300/60 text-slate-400'
+                    }`}>
+                      拖到此处归入「{group.sub?.name ?? '未分类'}」
+                    </div>
+                  )}
                 </div>
-              ))}
+                )
+              })}
             </div>
           )
         })()}
@@ -2150,6 +2296,16 @@ function App() {
           onUndo={restoreUndoSnapshot}
           onClose={() => setUndoSnapshot(null)}
         />
+      )}
+
+      {copyToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="glass fixed bottom-6 left-1/2 z-[95] -translate-x-1/2 rounded-xl border border-brand-200/70 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-xl shadow-slate-900/10"
+        >
+          {copyToast}
+        </div>
       )}
 
       {maintenanceSummary && !showSmartOrganize && (

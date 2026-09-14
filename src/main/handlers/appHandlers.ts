@@ -1,5 +1,5 @@
-import { ipcMain, shell, dialog } from 'electron'
-import { execFile, execFileSync, spawn } from 'child_process'
+import { ipcMain, shell, dialog, clipboard, nativeImage } from 'electron'
+import { execFile, spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { guardNativeDialog } from '../dialogGuard'
@@ -7,6 +7,47 @@ import { guardNativeDialog } from '../dialogGuard'
 /** 安全地将 PowerShell 命令编码为 Base64，避免注入 */
 function encodePsCommand(script: string): string {
   return Buffer.from(script, 'utf16le').toString('base64')
+}
+
+/** Windows 剪贴板的"文件拖放列表"格式名 */
+const CF_HDROP = 'CF_HDROP'
+
+/**
+ * 构造 CF_HDROP 需要的 DROPFILES 结构：
+ *   DWORD pFiles(20) + POINT pt(8) + BOOL fNC(4) + BOOL fWide(4)
+ * 后面紧跟 UTF-16LE 的路径列表，各路径以 \0 结尾，整体再补一个 \0 收尾。
+ */
+function buildFileDropBuffer(filePaths: string[]): Buffer {
+  const HEADER_SIZE = 20
+  const list = Buffer.from(filePaths.join('\0') + '\0\0', 'utf16le')
+  const buffer = Buffer.alloc(HEADER_SIZE + list.length)
+  buffer.writeUInt32LE(HEADER_SIZE, 0) // pFiles：文件名列表相对结构体的偏移
+  buffer.writeInt32LE(0, 4)            // pt.x
+  buffer.writeInt32LE(0, 8)            // pt.y
+  buffer.writeUInt32LE(0, 12)          // fNC
+  buffer.writeUInt32LE(1, 16)          // fWide：Unicode 路径
+  list.copy(buffer, HEADER_SIZE)
+  return buffer
+}
+
+/** 原生写 CF_HDROP 失败时的兜底：异步跑 PowerShell，不用 execFileSync 阻塞主进程 */
+function copyFileViaPowerShell(filePath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const psScript = `Add-Type -AssemblyName System.Windows.Forms; $dropList = New-Object System.Collections.Specialized.StringCollection; $dropList.Add('${filePath.replace(/'/g, "''")}') | Out-Null; [System.Windows.Forms.Clipboard]::SetFileDropList($dropList)`
+    execFile(
+      'powershell',
+      ['-NoProfile', '-EncodedCommand', encodePsCommand(psScript)],
+      { windowsHide: true, timeout: 5000 },
+      (error) => {
+        if (error) {
+          console.error('PowerShell clipboard fallback failed:', error)
+          resolve(false)
+          return
+        }
+        resolve(true)
+      }
+    )
+  })
 }
 
 function isSafeWebUrl(rawUrl: string): boolean {
@@ -177,9 +218,12 @@ export function registerAppHandlers() {
 
   ipcMain.handle('copy-file-to-clipboard', async (_, filePath: string) => {
     try {
-      const psScript = `Add-Type -AssemblyName System.Windows.Forms; $dropList = New-Object System.Collections.Specialized.StringCollection; $dropList.Add('${filePath.replace(/'/g, "''")}') | Out-Null; [System.Windows.Forms.Clipboard]::SetFileDropList($dropList)`
-      execFileSync('powershell', ['-NoProfile', '-EncodedCommand', encodePsCommand(psScript)], { windowsHide: true, timeout: 5000 })
-      return true
+      if (!fs.existsSync(filePath)) return false
+      // 直接写 Windows 的 CF_HDROP：不用起 PowerShell，主进程也不会被阻塞。
+      // 以前走 execFileSync 拉起 powershell，冷启动几百毫秒且会卡住整个界面。
+      clipboard.writeBuffer(CF_HDROP, buildFileDropBuffer([filePath]))
+      if (clipboard.availableFormats().includes(CF_HDROP)) return true
+      return await copyFileViaPowerShell(filePath)
     } catch (error) {
       console.error('Failed to copy file to clipboard:', error)
       return false
@@ -188,9 +232,15 @@ export function registerAppHandlers() {
 
   ipcMain.handle('copy-image-to-clipboard', async (_, filePath: string) => {
     try {
-      const psScript = `Add-Type -AssemblyName System.Windows.Forms -AssemblyName System.Drawing; $img = [System.Drawing.Image]::FromFile('${filePath.replace(/'/g, "''")}'); $bmp = New-Object System.Drawing.Bitmap($img); [System.Windows.Forms.Clipboard]::SetImage($bmp); $bmp.Dispose(); $img.Dispose()`
-      execFileSync('powershell', ['-NoProfile', '-EncodedCommand', encodePsCommand(psScript)], { windowsHide: true, timeout: 10000 })
-      return true
+      if (!fs.existsSync(filePath)) return false
+      const image = nativeImage.createFromPath(filePath)
+      if (!image.isEmpty()) {
+        clipboard.writeImage(image)
+        return true
+      }
+      // 解码不了的矢量图（SVG 等）退化为复制文件本身，至少还能粘贴出去
+      clipboard.writeBuffer(CF_HDROP, buildFileDropBuffer([filePath]))
+      return clipboard.availableFormats().includes(CF_HDROP)
     } catch (error) {
       console.error('Failed to copy image to clipboard:', error)
       return false

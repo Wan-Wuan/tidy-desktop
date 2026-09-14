@@ -61,6 +61,8 @@ export const AppCard = React.memo(function AppCard({
     <div
       key={app.id}
       data-app-id={app.id}
+      data-dragover={isDragOver ? 'true' : undefined}
+      data-selected={isSelected ? 'true' : undefined}
       draggable
       tabIndex={0}
       role="button"
