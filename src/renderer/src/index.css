@@ -29,8 +29,11 @@
   --slate-100: 241 245 249;
   --slate-200: 226 232 240;
   --slate-300: 203 213 225;
-  --slate-400: 148 163 184;
-  --slate-500: 100 116 139;
+  /* slate-400/500 承担几乎所有次要说明、空状态提示与卡片上的操作图标。
+     原值（148 163 184 / 100 116 139）压在浅色玻璃上只有约 2.6:1 对比度，
+     小字号几乎糊掉，这里整体加深一档。 */
+  --slate-400: 100 116 139;
+  --slate-500: 82 95 117;
   --slate-600: 71 85 105;
   --slate-700: 51 65 85;
   --slate-800: 30 41 59;
@@ -57,8 +60,20 @@
   --card-border: rgba(255, 255, 255, 0.75);
   --subtle-bg: rgba(252, 251, 248, 0.6);
   --subtle-border: rgba(255, 255, 255, 0.75);
-  --tile-hover-bg: rgba(255, 255, 255, 0.72);
-  --tile-hover-border: rgba(255, 255, 255, 0.95);
+  /* 浅色底上的悬停玻璃：不能再用"白叠白"。
+     页面底色本身是 #E8EEFF~#F5F3FF 的浅靛渐变，纯白半透明（原 255/0.72、边框 255/0.95）
+     与之几乎没有色差，肉眼等于没反馈。这里改成偏 brand-200 的淡靛磨砂：
+     既与页面拉开明度差，又保留 28% 透光让 backdrop 的模糊/极光能被看见，
+     同时给白色光泽扫过留出对比底。 */
+  --tile-hover-bg: rgba(199, 210, 254, 0.72);
+  --tile-hover-border: rgb(var(--brand-500) / 0.38);
+  --tile-hover-shadow:
+    0 14px 30px rgb(var(--brand-600) / 0.18),
+    0 3px 8px rgba(15, 23, 42, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgb(var(--brand-600) / 0.08);
+  --glass-hover-filter: blur(24px) saturate(1.6) brightness(1.02);
+  --glass-sheen: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.7) 50%, transparent 62%);
   --panel-bg: rgba(253, 252, 249, 0.8);
   --panel-border: rgba(255, 255, 255, 0.85);
   --menu-bg: rgba(253, 252, 249, 0.96);
@@ -105,6 +120,10 @@ body {
   color: rgb(var(--slate-800));
   min-height: 100vh;
   overflow: hidden;
+  /* 文字压在半透明玻璃上时默认渲染会发虚，统一走抗锯齿 + 字距优化 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 .theme-light {
@@ -128,10 +147,14 @@ body {
   --slate-50: 15 23 42;
   --slate-100: 30 41 59;
   --slate-300: 203 213 225;
-  --slate-500: 203 213 225;
-  --slate-600: 203 213 225;
+  /* 深色主题此前没有重映射 slate-400，直接继承浅色值（本就偏暗，浅色侧加深后会更暗）。
+     这里补上，并把 400→800 拉开成五档层次，原来 500/600 同值、700/800 同值，
+     正文与次要文字挤在一个亮度上，缺少视觉层级。 */
+  --slate-400: 176 190 208;
+  --slate-500: 194 206 222;
+  --slate-600: 210 220 233;
   --slate-700: 229 231 235;
-  --slate-800: 229 231 235;
+  --slate-800: 238 241 245;
 
   --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 32%), rgba(15, 19, 18, 0.54);
   --glass-border: rgba(255, 255, 255, 0.16);
@@ -139,8 +162,14 @@ body {
   --card-border: rgba(255, 255, 255, 0.12);
   --subtle-bg: rgba(15, 19, 18, 0.58);
   --subtle-border: rgba(255, 255, 255, 0.1);
-  --tile-hover-bg: rgba(255, 255, 255, 0.06);
+  --tile-hover-bg: rgba(255, 255, 255, 0.08);
   --tile-hover-border: rgba(255, 255, 255, 0.12);
+  --tile-hover-shadow:
+    0 14px 30px rgba(0, 0, 0, 0.45),
+    0 3px 8px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --glass-hover-filter: blur(16px) saturate(1.35) brightness(1.12);
+  --glass-sheen: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, 0.16) 50%, transparent 58%);
   --panel-bg: rgba(12, 15, 14, 0.8);
   --panel-border: rgba(255, 255, 255, 0.12);
   --menu-bg: rgba(15, 19, 18, 0.95);
@@ -193,10 +222,11 @@ body {
     --slate-50: 15 23 42;
     --slate-100: 30 41 59;
     --slate-300: 203 213 225;
-    --slate-500: 203 213 225;
-    --slate-600: 203 213 225;
+    --slate-400: 176 190 208;
+    --slate-500: 194 206 222;
+    --slate-600: 210 220 233;
     --slate-700: 229 231 235;
-    --slate-800: 229 231 235;
+    --slate-800: 238 241 245;
 
     --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 32%), rgba(15, 19, 18, 0.54);
     --glass-border: rgba(255, 255, 255, 0.16);
@@ -204,8 +234,14 @@ body {
     --card-border: rgba(255, 255, 255, 0.12);
     --subtle-bg: rgba(15, 19, 18, 0.58);
     --subtle-border: rgba(255, 255, 255, 0.1);
-    --tile-hover-bg: rgba(255, 255, 255, 0.06);
+    --tile-hover-bg: rgba(255, 255, 255, 0.08);
     --tile-hover-border: rgba(255, 255, 255, 0.12);
+    --tile-hover-shadow:
+      0 14px 30px rgba(0, 0, 0, 0.45),
+      0 3px 8px rgba(0, 0, 0, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    --glass-hover-filter: blur(16px) saturate(1.35) brightness(1.12);
+    --glass-sheen: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, 0.16) 50%, transparent 58%);
     --panel-bg: rgba(12, 15, 14, 0.8);
     --panel-border: rgba(255, 255, 255, 0.12);
     --menu-bg: rgba(15, 19, 18, 0.95);
@@ -356,9 +392,26 @@ body {
   border-color: rgba(248, 113, 113, 0.68);
 }
 
+/* 语义色在深色底上普遍偏暗：emerald-600 约 2.5:1、amber-700 约 2.8:1、
+   brand-500 约 4:1。统一换成各自的 300 档浅色，与原有 red 覆盖保持一致。 */
+.theme-dark .text-red-500,
 .theme-dark .text-red-600,
 .theme-dark .text-red-700 {
   color: #FCA5A5;
+}
+
+.theme-dark .text-emerald-500,
+.theme-dark .text-emerald-600 {
+  color: #6EE7B7;
+}
+
+.theme-dark .text-amber-600,
+.theme-dark .text-amber-700 {
+  color: #FCD34D;
+}
+
+.theme-dark .text-brand-500 {
+  color: rgb(var(--brand-300));
 }
 
 .theme-dark .shadow-brand-500\/5,
@@ -469,9 +522,24 @@ body {
     border-color: rgba(248, 113, 113, 0.68);
   }
 
+  .theme-system .text-red-500,
   .theme-system .text-red-600,
   .theme-system .text-red-700 {
     color: #FCA5A5;
+  }
+
+  .theme-system .text-emerald-500,
+  .theme-system .text-emerald-600 {
+    color: #6EE7B7;
+  }
+
+  .theme-system .text-amber-600,
+  .theme-system .text-amber-700 {
+    color: #FCD34D;
+  }
+
+  .theme-system .text-brand-500 {
+    color: rgb(var(--brand-300));
   }
 }
 
@@ -612,11 +680,20 @@ body {
 
 /* Glass card — transparent to show container blur */
 .glass-card {
-  background: var(--card-bg);
   border: 1px solid var(--card-border);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgb(var(--brand-600) / 0.05);
   backdrop-filter: blur(12px) saturate(1.12);
   -webkit-backdrop-filter: blur(12px) saturate(1.12);
+}
+
+/* .glass-card 是 0,1,0，比 Tailwind 的 .ring-2 / .shadow-xl / bg-brand-50\/50
+   （同为 0,1,0）位置更靠后，会整条盖掉它们。把会打架的 background 与 box-shadow
+   拆出来并排除拖拽悬停/选中态，这两个状态的 Tailwind 反馈才能真正显示出来。 */
+.glass-card:not([data-dragover]) {
+  background: var(--card-bg);
+}
+
+.glass-card:not([data-dragover]):not([data-selected]) {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgb(var(--brand-600) / 0.05);
 }
 
 .glass-subtle {
@@ -752,10 +829,18 @@ body {
 /* Card hover — GPU-accelerated, elastic curve */
 .card-hover {
   transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
-              box-shadow 220ms ease-out;
+              box-shadow 220ms ease-out,
+              background-color 220ms ease-out,
+              border-color 220ms ease-out,
+              backdrop-filter 220ms ease-out,
+              -webkit-backdrop-filter 220ms ease-out;
   contain: layout style;
 }
-.card-hover:hover {
+/* 注意：这里的 box-shadow 对应用卡片不生效——
+   `.layout-* .app-tile { box-shadow: none }`（0,2,0，位于下方）与本规则同权重且靠后，
+   会把它覆盖掉。卡片的悬停阴影统一由 `.layout-* .app-tile:hover` 提供。 */
+/* 同样排除拖拽悬停态：否则会盖掉 AppCard 里 isDragOver 的 scale-[1.03] */
+.card-hover:hover:not([data-dragover]) {
   transform: translateY(-2px);
   box-shadow: 0 12px 28px rgb(var(--brand-600) / 0.14), 0 3px 8px rgba(15, 23, 42, 0.08);
 }
@@ -766,9 +851,11 @@ body {
   overflow: hidden;
 }
 
+/* 滤镜强度改为按主题取值：浅色底上 brightness 提升量微乎其微（底色已接近 255），
+   真正起作用的是加大 blur——把身后的极光光斑糊开，玻璃感才出得来。 */
 .glass-card:hover {
-  backdrop-filter: blur(14px) saturate(1.3) brightness(1.06);
-  -webkit-backdrop-filter: blur(14px) saturate(1.3) brightness(1.06);
+  backdrop-filter: var(--glass-hover-filter);
+  -webkit-backdrop-filter: var(--glass-hover-filter);
 }
 
 /* D1 光泽扫过：hover 时 45° 高光从左滑到右 */
@@ -776,7 +863,8 @@ body {
   content: '';
   position: absolute;
   inset: -40%;
-  background: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, 0.16) 50%, transparent 58%);
+  /* 光泽颜色按主题取值：深色上 16% 白可见，浅色上要 70% 白才看得出扫过 */
+  background: var(--glass-sheen);
   transform: translateX(-70%);
   transition: transform 600ms ease;
   pointer-events: none;
@@ -1152,19 +1240,26 @@ body {
   padding-top: 10px;
 }
 
-.layout-command-rail .app-tile,
-.layout-horizon-workspace .app-tile,
-.layout-studio-split .app-tile {
+/* 排除拖拽悬停/选中态：这两个状态靠 Tailwind 的 ring-* / shadow-* / bg-* 表现，
+   而它们的权重只有 0,1,0，会被本规则（0,2,0）整条盖掉，反馈等于不存在。 */
+.layout-command-rail .app-tile:not([data-dragover]):not([data-selected]),
+.layout-horizon-workspace .app-tile:not([data-dragover]):not([data-selected]),
+.layout-studio-split .app-tile:not([data-dragover]):not([data-selected]) {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
 }
 
-.layout-command-rail .app-tile:hover,
-.layout-horizon-workspace .app-tile:hover,
-.layout-studio-split .app-tile:hover {
+/* 权重 0,3,0：高于上面的 `.layout-* .app-tile`（0,2,0）重置规则，
+   阴影要写在这里才会真正生效。
+   同样排除拖拽悬停/选中态——鼠标一定悬停在目标卡片上，若不排除，
+   Tailwind 的 bg-brand-50/50 与 ring 会被本规则全部覆盖。 */
+.layout-command-rail .app-tile:hover:not([data-dragover]):not([data-selected]),
+.layout-horizon-workspace .app-tile:hover:not([data-dragover]):not([data-selected]),
+.layout-studio-split .app-tile:hover:not([data-dragover]):not([data-selected]) {
   border-color: var(--tile-hover-border);
   background: var(--tile-hover-bg);
+  box-shadow: var(--tile-hover-shadow);
 }
 
 /* Template 2: broad top navigation and a horizontal scanning rhythm.
@@ -1598,19 +1693,31 @@ body {
 .theme-glass {
   --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12) 32%, rgba(255, 255, 255, 0.26)), rgba(255, 255, 255, 0.42);
   --glass-border: rgba(255, 255, 255, 0.6);
-  --card-bg: rgba(255, 255, 255, 0.68);
+  /* 本主题的 slate 被特意压深（配合白玻璃面板上的深色文字），
+     静止态要压低一点，好在悬停时留出提亮空间 */
+  --card-bg: rgba(255, 255, 255, 0.52);
   --card-border: rgba(255, 255, 255, 0.72);
   --slate-400: 71 85 105;
   --slate-500: 51 65 85;
   --slate-600: 30 41 59;
   --slate-700: 15 23 42;
+  /* brand-200/300 未重映射时是浅靛蓝，与本主题的绿/琥珀不搭，
+     且深色主题下 brand-700 类文字会靠 rgb(var(--brand-200)) 提亮——
+     这里补上偏祖母绿的浅色，画布上的标题提亮后才不跳色。 */
+  --brand-200: 167 243 208;
+  --brand-300: 110 231 183;
   --brand-500: 5 150 105;
   --brand-600: 4 120 87;
   --brand-700: 6 78 59;
   --subtle-bg: rgba(255, 255, 255, 0.42);
   --subtle-border: rgba(255, 255, 255, 0.4);
-  --tile-hover-bg: rgba(255, 255, 255, 0.68);
-  --tile-hover-border: rgba(255, 255, 255, 0.8);
+  --tile-hover-bg: rgba(255, 255, 255, 0.82);
+  --tile-hover-border: rgba(255, 255, 255, 0.88);
+  --tile-hover-shadow:
+    0 16px 34px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --glass-hover-filter: blur(20px) saturate(1.6) brightness(1.08);
+  --glass-sheen: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, 0.5) 50%, transparent 60%);
   --panel-bg: rgba(255, 255, 255, 0.62);
   --panel-border: rgba(255, 255, 255, 0.55);
   --menu-bg: rgba(252, 251, 248, 0.92);
@@ -1622,4 +1729,46 @@ body {
   --studio-border: rgba(255, 255, 255, 0.45);
   --grip-bg: rgba(255, 255, 255, 0.65);
   --grip-border: rgba(255, 255, 255, 0.65);
+}
+
+/* 玻璃主题的可读性修正：本主题的页面底是深绿→琥珀渐变，而本主题的 slate 被
+   重映射成深色（为配合白玻璃面板）。偏偏 `.layout-* .app-tile` 会把卡片背景强制
+   成 transparent，于是近黑的卡片名（slate-700 = 15 23 42）直接压在深色背景上，
+   对比度不足 1.5:1，等于隐形。这里把卡片的白玻璃底还回来，文字才有承载面。
+   权重与 `.layout-* .app-tile` 同为 0,2,0，但位置更靠后，故生效；悬停时由
+   `.layout-* .app-tile:hover`（0,3,0）接手，走 --tile-hover-bg 提亮。 */
+.theme-glass .app-tile {
+  background: var(--card-bg);
+  border-color: var(--card-border);
+}
+
+/* 画布区域的文字提亮。
+   本主题的 slate / brand-700 是深色（为配白玻璃面板），但顶栏、分类栏、内容区
+   这些地方没有底板，文字直接压在深绿→琥珀渐变上，等于隐形。
+   限定在画布容器内，避免波及模态框/卡片这些"白玻璃底 + 深色字"的区域。 */
+.theme-glass .app-header .text-brand-700,
+.theme-glass .app-content .text-brand-700 {
+  color: rgb(var(--brand-200));
+}
+
+.theme-glass .app-header .text-slate-900,
+.theme-glass .app-overview .text-slate-900,
+.theme-glass .app-content .text-slate-900 {
+  color: #F1F5F9;
+}
+
+.theme-glass .app-header .text-slate-400,
+.theme-glass .category-nav .text-slate-400,
+.theme-glass .subcategory-nav .text-slate-400,
+.theme-glass .app-content .text-slate-400 {
+  color: rgba(226, 232, 240, 0.82);
+}
+
+/* 分类/子分类按钮原本是 50%~60% 白底，在深色高饱和背景上混出来发灰，
+   深色字对比不足。加实到 88% 让字有清楚的底。 */
+.theme-glass .category-nav .bg-white\/60,
+.theme-glass .category-nav .bg-white\/50,
+.theme-glass .subcategory-nav .bg-white\/60,
+.theme-glass .subcategory-nav .bg-white\/50 {
+  background-color: rgba(255, 255, 255, 0.88);
 }
