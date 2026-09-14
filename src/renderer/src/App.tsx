@@ -419,6 +419,24 @@ function App() {
     }
   }, [])
 
+  /* dragend 兜底：万一源节点被异常移除，React 的 onDragEnd 就收不到事件，
+     拖拽状态会永久卡住（表现为排序整个失灵）。在 document 上再兜一层。 */
+  useEffect(() => {
+    const resetDragState = () => {
+      removeDragGhost()
+      draggedAppIdRef.current = null
+      dragOverGroupRef.current = null
+      rightDragTargetRef.current = null
+      setDraggedAppId(null)
+      setDragOverAppId(null)
+      setDragOverCategory(null)
+      setDragOverSubId(null)
+      setDragOverGroupSubId(null)
+    }
+    document.addEventListener('dragend', resetDragState)
+    return () => document.removeEventListener('dragend', resetDragState)
+  }, [removeDragGhost])
+
   useEffect(() => {
     if (!categoryContextMenu) return
     const closeMenu = () => setCategoryContextMenu(null)
@@ -1375,22 +1393,21 @@ function App() {
   const isDraggingApp = draggedAppId !== null
 
   const groupedApps = useMemo(() => {
-    // 拖动时从网格里过滤掉被拖的那张：原位置腾出来，网格自动塌缩，
-    // 不再像之前那样留一个半透明的"洞"——拖到中间时也就不会有"卡住"的错觉。
-    const visibleApps = draggedAppId
-      ? filteredApps.filter(a => a.id !== draggedAppId)
-      : filteredApps
+    /* 注意：这里**不能**把 draggedAppId 过滤掉。
+       源卡片一旦从 DOM 移除，HTML5 拖拽的 dragend 就再也不会触发，
+       清理逻辑全部失效、拖拽状态永久错乱（排序会整个坏掉）。
+       要表达"已被拖走"，改用 CSS 把源卡片画成虚线空框（见 index.css）。 */
     const groups: { sub: Subcategory | null; apps: AppItem[] }[] = []
-    const noSub = sortAppsForDisplay(visibleApps.filter(a => !a.subcategoryId))
+    const noSub = sortAppsForDisplay(filteredApps.filter(a => !a.subcategoryId))
     if (noSub.length > 0) groups.push({ sub: null, apps: noSub })
     for (const s of displaySubcategories) {
-      const sApps = sortAppsForDisplay(visibleApps.filter(a => a.subcategoryId === s.id))
+      const sApps = sortAppsForDisplay(filteredApps.filter(a => a.subcategoryId === s.id))
       // 拖动应用时把"还没有任何应用"的子分类也渲染出来：
       // 否则网格里根本没有这一块，用户没法把应用归到空子分类上。
       if (sApps.length > 0 || isDraggingApp) groups.push({ sub: s, apps: sApps })
     }
     return groups
-  }, [filteredApps, displaySubcategories, sortAppsForDisplay, isDraggingApp, draggedAppId])
+  }, [filteredApps, displaySubcategories, sortAppsForDisplay, isDraggingApp])
 
   useEffect(() => {
     setActiveSubcategoryId(null)

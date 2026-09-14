@@ -1250,6 +1250,24 @@ body {
   box-shadow: none;
 }
 
+/* 拖动中的源卡片：画成虚线空框表示"原位、已被拖走"。
+   绝对不能用 display:none 或从 DOM 移除它——HTML5 拖拽的源节点一旦消失，
+   dragend 就不再触发，清理逻辑失效、拖拽状态会永久错乱（排序整个坏掉）。 */
+.app-tile[data-dragging='true'] {
+  /* 覆盖 AppCard 上的 opacity-30 / scale-95 / blur-[2px]——
+     那些会把虚线框一起淡化，反而看不出"已被拖走" */
+  opacity: 1 !important;
+  transform: none !important;
+  filter: none !important;
+  background: rgb(var(--brand-500) / 0.06) !important;
+  border: 1px dashed rgb(var(--brand-500) / 0.55) !important;
+  box-shadow: none !important;
+}
+
+.app-tile[data-dragging='true'] > * {
+  opacity: 0.18;
+}
+
 /* 权重 0,3,0：高于上面的 `.layout-* .app-tile`（0,2,0）重置规则，
    阴影要写在这里才会真正生效。
    同样排除拖拽悬停/选中态——鼠标一定悬停在目标卡片上，若不排除，
