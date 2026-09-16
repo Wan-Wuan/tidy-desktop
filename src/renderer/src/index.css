@@ -155,6 +155,12 @@ body {
   --slate-600: 210 220 233;
   --slate-700: 229 231 235;
   --slate-800: 238 241 245;
+  /* brand-50/100 是浅色系的浅紫底（#EEF2FF / #E0E7FF）。深色主题此前没重映射它们，
+     于是 `bg-brand-50/50` 这类"浅紫半透明"叠在深色模态框上会混成中灰紫，
+     而里面的文字走的是已重映射的 slate-700（浅色）——浅字压中灰底，对比度约 3:1，
+     达不到 WCAG AA。重映射为深靛（indigo-950/900），让它和 slate 一样随主题走。 */
+  --brand-50: 30 27 75;
+  --brand-100: 49 46 129;
 
   --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 32%), rgba(15, 19, 18, 0.54);
   --glass-border: rgba(255, 255, 255, 0.16);
@@ -227,6 +233,9 @@ body {
     --slate-600: 210 220 233;
     --slate-700: 229 231 235;
     --slate-800: 238 241 245;
+    /* 同 .theme-dark：brand-50/100 必须一起重映射，否则浅紫半透明底 + 浅色文字 */
+    --brand-50: 30 27 75;
+    --brand-100: 49 46 129;
 
     --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 32%), rgba(15, 19, 18, 0.54);
     --glass-border: rgba(255, 255, 255, 0.16);
@@ -335,6 +344,15 @@ body {
 .theme-dark button.bg-white:hover,
 .theme-dark button.bg-slate-100:hover {
   background-color: rgba(51, 65, 85, 0.95);
+}
+
+/* brand-100 已被重映射成深靛（用于背景时是对的），但用作**边框**时在深色底上
+   几乎看不见——这些描边（浮层、胶囊、模态框分隔线）改用亮紫的低透明度版本。 */
+.theme-dark .border-brand-100\/40,
+.theme-dark .border-brand-100\/50,
+.theme-dark .border-brand-100\/70,
+.theme-dark .border-brand-100\/80 {
+  border-color: rgb(var(--brand-400) / 0.28);
 }
 
 /* 带透明度的白色表面（胶囊、kbd、浮层面板）→ 深色玻璃面，避免深色背景下刺眼白块 */
@@ -477,6 +495,14 @@ body {
   .theme-system .bg-white\/82,
   .theme-system .bg-white\/95 {
     background-color: rgba(30, 41, 59, 0.78);
+  }
+
+  /* 同 .theme-dark：brand-100 重映射后作边框在深色底上看不见，换亮紫低透明度 */
+  .theme-system .border-brand-100\/40,
+  .theme-system .border-brand-100\/50,
+  .theme-system .border-brand-100\/70,
+  .theme-system .border-brand-100\/80 {
+    border-color: rgb(var(--brand-400) / 0.28);
   }
 
   .theme-system div.bg-white:not(.rounded-full) {
