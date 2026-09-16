@@ -1776,6 +1776,59 @@ body {
   border-color: var(--card-border);
 }
 
+/* ── AppCard 图标背景 ─
+ 以前硬编码 `from-orange-50 to-orange-100` 等 Tailwind gradient——深色主题下
+ 浅橙色背景既刺眼又让上面的 duotone Phosphor 图标对比度归零。
+ 改成三个语义化类，颜色 + currentColor 都按主题切换：图标容器用 color 控制
+ currentColor（Phosphor 图标默认就是 currentColor），浅色主题保持原来的
+ 柔和渐变，深色主题用低饱和度的同色相版本。 */
+.icon-bg-folder {
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+  color: #C2410C;
+}
+.icon-bg-steam {
+  background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%);
+  color: #6D28D9;
+}
+.icon-bg-app {
+  background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+  color: #4338CA;
+}
+
+.theme-dark .icon-bg-folder {
+  background: linear-gradient(135deg, rgba(251, 146, 60, 0.22) 0%, rgba(251, 146, 60, 0.08) 100%);
+  color: #FB923C;
+}
+.theme-dark .icon-bg-steam {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.22) 0%, rgba(139, 92, 246, 0.08) 100%);
+  color: #A78BFA;
+}
+.theme-dark .icon-bg-app {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.22) 0%, rgba(99, 102, 241, 0.08) 100%);
+  color: #818CF8;
+}
+
+/* 玻璃主题的图标底保留浅色：卡片本身是白玻璃底，深色图标自然清楚。
+   颜色保持原版面的饱和橙/紫/蓝，避免与白玻璃底混色。 */
+.theme-glass .icon-bg-folder {
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+  color: #C2410C;
+}
+.theme-glass .icon-bg-steam {
+  background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%);
+  color: #6D28D9;
+}
+.theme-glass .icon-bg-app {
+  background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+  color: #4338CA;
+}
+
+/* 卡片名：原来是 text-slate-700（#0F172A）压在深色卡片上等于隐形，
+   深色主题下换成 slate-200。玻璃主题下卡片是白玻璃底，深色字仍然清楚，不用改。 */
+.theme-dark .app-tile-name {
+  color: rgb(var(--slate-200));
+}
+
 /* 画布区域的文字提亮。
    本主题的 slate / brand-700 是深色（为配白玻璃面板），但顶栏、分类栏、内容区
    这些地方没有底板，文字直接压在深绿→琥珀渐变上，等于隐形。

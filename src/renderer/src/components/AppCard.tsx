@@ -126,7 +126,7 @@ export const AppCard = React.memo(function AppCard({
       </div>
       {ui?.showIcon !== false && (
         <div style={{ borderRadius: Math.min(br, 12) }} className={`${iconSize} flex items-center justify-center mb-3 mx-auto ${
-          app.type === 'folder' ? 'bg-gradient-to-br from-orange-50 to-orange-100' : app.type === 'steam' ? 'bg-gradient-to-br from-aurora-50 to-aurora-100' : 'bg-gradient-to-br from-brand-50 to-brand-100'
+          app.type === 'folder' ? 'icon-bg-folder' : app.type === 'steam' ? 'icon-bg-steam' : 'icon-bg-app'
         }`}>
           {hasDisplayableIcon(app.icon) ? (
             <img src={app.icon} alt={app.name} className={iconInner} draggable={false} />
@@ -138,7 +138,7 @@ export const AppCard = React.memo(function AppCard({
         </div>
       )}
       {ui?.showName !== false && (
-        <p className={`${textSize} text-center text-slate-700 font-medium truncate`}>{app.name}</p>
+        <p className={`${textSize} text-center app-tile-name font-medium truncate`}>{app.name}</p>
       )}
     </div>
   )
