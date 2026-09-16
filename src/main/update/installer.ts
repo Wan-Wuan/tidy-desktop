@@ -5,8 +5,6 @@ import { spawn } from 'child_process'
 import { InstallResult } from './types'
 
 const UPDATE_FILE = path.join(app.getPath('temp'), 'tidy-desktop-update.exe')
-const PS_SCRIPT = path.join(app.getPath('temp'), 'tidy-desktop-update.ps1')
-const INSTALL_LOG = path.join(app.getPath('temp'), 'tidy-desktop-install.log')
 
 export function getUpdateFilePath(): string {
   return UPDATE_FILE
@@ -20,6 +18,19 @@ function getCurrentInstallDir(): string {
   }
 }
 
+/**
+ * 启动更新安装。
+ *
+ * 约束：Windows 会锁住运行中的 exe，必须等本进程真正退出后才能覆盖安装目录，
+ * 否则 NSIS 会报"安装没有完成"。
+ *
+ * 旧实现是生成一段外部脚本、再用 `cmd /c start` 拉起脚本宿主去等进程退出并启动安装器。
+ * 这套链路依赖系统里存在可用的命令解释器与脚本宿主，而这两者在受限机器上并不保证
+ * 存在（组策略禁用、执行策略锁死、精简系统缺组件），一旦缺失用户就卡在"下载完却装不上"。
+ *
+ * 现在改为派生**应用自己的可执行文件**作为安装助手（见 ./assistant），由它用 Node
+ * 内置能力完成等待与启动。整条链路不再需要任何外部命令解释器。
+ */
 export function runInstaller(installerPath: string): Promise<InstallResult> {
   // Validate path matches expected update file
   const resolvedPath = path.resolve(installerPath)
@@ -36,82 +47,48 @@ export function runInstaller(installerPath: string): Promise<InstallResult> {
   try {
     const currentPid = process.pid
     const installDir = getCurrentInstallDir()
-    const escapedInstallerPath = installerPath.replace(/'/g, "''")
-    const escapedInstallDir = installDir.replace(/'/g, "''")
-    const escapedLogPath = INSTALL_LOG.replace(/'/g, "''")
-    const escapedScriptPath = PS_SCRIPT.replace(/'/g, "''")
 
-    const psScript = `
-try {
-  $logFile = '${escapedLogPath}'
-  $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-  "[$ts] Waiting for app PID ${currentPid} to exit..." | Out-File -FilePath $logFile -Encoding UTF8
-
-  # 等到应用进程真正退出再安装（上限 120s）。旧实现 Wait-Process -Timeout 30
-  # 超时后照样安装，exe 被占用会导致"安装没有完成"。
-  $deadline = (Get-Date).AddSeconds(120)
-  while ((Get-Process -Id ${currentPid} -ErrorAction SilentlyContinue) -and ((Get-Date) -lt $deadline)) {
-    Start-Sleep -Milliseconds 500
-  }
-  if (Get-Process -Id ${currentPid} -ErrorAction SilentlyContinue) {
-    "[$ts] App still running after 120s; aborting install." | Out-File -FilePath $logFile -Append -Encoding UTF8
-    exit 1
-  }
-
-  $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-  "[$ts] App exited, starting installer for '${escapedInstallDir}'..." | Out-File -FilePath $logFile -Append -Encoding UTF8
-  $installDir = '${escapedInstallDir}'
-  $installerArgs = "/S --force-run /D=$installDir"
-  Start-Process -FilePath '${escapedInstallerPath}' -ArgumentList $installerArgs -Wait
-
-  $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-  "[$ts] Installation completed, app start requested." | Out-File -FilePath $logFile -Append -Encoding UTF8
-} catch {
-  $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-  $errMsg = $_.Exception.Message
-  "[$ts] Error: $errMsg" | Out-File -FilePath $logFile -Append -Encoding UTF8
-} finally {
-  Remove-Item -Path '${escapedScriptPath}' -Force -ErrorAction SilentlyContinue
-}
-`.trim()
-
-    fs.writeFileSync(PS_SCRIPT, psScript, 'utf-8')
-
-    // Use cmd /c start to launch PowerShell as a fully independent process
-    // This ensures the script survives after app.quit() on Windows
-    const child = spawn('cmd.exe', [
-      '/c', 'start', '', 'powershell',
-      '-ExecutionPolicy', 'Bypass',
-      '-WindowStyle', 'Hidden',
-      '-File', PS_SCRIPT
-    ], {
-      detached: true,
-      stdio: 'ignore',
-      shell: false
-    })
+    const child = spawn(
+      process.execPath,
+      [
+        '--tidy-update-install',
+        `--tidy-installer=${resolvedPath}`,
+        `--tidy-wait-pid=${currentPid}`,
+        `--tidy-install-dir=${installDir}`
+      ],
+      {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      }
+    )
 
     return new Promise<InstallResult>((resolve) => {
-      let spawnCalled = false
+      let settled = false
+      const done = (result: InstallResult) => {
+        if (settled) return
+        settled = true
+        resolve(result)
+      }
 
       child.on('spawn', () => {
-        spawnCalled = true
         child.unref()
-        resolve({ success: true })
-        // Force exit immediately — skip window close handlers that would hide instead of quit
-        // PowerShell script (cmd /c start) is already independent, no need to wait
-        setTimeout(() => app.exit(0), 500)
+        done({ success: true })
+        // 立刻退出：绕开"关闭窗口 = 最小化到托盘"那套逻辑（它会让进程继续常驻）。
+        // 安装助手会等这个进程真正消失后再启动安装器，所以退出快慢不影响正确性。
+        setTimeout(() => app.exit(0), 300)
       })
 
       child.on('error', (err) => {
         console.error('install-update: spawn error:', err)
-        if (!spawnCalled) resolve({ success: false, error: err.message })
+        done({ success: false, error: err.message })
       })
 
       // Fallback timeout
       setTimeout(() => {
-        if (!spawnCalled) {
+        if (!settled) {
           child.kill()
-          resolve({ success: false, error: 'Spawn timeout' })
+          done({ success: false, error: 'Spawn timeout' })
         }
       }, 5000)
     })

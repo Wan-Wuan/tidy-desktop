@@ -9,9 +9,17 @@ import { registerFileHandlers } from './handlers/fileHandlers'
 import { registerIconHandlers } from './handlers/iconHandlers'
 import { registerSystemHandlers, setWindowRefs } from './handlers/systemHandlers'
 import { cleanupInstalledUpdateCache, registerUpdateHandlers } from './update'
+import { parseUpdateAssistantArgs, runUpdateAssistant } from './update/assistant'
 import { isNativeDialogOpen, guardNativeDialog } from './dialogGuard'
 
 const isDev = !app.isPackaged
+
+/**
+ * 安装助手模式：由更新流程派生的临时进程，只负责等主实例退出后跑安装器。
+ * 它不建窗口、不注册快捷键，也**不参与单实例锁**——否则在主实例尚未完全退出的
+ * 那几百毫秒里会被判成"第二个实例"而直接退出，更新就断了。
+ */
+const updateAssistantArgs = parseUpdateAssistantArgs(process.argv)
 
 const mainWindowRef: { current: BrowserWindow | null } = { current: null }
 const searchWindowRef: { current: BrowserWindow | null } = { current: null }
@@ -20,7 +28,10 @@ let singleInstancePromptOpen = false
 let searchWindowShouldShow = false
 let shortcutRetryTimer: NodeJS.Timeout | null = null
 const pendingSearchReveal = new WeakSet<BrowserWindow>()
-const hasSingleInstanceLock = app.requestSingleInstanceLock()
+// 助手进程不参与单实例锁：它启动的那一刻主实例往往还在退出中，
+// 一旦去抢锁就会被判成"第二个实例"从而退出，更新链路会断在这里。
+// 这里直接视为已持有锁，跳过 quit 分支即可（它本来也不会创建窗口）。
+const hasSingleInstanceLock = updateAssistantArgs ? true : app.requestSingleInstanceLock()
 const SEARCH_WINDOW_DEFAULT_WIDTH = 600
 const SEARCH_WINDOW_EMPTY_HEIGHT = 100
 
@@ -590,6 +601,14 @@ if (!hasSingleInstanceLock) {
 
 app.on('ready', () => {
   if (!hasSingleInstanceLock) return
+
+  // 安装助手：等主实例退出后静默启动安装器，全程不建窗口、不建托盘、不注册快捷键
+  if (updateAssistantArgs) {
+    runUpdateAssistant(updateAssistantArgs)
+      .catch(err => console.error('update assistant failed:', err))
+      .finally(() => app.exit(0))
+    return
+  }
 
   Menu.setApplicationMenu(null)
   ensureDataDir()
