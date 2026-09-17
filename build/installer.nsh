@@ -21,6 +21,12 @@
       MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY retry_force_kill
       Quit
     ${endIf}
+
+  ; 更新助手跑的是应用自身的可执行文件，spawn 安装器后会立刻退出，
+  ; 但进程收尾和文件句柄释放仍需要一点时间，期间 exe 处于锁定状态。
+  ; 这里的等待是纯 NSIS 指令，不依赖任何外部命令——即使上面的进程检测
+  ; 因命令解释器缺失而不可用，也能留出足够的退出窗口，避免覆盖文件时撞锁。
+  Sleep 1200
 !macroend
 
 !macro customInstall
