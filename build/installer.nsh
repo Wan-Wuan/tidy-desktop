@@ -1,31 +1,38 @@
-!macro customCheckAppRunning
+﻿!macro customCheckAppRunning
   ; 本应用"关闭窗口 = 最小化到托盘"，进程对 WM_CLOSE 不会真正退出；
   ; 默认检测流程对这类托盘常驻应用会以"安装没有完成"告终。
-  ; 这里直接结束安装目录下的应用进程：先请求退出，再强制结束，确保升级总能完成。
+  ;
+  ; 这里用 electron-builder 自带 NSIS 的 nsProcess 插件按进程名结束后台常驻进程：
+  ; 不派生任何外部命令（cmd / taskkill / PowerShell 都不需要），也不会有窗口闪出。
+  ; 因此静默安装（应用内更新走的 /S 通道）和交互式安装在此处行为一致，且在没有
+  ; 命令解释器的精简系统上同样可用。
   DetailPrint `Checking for running "${PRODUCT_NAME}"...`
-  nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /T 1>nul 2>nul`
-  Pop $0
+  !insertmacro nsProcess::CloseProcess "${APP_EXECUTABLE_FILENAME}" $0
   ${if} $0 == 0
     Sleep 800
   ${endIf}
+
   StrCpy $1 0
   retry_force_kill:
-    nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T 1>nul 2>nul`
-    Pop $0
+    !insertmacro nsProcess::KillProcess "${APP_EXECUTABLE_FILENAME}" $0
     ${if} $0 == 0
       IntOp $1 $1 + 1
       ${if} $1 <= 10
         Sleep 500
         Goto retry_force_kill
       ${endIf}
-      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY retry_force_kill
+      ; 静默安装不能弹出任何界面：应用内更新此时已经没有前台窗口，
+      ; 弹框只会把人卡住。交互式安装才让用户决定重试还是取消。
+      ${IfNot} ${Silent}
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY retry_force_kill
+      ${EndIf}
       Quit
     ${endIf}
 
   ; 更新助手跑的是应用自身的可执行文件，spawn 安装器后会立刻退出，
   ; 但进程收尾和文件句柄释放仍需要一点时间，期间 exe 处于锁定状态。
-  ; 这里的等待是纯 NSIS 指令，不依赖任何外部命令——即使上面的进程检测
-  ; 因命令解释器缺失而不可用，也能留出足够的退出窗口，避免覆盖文件时撞锁。
+  ; 这里的等待是纯 NSIS 指令，不依赖任何外部命令——即使上面的进程结束
+  ; 一步没生效，也能留出足够的退出窗口，避免覆盖文件时撞锁。
   Sleep 1200
 !macroend
 

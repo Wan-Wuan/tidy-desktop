@@ -1,4 +1,4 @@
-import { ipcMain, app } from 'electron'
+import { ipcMain, app, shell } from 'electron'
 import { execFileSync } from 'child_process'
 import crypto from 'crypto'
 import path from 'path'
@@ -72,22 +72,15 @@ function getSteamInstallPaths(): string[] {
 
 function resolveShortcut(filePath: string): ShortcutInfo {
   try {
-    const escapedPath = escapePsString(filePath)
-    const result = execFileSync(
-      'powershell',
-      [
-        '-NoProfile',
-        '-Command',
-        `$sh = New-Object -ComObject WScript.Shell; $s = $sh.CreateShortcut('${escapedPath}'); [Console]::OutputEncoding=[Text.Encoding]::UTF8; [string]::Join([char]31, @($s.TargetPath, $s.IconLocation))`
-      ],
-      { encoding: 'utf8', windowsHide: true, timeout: 3000 }
-    ).trim()
-    const [targetPath = '', iconLocation = ''] = result.split(String.fromCharCode(31))
-    const parsedIcon = parseIconLocation(iconLocation)
+    // 走 Electron 内置的 .lnk 解析，不再派生 PowerShell：
+    // ① 导入快捷方式时每个 .lnk 都会走这里，外部进程会闪黑窗口；
+    // ② 受限机器上 PowerShell 可能被策略禁用甚至不存在，那时图标会静默降级。
+    const details = shell.readShortcutLink(filePath)
+    const parsedIcon = parseIconLocation(details.icon || '')
     return {
-      targetPath: expandWindowsEnvPath(targetPath),
+      targetPath: expandWindowsEnvPath(details.target || ''),
       iconPath: expandWindowsEnvPath(parsedIcon.iconPath),
-      iconIndex: parsedIcon.iconIndex
+      iconIndex: Number.isInteger(details.iconIndex) ? (details.iconIndex as number) : parsedIcon.iconIndex
     }
   } catch {
     return { targetPath: '', iconPath: '', iconIndex: 0 }
