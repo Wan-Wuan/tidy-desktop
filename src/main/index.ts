@@ -227,6 +227,17 @@ function createWindow() {
   })
 
   if (isDev) {
+    /* 开发期的 DevTools 入口。
+       本窗口是无边框 + setApplicationMenu(null)，没有默认菜单，
+       所以 Electron 默认的 Ctrl+Shift+I / F12 都不会生效——想在真机验证时
+       读渲染层的 [drag-perf] 帧率日志，会发现控制台根本打不开。这里自己绑一次。
+       只在开发构建里注册，打包后不带这条路径。 */
+    win.webContents.on('before-input-event', (_event, input) => {
+      if (input.type !== 'keyDown') return
+      const isF12 = input.key === 'F12'
+      const isInspect = input.control && input.shift && input.key.toLowerCase() === 'i'
+      if (isF12 || isInspect) win.webContents.toggleDevTools()
+    })
     win.loadURL('http://localhost:5173')
   } else {
     win.loadFile(path.join(__dirname, '../../renderer/index.html'))
