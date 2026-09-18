@@ -705,10 +705,16 @@ body {
 }
 
 /* Glass card — transparent to show container blur */
+/* 基础玻璃滤镜抽成变量：拖拽期间要把 hover 的滤镜变化钉回这个基准值，
+   避免两处硬编码不同步 */
+:root {
+  --glass-base-filter: blur(12px) saturate(1.12);
+}
+
 .glass-card {
   border: 1px solid var(--card-border);
-  backdrop-filter: blur(12px) saturate(1.12);
-  -webkit-backdrop-filter: blur(12px) saturate(1.12);
+  backdrop-filter: var(--glass-base-filter);
+  -webkit-backdrop-filter: var(--glass-base-filter);
 }
 
 /* .glass-card 是 0,1,0，比 Tailwind 的 .ring-2 / .shadow-xl / bg-brand-50\/50
@@ -909,6 +915,28 @@ body {
 .glass-card:hover:not([data-dragover]) {
   backdrop-filter: var(--glass-hover-filter);
   -webkit-backdrop-filter: var(--glass-hover-filter);
+}
+
+/* ── 拖拽进行中：冻结卡片的一切 hover 过渡 ──
+   开关是 App.tsx 挂在 .app-shell 上的 data-drag-active。
+
+   为什么必须冻结：卡片带 backdrop-filter，任何一次外观变化（阴影/底色/模糊）
+   都要让它连同自己的模糊一起重新栅格化。hover 过渡是 220ms——鼠标快速划过
+   一排卡片时，会有十几张卡同时处于过渡中，每帧都在重算模糊，直接掉帧。
+
+   冻结过渡而不是隐藏 hover 效果：落点卡片的高亮仍然立即出现（只是不再缓动），
+   其余卡片的 hover 也只发生一次瞬时变化，而不是持续十几帧的重绘。 */
+.app-shell[data-drag-active='true'] .card-hover {
+  transition: none;
+}
+.app-shell[data-drag-active='true'] .glass-card::after {
+  /* 光泽扫过同样是 600ms 过渡，拖拽时一并冻结（冻结后它停在画布外，等于不显示） */
+  transition: none;
+}
+.app-shell[data-drag-active='true'] .glass-card:hover:not([data-dragover]) {
+  /* 拖拽时 hover 不再加深模糊：改一次模糊半径就要重算一次整卡模糊 */
+  backdrop-filter: var(--glass-base-filter);
+  -webkit-backdrop-filter: var(--glass-base-filter);
 }
 
 /* D1 光泽扫过：hover 时 45° 高光从左滑到右 */

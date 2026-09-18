@@ -40,6 +40,21 @@ function toColor(triplet: string): string {
   return /^\d+\s+\d+\s+\d+$/.test(triplet) ? `rgb(${triplet})` : triplet
 }
 
+/**
+ * 把一个半透明颜色叠成接近不透明的背景。
+ *
+ * 幽灵在拖拽期间每帧都在移动，一旦它带 backdrop-filter，浏览器就要每帧重新渲染
+ * "它背后那块画面"再做一次模糊——而它背后正好是上百张同样带 backdrop-filter 的卡片，
+ * 于是每帧都要把该区域连同卡片自身的模糊一起重算。这是拖拽掉帧最重的一处。
+ *
+ * 拿掉 backdrop-filter 后改成叠四层同色：alpha 由 0.58 抬到约 0.97，
+ * 观感与原来的毛玻璃几乎一致，但不再需要读背景。
+ */
+function stackedSurface(color: string): string {
+  const coat = `linear-gradient(${color}, ${color})`
+  return [coat, coat, coat, color].join(', ')
+}
+
 function iconGradient(type: AppItem['type']): string {
   if (type === 'folder') return 'linear-gradient(to bottom right, #FFF7ED, #FFEDD5)'
   if (type === 'steam') return 'linear-gradient(to bottom right, #F5F3FF, #EDE9FE)'
@@ -96,9 +111,9 @@ export function useDragGhost(
     div.style.cssText =
       'position:fixed;left:0;top:0;z-index:99999;pointer-events:none;box-sizing:border-box;' +
       `width:${w}px;height:${h}px;padding:${size.pad}px;border-radius:${br}px;` +
-      `background:${readThemeVar('--card-bg')};` +
+      /* 不能用 backdrop-filter，原因见 stackedSurface 的注释 */
+      `background:${stackedSurface(readThemeVar('--card-bg'))};` +
       `border:1px solid ${readThemeVar('--card-border')};` +
-      'backdrop-filter:blur(12px) saturate(1.12);-webkit-backdrop-filter:blur(12px) saturate(1.12);' +
       'display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:12px;' +
       "font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif;" +
       'box-shadow:0 18px 40px rgba(15,23,42,0.22),0 6px 14px rgba(15,23,42,0.12),' +

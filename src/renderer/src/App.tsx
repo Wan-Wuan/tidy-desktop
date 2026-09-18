@@ -475,6 +475,43 @@ function App() {
       })
     }
 
+    /* ── 拖拽帧率自检（仅开发环境；打包后渲染层走 file: 协议，自动关闭）──
+       拖拽结束会在 DevTools Console 打一行 [drag-perf] 汇总：
+       frames=总帧数 avg=平均帧间隔 worst=最差一帧 long>20ms=掉帧数。
+       卡顿消失的判据：long 是 0 或个位数，avg 接近 16.7ms。 */
+    const dragPerfOn = window.location.protocol !== 'file:'
+    let perfFrames = 0
+    let perfWorst = 0
+    let perfLong = 0
+    let perfLast = 0
+    let perfStart = 0
+    let perfRaf = 0
+    const startDragPerf = () => {
+      if (!dragPerfOn) return
+      if (perfRaf) cancelAnimationFrame(perfRaf)
+      perfFrames = 0
+      perfWorst = 0
+      perfLong = 0
+      perfLast = performance.now()
+      perfStart = perfLast
+      const tick = (now: number) => {
+        if (!leftDragRef.current?.active) {
+          const total = now - perfStart
+          const avg = perfFrames > 0 ? total / perfFrames : 0
+          console.log(`[drag-perf] frames=${perfFrames} avg=${avg.toFixed(1)}ms worst=${perfWorst.toFixed(1)}ms long>20ms=${perfLong}`)
+          perfRaf = 0
+          return
+        }
+        const delta = now - perfLast
+        perfLast = now
+        perfFrames++
+        if (delta > perfWorst) perfWorst = delta
+        if (delta > 20) perfLong++
+        perfRaf = requestAnimationFrame(tick)
+      }
+      perfRaf = requestAnimationFrame(tick)
+    }
+
     const handleLeftDragMove = (e: MouseEvent) => {
       if (!leftDragRef.current) return
       if (!leftDragRef.current.active) {
@@ -486,6 +523,7 @@ function App() {
         draggedAppIdRef.current = leftDragRef.current.appId
         document.body.style.cursor = 'grabbing'
         createDragGhost(leftDragRef.current.appId, e.clientX, e.clientY)
+        startDragPerf()
         /* 看门狗：拖到窗口外松手时 mouseup 可能收不到，拖拽状态就会永久卡住
            （表现为排序整个失灵、幽灵贴图留在屏幕上）。到点强制收尾。
            这是从原 HTML5 拖拽实现里迁移过来的保障，不能丢。 */
@@ -561,6 +599,10 @@ function App() {
       if (dropTargetRaf) {
         cancelAnimationFrame(dropTargetRaf)
         dropTargetRaf = 0
+      }
+      if (perfRaf) {
+        cancelAnimationFrame(perfRaf)
+        perfRaf = 0
       }
       removeDragGhost()
     }
@@ -1910,6 +1952,10 @@ function App() {
   return (
     <div
       className={`app-shell layout-${activeLayout} flex flex-col h-screen relative theme-${config?.ui?.theme || 'aurora'}`}
+      /* 拖拽进行中给 CSS 一个总开关：冻结卡片 hover 的过渡与模糊变化。
+         hover 过渡期间每帧都要重绘该卡片（含 backdrop-filter 重新算模糊），
+         鼠标快速划过一排卡片时会有十几条这样的动画同时在跑，是掉帧主力之一。 */
+      data-drag-active={isDraggingApp || draggedSubId !== null ? 'true' : undefined}
       style={shellStyle}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
@@ -2230,14 +2276,18 @@ function App() {
                   key={groupKey}
                   id={group.sub ? `subcat-${group.sub.id}` : undefined}
                   data-subcategory-drop={groupKey}
-                  className={`${gi > 0 ? 'mt-6' : ''} rounded-xl transition-colors duration-150 ${
-                    isGroupDropTarget ? 'bg-brand-500/10' : ''
-                  }`}
+                  className={`${gi > 0 ? 'mt-6' : ''} rounded-xl`}
                   /* 这里原本挂着内部 HTML5 拖拽的三个处理器（onDragOver / onDragLeave / onDrop），
                      用于计算精确落点、高亮目标卡片与执行重排。拖拽统一到左键的自绘引擎后，
                      内部拖拽不再产生 HTML5 的 dragover/drop 事件，这些分支全部失效，已删除。
                      外层 <main> 上的 handleDragOver / handleDrop 仍负责「外部文件拖入导入」，
-                     事件会自然冒泡上去，功能不受影响。 */
+                     事件会自然冒泡上去，功能不受影响。
+
+                     ⚠️ 这里**不能**给整个分组容器加拖拽高亮的底色（bg-brand-500/10），
+                     也不能挂 transition-colors：分组容器在卡片的**背后**，而每张卡片都带
+                     backdrop-filter——改一次容器底色就等于改了整组卡片的背景，
+                     配上过渡就是整整 150ms 里每帧都让这组几十张卡重新算模糊，
+                     拖拽每次划过一个分组就卡一下。落点反馈放在分组标题上（见下）。 */
                 >
                   {group.sub && (
                     <div className={`flex items-center gap-2.5 mb-3 px-2 py-1 rounded-lg transition-colors ${
