@@ -16,6 +16,34 @@ export interface UpdateProgress {
   total: number
 }
 
+/** 打开更新安装日志的结果。区分「没有日志」与「打开失败」，界面才能给出有用的提示。 */
+export interface UpdateLogOpenResult {
+  ok: boolean
+  reason?: 'not-found' | 'open-failed'
+  logPath: string
+}
+
+/** 最近一次更新安装的结果，用于应用重启后提示上次更新是否中断 */
+export type UpdateInstallStatus =
+  | { state: 'none' }
+  | { state: 'completed'; exitCode: number | null }
+  | { state: 'aborted'; reason: string }
+
+/** 一份损坏数据的留档（`<原文件>.corrupt-<时间戳>`） */
+export interface CorruptBackupInfo {
+  fileName: string
+  backupPath: string
+  targetFile: string
+  size: number
+  createdAt: number
+}
+
+/** 数据健康状态：哪些文件当前损坏、有哪些可以恢复的留档 */
+export interface DataHealth {
+  corruptedNow: string[]
+  backups: CorruptBackupInfo[]
+}
+
 export interface PathInfo {
   path: string
   exists: boolean
@@ -33,6 +61,9 @@ declare global {
       saveApps: (data: { apps: AppItem[] }) => Promise<boolean>
       getCategories: () => Promise<{ categories: Category[]; subcategories: Subcategory[] }>
       saveCategories: (data: { categories: Category[]; subcategories: Subcategory[] }) => Promise<boolean>
+      getDataHealth: () => Promise<DataHealth>
+      restoreCorruptBackup: (payload: { backupPath: string; targetFile: string }) => Promise<boolean>
+      openCorruptBackupsDirectory: () => Promise<boolean>
       openApp: (appPath: string) => Promise<boolean>
       openAppAsAdmin: (appPath: string) => Promise<boolean>
       openFolder: (folderPath: string) => Promise<boolean>
@@ -68,7 +99,9 @@ declare global {
       openBackupsDirectory: () => Promise<boolean>
       copyTextToClipboard: (text: string) => Promise<boolean>
       clearIconCache: () => Promise<{ success: boolean; count: number }>
-      openUpdateLog: () => Promise<boolean>
+      openUpdateLog: () => Promise<UpdateLogOpenResult>
+      getUpdateInstallStatus: () => Promise<UpdateInstallStatus>
+      resetUpdateInstallLog: () => Promise<boolean>
       showSearchWindow: () => Promise<boolean>
       hideSearchWindow: () => Promise<void>
       resizeSearchWindow: (height: number) => Promise<void>

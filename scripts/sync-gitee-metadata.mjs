@@ -3,10 +3,12 @@
 // 只同步文字信息；安装包资产仍由 publish-gitee-release.mjs 管理。
 import { execFileSync } from 'node:child_process'
 
-const GITHUB_REPO = 'Wan-Wuan/tidy-desktop'
-const GITEE_OWNER = 'wanwuan'
-const GITEE_REPO = 'tidy_desktop'
-const giteeApiBase = `https://gitee.com/api/v5/repos/${GITEE_OWNER}/${GITEE_REPO}`
+import { github, gitee as giteeRepo } from './lib/repo.mjs'
+
+const GITHUB_REPO = `${github.owner}/${github.repo}`
+const GITEE_OWNER = giteeRepo.owner
+const GITEE_REPO = giteeRepo.repo
+const giteeApiBase = giteeRepo.apiBase
 
 const token = process.env.GITEE_TOKEN
 if (!token) {

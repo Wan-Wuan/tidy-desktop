@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import { spawn } from 'child_process'
 import { InstallResult } from './types'
+import { ensureInstallLogHeader, installLog } from './installLog'
 
 const UPDATE_FILE = path.join(app.getPath('temp'), 'tidy-desktop-update.exe')
 
@@ -48,6 +49,11 @@ export function runInstaller(installerPath: string): Promise<InstallResult> {
     const currentPid = process.pid
     const installDir = getCurrentInstallDir()
 
+    // 表头要在主进程退出前建好：之后这条链路由助手进程接管，
+    // 万一助手没能启动，至少能从这里看出「主进程已经交棒了」。
+    ensureInstallLogHeader({ installDir, mode: 'spawn-assistant' })
+    installLog('handing off to update assistant', `main pid=${currentPid} installDir=${installDir}`)
+
     const child = spawn(
       process.execPath,
       [
@@ -74,13 +80,16 @@ export function runInstaller(installerPath: string): Promise<InstallResult> {
       child.on('spawn', () => {
         child.unref()
         done({ success: true })
+        // 先落一条日志再退出：主进程一旦 exit(0) 就不会再有写入机会，
+        // 这条记录是判断「助手是否真的起来了」的唯一依据。
+        installLog('assistant spawned, main process exiting')
         // 立刻退出：绕开"关闭窗口 = 最小化到托盘"那套逻辑（它会让进程继续常驻）。
         // 安装助手会等这个进程真正消失后再启动安装器，所以退出快慢不影响正确性。
         setTimeout(() => app.exit(0), 300)
       })
 
       child.on('error', (err) => {
-        console.error('install-update: spawn error:', err)
+        installLog('assistant spawn failed', err)
         done({ success: false, error: err.message })
       })
 
@@ -88,11 +97,13 @@ export function runInstaller(installerPath: string): Promise<InstallResult> {
       setTimeout(() => {
         if (!settled) {
           child.kill()
+          installLog('assistant spawn timeout')
           done({ success: false, error: 'Spawn timeout' })
         }
       }, 5000)
     })
   } catch (err: any) {
+    installLog('installer entry failed', err)
     return Promise.resolve({ success: false, error: err.message || 'Installation failed' })
   }
 }

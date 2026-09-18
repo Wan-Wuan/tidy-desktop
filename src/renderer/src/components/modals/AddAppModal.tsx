@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import type { Category } from '../../../../shared/types'
+import { useDialogA11y } from '../../hooks/useDialogA11y'
 
 export const AddAppModal = React.memo(function AddAppModal({ categories, onClose, onAdd, defaultCategory }: {
   categories: Category[]
@@ -7,6 +8,12 @@ export const AddAppModal = React.memo(function AddAppModal({ categories, onClose
   onAdd: (name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam', aliases?: string[]) => void
   defaultCategory?: string | null
 }) {
+  // Esc 关闭、焦点进出、Tab 循环：此前这个弹窗按 Esc 关不掉，键盘用户也没法用
+  const { ref: dialogRef, dialogProps } = useDialogA11y<HTMLDivElement>({
+    onClose,
+    labelledBy: 'add-app-title'
+  })
+
   const getInitialCategory = () => {
     if (defaultCategory && categories.find(c => c.id === defaultCategory)) {
       return defaultCategory
@@ -92,8 +99,8 @@ export const AddAppModal = React.memo(function AddAppModal({ categories, onClose
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="glass rounded-2xl p-6 w-96 shadow-xl shadow-brand-500/5 modal-enter">
-        <h2 className="text-lg font-display font-bold text-slate-800 mb-4">添加应用</h2>
+      <div ref={dialogRef} {...dialogProps} className="glass rounded-2xl p-6 w-96 shadow-xl shadow-brand-500/5 modal-enter">
+        <h2 id="add-app-title" className="text-lg font-display font-bold text-slate-800 mb-4">添加应用</h2>
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">

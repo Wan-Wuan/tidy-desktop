@@ -6,6 +6,8 @@ import { guardNativeDialog } from '../dialogGuard'
 import { APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, CONFIG_DIR, ICONS_DIR, getDefaultConfig, readJsonFile, writeJsonFilesAtomically } from '../config'
 import type { AppsData, CategoriesData, Config, ShortcutImportItem } from '../../shared/types'
 import { sanitizeAppsData, sanitizeCategoriesData, sanitizeConfig } from '../validation'
+import { ensureInstallLogHeader, getInstallLogPath, getLastInstallStatus } from '../update/installLog'
+import { assertPath, assertSender } from '../ipcGuard'
 
 let mainWindowRef: { current: BrowserWindow | null } = { current: null }
 let searchWindowRef: { current: BrowserWindow | null } = { current: null }
@@ -258,7 +260,9 @@ export function registerSystemHandlers() {
     return result.response === 1
   })
 
-  ipcMain.handle('set-auto-start', (_, enabled: unknown) => {
+  ipcMain.handle('set-auto-start', (event, enabled: unknown) => {
+    // 会写注册表，来源必须校验
+    if (!assertSender(event)) return false
     app.setLoginItemSettings({
       openAtLogin: enabled === true,
       path: app.getPath('exe'),
@@ -302,15 +306,38 @@ export function registerSystemHandlers() {
     const safeApps = Array.isArray(apps)
       ? apps.filter((item): item is { id?: unknown; path?: unknown; type?: unknown } => typeof item === 'object' && item !== null).slice(0, 5000)
       : []
-    return safeApps.map((item) => {
-      const id = typeof item.id === 'string' ? item.id : ''
-      const itemPath = typeof item.path === 'string' ? item.path : ''
-      const type = typeof item.type === 'string' ? item.type : ''
-      const exists = type === 'steam'
-        ? /^steam:\/\//i.test(itemPath)
-        : !!itemPath && fs.existsSync(itemPath)
-      return { id, path: itemPath, exists }
-    })
+
+    // 原实现对最多 5000 个应用逐个同步 fs.existsSync，会长时间阻塞主进程事件循环。
+    // 改为 fs.promises.access 异步判断，并按 32 个一批 Promise.all 并发；返回数组顺序
+    // 与输入严格一致（每批内部顺序不变、批次按序 push），返回结构 {id,path,exists} 不变。
+    const BATCH_SIZE = 32
+    const results: Array<{ id: string; path: string; exists: boolean }> = []
+    for (let i = 0; i < safeApps.length; i += BATCH_SIZE) {
+      const batch = safeApps.slice(i, i + BATCH_SIZE)
+      const batchResults = await Promise.all(
+        batch.map(async (item) => {
+          const id = typeof item.id === 'string' ? item.id : ''
+          const itemPath = typeof item.path === 'string' ? item.path : ''
+          const type = typeof item.type === 'string' ? item.type : ''
+          let exists: boolean
+          if (type === 'steam') {
+            exists = /^steam:\/\//i.test(itemPath)
+          } else if (!itemPath) {
+            exists = false
+          } else {
+            try {
+              await fs.promises.access(itemPath)
+              exists = true
+            } catch {
+              exists = false
+            }
+          }
+          return { id, path: itemPath, exists }
+        })
+      )
+      results.push(...batchResults)
+    }
+    return results
   })
 
   ipcMain.handle('export-backup', async () => {
@@ -512,28 +539,44 @@ export function registerSystemHandlers() {
   })
 
   ipcMain.handle('open-update-log', async () => {
-    const logPath = path.join(app.getPath('temp'), 'tidy-desktop-install.log')
-    if (!fs.existsSync(logPath)) return false
+    const logPath = getInstallLogPath()
+    if (!fs.existsSync(logPath)) {
+      // 以前这里只返回 false，界面上表现为「点了没反应」。
+      // 现在把原因带回去，让用户知道是「本次更新没走到安装步骤」而不是按钮坏了。
+      return { ok: false, reason: 'not-found', logPath }
+    }
     const error = await shell.openPath(logPath)
-    return !error
+    return { ok: !error, reason: error ? 'open-failed' : undefined, logPath }
+  })
+
+  ipcMain.handle('get-update-install-status', () => {
+    return getLastInstallStatus()
+  })
+
+  ipcMain.handle('reset-update-install-log', () => {
+    try {
+      ensureInstallLogHeader({ resetAt: new Date().toISOString() })
+      return true
+    } catch {
+      return false
+    }
   })
 
   ipcMain.handle('start-drag-file', async (event, filePath: unknown) => {
-    const senderWin = BrowserWindow.fromWebContents(event.sender)
-    if (!senderWin || senderWin.isDestroyed()) return false
-    if (typeof filePath !== 'string') return false
-    if (!fs.existsSync(filePath)) return false
+    if (!assertSender(event)) return false
+    const safePath = assertPath(filePath)
+    if (!safePath) return false
 
     let icon = nativeImage.createEmpty()
     try {
-      const fileIcon = await app.getFileIcon(filePath, { size: 'normal' })
+      const fileIcon = await app.getFileIcon(safePath, { size: 'normal' })
       if (fileIcon && !fileIcon.isEmpty()) {
         icon = fileIcon
       }
     } catch { /* ignore */ }
 
     event.sender.startDrag({
-      file: filePath,
+      file: safePath,
       icon
     })
     return true

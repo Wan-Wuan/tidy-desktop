@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { AppItem, AutoCategoryRule, Category } from '../../../../shared/types'
 import type { HealthReport, IconRefreshProgress } from './types'
+import { useDialogA11y } from '../../hooks/useDialogA11y'
 
 type ActionKey =
   | 'scan'
@@ -69,6 +70,12 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
   onExportBackup,
   onImportBackup
 }: SmartOrganizeModalProps) {
+  // Esc 关闭、焦点进出、Tab 循环：此前整理中心按 Esc 关不掉
+  const { ref: dialogRef, dialogProps } = useDialogA11y<HTMLDivElement>({
+    onClose,
+    labelledBy: 'smart-organize-title'
+  })
+
   const [busyAction, setBusyAction] = useState<ActionKey | null>(null)
   const [ruleMatch, setRuleMatch] = useState('')
   const [ruleCategoryId, setRuleCategoryId] = useState('')
@@ -348,14 +355,14 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="smart-organize-modal glass w-[940px] max-w-[calc(100vw-32px)] max-h-[88vh] overflow-auto rounded-2xl shadow-2xl shadow-brand-900/10 modal-enter">
+      <div ref={dialogRef} {...dialogProps} className="smart-organize-modal glass w-[940px] max-w-[calc(100vw-32px)] max-h-[88vh] overflow-auto rounded-2xl shadow-2xl shadow-brand-900/10 modal-enter">
         <div className="smart-organize-header px-6 py-5 border-b border-brand-100/50 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="smart-organize-badge w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20 font-bold">
               ✦
             </div>
             <div>
-              <h2 className="text-lg font-display font-bold text-slate-800">整理中心</h2>
+              <h2 id="smart-organize-title" className="text-lg font-display font-bold text-slate-800">整理中心</h2>
               <div className="text-xs text-slate-500 mt-0.5">{stats.visible} 个可见项目 · {categories.length} 个分类 · {recommendations[0]?.title}</div>
             </div>
           </div>

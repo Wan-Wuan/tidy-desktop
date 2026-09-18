@@ -39,6 +39,36 @@ function writeInstallerChecksum(version) {
   fs.writeFileSync(`${installerPath}.sha256`, `${checksum}  ${installerName}\n`, 'utf8')
 }
 
+// 清理 release/ 里与本次版本无关的旧安装包与校验文件，避免把上一版的产物一并上传。
+// 更新器只读与当前版本同名的 .exe / .sha256，留着旧文件只会让目录越来越乱。
+function cleanReleaseDir(version) {
+  const installerName = `tidy-desktop-Setup-${version}.exe`
+  const dir = path.join(root, 'release')
+  if (!fs.existsSync(dir)) return
+  for (const entry of fs.readdirSync(dir)) {
+    if (entry === installerName || entry === `${installerName}.sha256`) continue
+    if (entry.endsWith('.exe') || entry.endsWith('.sha256')) {
+      fs.rmSync(path.join(dir, entry), { force: true })
+    }
+  }
+}
+
+// 发布前提醒核对 CHANGELOG：仅警告、不阻断，避免漏写更新说明却已打出版本。
+function checkChangelog(version) {
+  const file = path.join(root, 'CHANGELOG.md')
+  if (!fs.existsSync(file)) {
+    console.warn(`\n⚠️  警告：未找到 CHANGELOG.md，发布 v${version} 前建议补充更新说明。`)
+    return
+  }
+  const text = fs.readFileSync(file, 'utf8')
+  if (!text.includes(version)) {
+    console.warn(
+      `\n⚠️  警告：CHANGELOG.md 中未发现 v${version} 的条目，` +
+        `请确认已记录本次更新内容后再发布（这是提醒，不会阻断发布）。`
+    )
+  }
+}
+
 if (!validBumps.has(bump)) {
   console.error('Usage: npm run release -- patch|minor|major')
   process.exit(1)
@@ -105,6 +135,9 @@ if (tagExists) {
   process.exit(1)
 }
 
+// 发布前先提示核对更新说明（仅警告）。
+checkChangelog(nextVersion)
+
 if (process.platform === 'win32' && !process.env.CSC_LINK && process.env.ALLOW_UNSIGNED_RELEASE !== '1') {
   console.error('Release blocked: CSC_LINK is required for a signed Windows release.')
   console.error('Set ALLOW_UNSIGNED_RELEASE=1 only for local test packages.')
@@ -127,6 +160,8 @@ try {
 
   run('npm', ['run', 'typecheck'])
   run('npm', ['run', 'test'])
+  // 打包前先清掉上一版残留的安装包与校验文件，避免旧产物被一并发布。
+  cleanReleaseDir(nextVersion)
   run('npm', ['run', 'electron:build'])
   writeInstallerChecksum(nextVersion)
   run('git', ['add', 'package.json', 'package-lock.json'])
@@ -134,10 +169,25 @@ try {
   releaseCommitted = true
   run('git', ['tag', `v${nextVersion}`])
 } catch (error) {
-  if (!releaseCommitted) {
-    fs.writeFileSync(packagePath, originalPackage, 'utf8')
-    if (originalLock !== null) fs.writeFileSync(lockPath, originalLock, 'utf8')
-    run('git', ['add', 'package.json', 'package-lock.json'])
+  // 回滚策略：
+  //   - commit 之前失败 -> 直接还原版本文件即可；
+  //   - commit 之后失败（典型如打 tag 失败）-> 先撤销 commit，避免留下
+  //     「已提交但无 tag」的半成品，再还原版本文件。
+  if (releaseCommitted) {
+    try {
+      run('git', ['reset', '--soft', 'HEAD~1'])
+    } catch (resetError) {
+      console.error(`回滚 commit 失败：${resetError instanceof Error ? resetError.message : String(resetError)}`)
+    }
+  }
+  fs.writeFileSync(packagePath, originalPackage, 'utf8')
+  if (originalLock !== null) fs.writeFileSync(lockPath, originalLock, 'utf8')
+  // 还原暂存区与工作区：无论这些文件此前是否被 git add 过，都回到发布前的状态。
+  try {
+    run('git', ['restore', '--staged', 'package.json', 'package-lock.json'])
+    run('git', ['checkout', '--', 'package.json', 'package-lock.json'])
+  } catch {
+    // 文件本就无改动时 checkout 会失败，忽略即可。
   }
   console.error(`Release failed: ${error instanceof Error ? error.message : String(error)}`)
   process.exit(1)

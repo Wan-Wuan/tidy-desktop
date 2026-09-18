@@ -2,6 +2,7 @@ import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { app } from 'electron'
+import { DONE_MARK, SESSION_MARK, ensureInstallLogHeader, installLog } from './installLog'
 
 /**
  * 更新安装助手。
@@ -86,18 +87,52 @@ function waitForPidExit(pid: number, timeoutMs: number): Promise<boolean> {
 /**
  * 助手主体：等主进程退出后静默启动安装器。
  * /D= 必须是最后一个参数，这是 NSIS 的要求。
+ *
+ * 每一步都落日志（见 ./installLog）：这条链路跑在主进程消失之后，一旦失败
+ * 用户和开发者都拿不到现场，日志是唯一的排查依据。
  */
 export async function runUpdateAssistant(opts: UpdateAssistantOptions): Promise<void> {
-  await waitForPidExit(opts.waitPid, 120_000)
+  ensureInstallLogHeader()
+  installLog('session start', {
+    installer: opts.installerPath,
+    installDir: opts.installDir,
+    waitPid: opts.waitPid
+  })
+
+  const mainExited = await waitForPidExit(opts.waitPid, 120_000)
+  if (mainExited) {
+    installLog('main process exited', `pid ${opts.waitPid}`)
+  } else {
+    // 超时不代表失败：主进程可能被托盘等逻辑拖住，仍然继续安装，但必须留痕
+    installLog('wait timeout', `pid ${opts.waitPid} 在 120s 内未退出，仍继续安装`)
+  }
 
   if (!fs.existsSync(opts.installerPath)) {
-    console.error('update assistant: installer missing at', opts.installerPath)
+    installLog('installer missing', opts.installerPath)
     return
   }
 
-  spawn(opts.installerPath, ['/S', '--force-run', `/D=${opts.installDir}`], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true
-  }).unref()
+  const args = ['/S', '--force-run', `/D=${opts.installDir}`]
+  installLog('spawning installer', `${opts.installerPath} ${args.join(' ')}`)
+
+  // 这里刻意 **不 unref**：助手进程要活到安装器结束，才能把退出码写进日志。
+  // 它没有窗口也没有托盘，多存活这几秒开销可以忽略。
+  await new Promise<void>((resolve) => {
+    const child = spawn(opts.installerPath, args, {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    })
+
+    child.on('error', (err) => {
+      installLog('spawn failed', err)
+      resolve()
+    })
+
+    child.on('exit', (code, signal) => {
+      // NSIS 静默安装成功退出码为 0；非 0 说明被取消（例如 UAC 拒绝）或安装失败
+      installLog(DONE_MARK, `exit code=${code ?? 'null'} signal=${signal ?? 'none'}`)
+      resolve()
+    })
+  })
 }

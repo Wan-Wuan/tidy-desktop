@@ -1,4 +1,7 @@
 {
+  // 本配置用于校验 vite.config.ts 这类「仅 Node 侧」的脚本（ESM + bundler 解析）。
+  // 目前没有任何 npm 脚本引用它（vite 自身用 esbuild 解析配置，不经 tsc），故暂时闲置；
+  // 保留它是为了将来接入 typecheck:node，或供编辑器对 vite.config.ts 做类型提示。
   "compilerOptions": {
     "composite": true,
     "skipLibCheck": true,

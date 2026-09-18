@@ -1,0 +1,13 @@
+{
+  // 渲染层独立类型检查配置。
+  //
+  // 复用根 tsconfig.json 的编译选项（ESNext + bundler 解析 + DOM lib 等），
+  // 仅把范围收敛到渲染层与共享代码，并强制 noEmit（类型检查不应产出文件）。
+  // 主进程另走 tsconfig.main.json（CommonJS），与主进程真实编译环境保持一致。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/renderer/**/*", "src/shared/**/*"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}

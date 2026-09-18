@@ -1,9 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const owner = 'wanwuan'
-const repo = 'tidy_desktop'
-const apiBase = `https://gitee.com/api/v5/repos/${owner}/${repo}`
+import { github, gitee } from './lib/repo.mjs'
+
+const { owner, repo, apiBase } = gitee
 const MAX_RELEASE_ASSET_SIZE = 100 * 1024 * 1024
 const root = process.cwd()
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
@@ -64,7 +64,7 @@ if (!release?.id) {
       tag_name: tag,
       name: tag,
       body: `Release ${tag}\n\nWindows 安装包：` +
-        `https://github.com/Wan-Wuan/tidy-desktop/releases/download/${tag}/${installerName}`,
+        `${github.webBase}/releases/download/${tag}/${installerName}`,
       target_commitish: 'master'
     })
   })

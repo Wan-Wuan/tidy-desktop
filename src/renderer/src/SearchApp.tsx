@@ -3,6 +3,7 @@ import { AppItem, Config, Category, UiCommand } from '../../shared/types'
 import { getFolderSuggestion, checkSearchEngine } from '../../shared/utils'
 import { hasDisplayableIcon } from './utils/iconUtils'
 import { applyAccentScale, generateAccentScale } from './utils/colorScale'
+import { matchesTerm, getSearchScore, compactSearchText } from './utils/searchScore'
 
 interface SearchEngineInfo {
   key: string
@@ -236,86 +237,6 @@ function SearchApp() {
     return cat ? cat.name : ''
   }
 
-  const splitSearchWords = (value: string): string[] => {
-    return value
-      .toLowerCase()
-      .split(/[\s\-_.,/\\|()[\]{}]+/)
-      .map(word => word.trim())
-      .filter(Boolean)
-  }
-
-  const compactSearchText = (value: string): string => {
-    return value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '')
-  }
-
-  const getSearchFields = (app: AppItem) => {
-    const name = app.name.toLowerCase()
-    const pinyin = (app.pinyin || '').toLowerCase()
-    const firstLetter = (app.firstLetter || '').toLowerCase()
-    const aliases = (app.aliases || []).map(alias => alias.toLowerCase())
-    const nameWords = splitSearchWords(name)
-    const pinyinWords = splitSearchWords(pinyin)
-    const wordInitials = nameWords.map(word => word[0]).join('')
-    const pinyinInitials = pinyinWords.map(word => word[0]).join('')
-    const compactName = compactSearchText(name)
-    const compactPinyin = compactSearchText(pinyin)
-
-    return {
-      name,
-      pinyin,
-      firstLetter,
-      aliases,
-      nameWords,
-      pinyinWords,
-      wordInitials,
-      pinyinInitials,
-      compactName,
-      compactPinyin
-    }
-  }
-
-  const matchesTerm = (app: AppItem, term: string): boolean => {
-    const fields = getSearchFields(app)
-    const compactTerm = compactSearchText(term)
-
-    if (!compactTerm) return true
-    if (fields.aliases.some(alias => alias.includes(term))) return true
-    if (fields.name.includes(term)) return true
-    if (fields.pinyin.includes(term)) return true
-    if (fields.firstLetter.startsWith(compactTerm)) return true
-    if (fields.wordInitials.startsWith(compactTerm)) return true
-    if (fields.pinyinInitials.startsWith(compactTerm)) return true
-    if (fields.nameWords.some(word => word.startsWith(term))) return true
-    if (fields.pinyinWords.some(word => word.startsWith(term))) return true
-
-    return compactTerm.length >= 2 && (
-      fields.compactName.startsWith(compactTerm) ||
-      fields.compactPinyin.startsWith(compactTerm)
-    )
-  }
-
-  const getSearchScore = (app: AppItem, terms: string[]): number => {
-    const fields = getSearchFields(app)
-
-    let score = (app.launchCount || 0) * 8 + Math.min(20, Math.floor((app.lastOpenedAt || 0) / 86400000))
-    for (const term of terms) {
-      const compactTerm = compactSearchText(term)
-      if (fields.aliases.some(alias => alias === term)) score += 120
-      if (fields.name === term) score += 100
-      if (fields.name.startsWith(term)) score += 80
-      if (fields.compactName.startsWith(compactTerm)) score += 70
-      if (fields.nameWords.some(word => word.startsWith(term))) score += 65
-      if (fields.firstLetter.startsWith(compactTerm)) score += 60
-      if (fields.wordInitials.startsWith(compactTerm)) score += 55
-      if (fields.pinyin.startsWith(term)) score += 50
-      if (fields.compactPinyin.startsWith(compactTerm)) score += 45
-      if (fields.pinyinWords.some(word => word.startsWith(term))) score += 40
-      if (fields.aliases.some(alias => alias.includes(term))) score += 35
-      if (fields.name.includes(term)) score += 30
-      if (fields.pinyin.includes(term)) score += 25
-    }
-    return score
-  }
 
   const getQuickActionResults = useCallback((searchQuery: string): SearchResult[] => {
     const normalized = searchQuery.trim().toLowerCase()

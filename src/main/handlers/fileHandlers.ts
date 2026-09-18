@@ -1,5 +1,19 @@
-import { BrowserWindow, ipcMain } from 'electron'
-import { readJsonFile, writeJsonFile, APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, getDefaultConfig } from '../config'
+import { BrowserWindow, ipcMain, shell } from 'electron'
+import fs from 'fs'
+import path from 'path'
+import {
+  readJsonFile,
+  writeJsonFile,
+  APPS_FILE,
+  CATEGORIES_FILE,
+  CONFIG_FILE,
+  CONFIG_DIR,
+  getDefaultConfig,
+  getCorruptedFiles,
+  isDataFileCorrupted,
+  listCorruptBackups,
+  restoreCorruptBackup
+} from '../config'
 import type { Config, AppsData, CategoriesData } from '../../shared/types'
 import { sanitizeAppsData, sanitizeCategoriesData, sanitizeConfig } from '../validation'
 
@@ -38,6 +52,9 @@ export function registerFileHandlers(applyGlobalShortcuts?: (config: Config) => 
   })
 
   ipcMain.handle('save-config', (_, config: unknown) => {
+    // 文件损坏时拒绝写入：当前内存里的 config 是解析失败后的默认值，
+    // 写回去就等于用默认值覆盖用户配置
+    if (isDataFileCorrupted(CONFIG_FILE)) return false
     const defaults = getDefaultConfig()
     const sanitized = sanitizeConfig(config, defaults)
     if (!sanitized) return false
@@ -71,6 +88,9 @@ export function registerFileHandlers(applyGlobalShortcuts?: (config: Config) => 
   })
 
   ipcMain.handle('save-apps', (_, data: unknown) => {
+    // 同 save-config：损坏的 apps.json 解析出来是空列表，
+    // 一旦写回去用户的整个应用库就真没了
+    if (isDataFileCorrupted(APPS_FILE)) return false
     const sanitized = sanitizeAppsData(data)
     if (!sanitized) return false
     const success = writeJsonFile(APPS_FILE, sanitized)
@@ -91,8 +111,46 @@ export function registerFileHandlers(applyGlobalShortcuts?: (config: Config) => 
   })
 
   ipcMain.handle('save-categories', (_, data: unknown) => {
+    if (isDataFileCorrupted(CATEGORIES_FILE)) return false
     const sanitized = sanitizeCategoriesData(data)
     if (!sanitized) return false
     return writeJsonFile(CATEGORIES_FILE, sanitized)
+  })
+
+  /**
+   * 数据健康状态。渲染层在启动时查询，若发现损坏留档就明确告知用户，
+   * 而不是让"数据看起来空了、其实备份还在磁盘上"这种情况悄悄发生。
+   */
+  ipcMain.handle('get-data-health', () => {
+    const backups = listCorruptBackups(CONFIG_DIR)
+    return {
+      corruptedNow: getCorruptedFiles(),
+      backups: backups.map(b => ({
+        fileName: b.fileName,
+        backupPath: b.backupPath,
+        targetFile: b.targetFile,
+        size: b.size,
+        createdAt: b.createdAt
+      }))
+    }
+  })
+
+  ipcMain.handle('restore-corrupt-backup', (_, payload: unknown) => {
+    if (typeof payload !== 'object' || payload === null) return false
+    const { backupPath, targetFile } = payload as { backupPath?: unknown; targetFile?: unknown }
+    if (typeof backupPath !== 'string' || typeof targetFile !== 'string') return false
+    // 只允许操作数据目录内的文件，避免这个入口被当成任意文件写入
+    const resolvedDir = path.resolve(CONFIG_DIR)
+    const resolvedBackup = path.resolve(backupPath)
+    const resolvedTarget = path.resolve(targetFile)
+    if (path.dirname(resolvedBackup) !== resolvedDir) return false
+    if (path.dirname(resolvedTarget) !== resolvedDir) return false
+    if (!fs.existsSync(resolvedBackup)) return false
+    return restoreCorruptBackup(resolvedBackup, resolvedTarget)
+  })
+
+  ipcMain.handle('open-corrupt-backups-directory', async () => {
+    const error = await shell.openPath(CONFIG_DIR)
+    return !error
   })
 }

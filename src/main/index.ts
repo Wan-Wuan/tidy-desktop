@@ -11,6 +11,7 @@ import { registerSystemHandlers, setWindowRefs } from './handlers/systemHandlers
 import { cleanupInstalledUpdateCache, registerUpdateHandlers } from './update'
 import { parseUpdateAssistantArgs, runUpdateAssistant } from './update/assistant'
 import { isNativeDialogOpen, guardNativeDialog } from './dialogGuard'
+import { isAllowedInternalUrl, isSafeExternalUrl } from './urlPolicy'
 
 const isDev = !app.isPackaged
 
@@ -109,27 +110,8 @@ function notifyTrayOnce() {
   }
 }
 
-function isAllowedInternalUrl(rawUrl: string): boolean {
-  try {
-    const url = new URL(rawUrl)
-    if (isDev) {
-      return url.origin === 'http://localhost:5173'
-    }
-    return url.protocol === 'file:'
-  } catch {
-    return false
-  }
-}
-
-function isSafeExternalUrl(rawUrl: string): boolean {
-  try {
-    const url = new URL(rawUrl)
-    return url.protocol === 'http:' || url.protocol === 'https:'
-  } catch {
-    return false
-  }
-}
-
+// URL 放行策略统一放在 ./urlPolicy：IPC 来源校验（./ipcGuard）也要用同一个定义，
+// 放在这里会形成循环依赖
 function attachWindowSecurity(win: BrowserWindow) {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (isSafeExternalUrl(url)) {
@@ -187,6 +169,8 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
+      // 与主窗口保持一致，见 createWindow 处的说明
+      sandbox: true,
       preload: path.join(__dirname, 'preload.js')
     }
   })
@@ -387,6 +371,9 @@ function createSearchWindow(showOnReady = true) {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
+      // 显式开启渲染进程沙箱：此前只依赖 Electron 的默认值，一旦默认值变化就会被静默降级。
+      // preload 只使用 contextBridge/ipcRenderer/webUtils（无任何 Node 模块），因此可以安全开启。
+      sandbox: true,
       preload: path.join(__dirname, 'preload.js')
     }
   })

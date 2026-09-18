@@ -5,6 +5,7 @@ import { compareVersions, fetchJson, fetchText, downloadWithRetry, cleanupFile }
 import { runInstaller, getUpdateFilePath } from './installer'
 import { UpdateInfo } from './types'
 import { hashFileSha256, parseSha256Checksum, parseSha256Digest } from './integrity'
+import { assertSender } from '../ipcGuard'
 
 const GITHUB_API = 'https://api.github.com/repos/Wan-Wuan/tidy-desktop/releases/latest'
 const GITEE_API = 'https://gitee.com/api/v5/repos/wanwuan/tidy_desktop/releases/latest'
@@ -254,8 +255,12 @@ export function registerUpdateHandlers() {
     }
   })
 
-  ipcMain.handle('install-update', async (_, filePath: string) => {
-    const result = await runInstaller(filePath || getUpdateFilePath())
+  ipcMain.handle('install-update', async (event, filePath: unknown) => {
+    // 这个入口会派生进程启动安装器，来源必须校验。
+    // （runInstaller 内部还会把路径与预期的更新包路径做严格比对，这里是第二道。）
+    if (!assertSender(event)) return false
+    const target = typeof filePath === 'string' && filePath ? filePath : getUpdateFilePath()
+    const result = await runInstaller(target)
     return result.success
   })
 

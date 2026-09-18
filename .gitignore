@@ -8,6 +8,7 @@ Thumbs.db
 *.mp4
 .claude/
 .workbuddy/
+.workbuddy-ai/
 build/icons/
 gitee-check.json
 build/icon-candidates/

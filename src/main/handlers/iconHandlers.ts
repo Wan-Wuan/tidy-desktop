@@ -1,9 +1,11 @@
 import { ipcMain, app, shell } from 'electron'
-import { execFileSync } from 'child_process'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import crypto from 'crypto'
 import path from 'path'
 import fs from 'fs'
 import { ICONS_DIR } from '../config'
+import { assertPath, assertSender } from '../ipcGuard'
 
 interface ShortcutInfo {
   targetPath: string
@@ -56,14 +58,18 @@ export function mergeSteamPaths(regValue: string | null, fallbacks: string[] = D
   return [...candidates]
 }
 
-function getSteamInstallPaths(): string[] {
+// util.promisify 把 execFile 的回调式 API 转成 Promise；配合 windowsHide + timeout，
+// 行为与原来 execFileSync 一致，但不阻塞主进程事件循环。
+const execFileAsync = promisify(execFile)
+
+async function getSteamInstallPaths(): Promise<string[]> {
   try {
-    const output = execFileSync(
+    const { stdout } = await execFileAsync(
       'reg',
       ['query', 'HKCU\\Software\\Valve\\Steam', '/v', 'SteamPath'],
       { encoding: 'utf8', windowsHide: true, timeout: 2000 }
     )
-    const match = output.match(/SteamPath\s+REG_SZ\s+(.+)/i)
+    const match = stdout.match(/SteamPath\s+REG_SZ\s+(.+)/i)
     return mergeSteamPaths(match?.[1] || null)
   } catch {
     return mergeSteamPaths(null)
@@ -87,16 +93,17 @@ function resolveShortcut(filePath: string): ShortcutInfo {
   }
 }
 
-function extractIconByPowerShell(sourcePath: string, iconIndex = 0): Buffer | null {
-  try {
-    if (!fs.existsSync(sourcePath)) return null
-    const escapedSourcePath = escapePsString(sourcePath)
-    const psResult = execFileSync(
-      'powershell',
-      [
-        '-NoProfile',
-        '-Command',
-        `
+function extractIconByPowerShell(sourcePath: string, iconIndex = 0): Promise<Buffer | null> {
+  return (async () => {
+    try {
+      if (!fs.existsSync(sourcePath)) return null
+      const escapedSourcePath = escapePsString(sourcePath)
+      const { stdout } = await execFileAsync(
+        'powershell',
+        [
+          '-NoProfile',
+          '-Command',
+          `
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
 using System;
@@ -137,14 +144,16 @@ if ($handle -ne [IntPtr]::Zero) {
   }
 }
 `.trim()
-      ],
-      { encoding: 'utf8', windowsHide: true, timeout: 4000 }
-    ).trim()
-    if (!psResult || psResult.length <= 100) return null
-    return Buffer.from(psResult, 'base64')
-  } catch {
-    return null
-  }
+        ],
+        { encoding: 'utf8', windowsHide: true, timeout: 4000 }
+      )
+      const psResult = stdout.trim()
+      if (!psResult || psResult.length <= 100) return null
+      return Buffer.from(psResult, 'base64')
+    } catch {
+      return null
+    }
+  })()
 }
 
 async function getIconPng(sourcePath: string, iconIndex = 0): Promise<Buffer | null> {
@@ -162,17 +171,21 @@ async function getIconPng(sourcePath: string, iconIndex = 0): Promise<Buffer | n
     if (pngData.length > 1200) return pngData
   } catch { /* ignore */ }
 
-  const extracted = extractIconByPowerShell(sourcePath, iconIndex)
+  const extracted = await extractIconByPowerShell(sourcePath, iconIndex)
   if (extracted && extracted.length > 500) return extracted
 
   return extracted && extracted.length > 0 ? extracted : null
 }
 
 export function registerIconHandlers() {
-  ipcMain.handle('extract-icon', async (_, filePath: string) => {
+  ipcMain.handle('extract-icon', async (event, filePath: unknown) => {
+    // 这个入口会按调用方给的路径读文件，必须校验来源与路径本身
+    if (!assertSender(event)) return null
+    const safePath = assertPath(filePath)
+    if (!safePath) return null
     try {
       // sha256 前 32 位十六进制，避免旧 base64url 截断 64 字符在超长路径上的碰撞
-      const hash = crypto.createHash('sha256').update(filePath).digest('hex').slice(0, 32)
+      const hash = crypto.createHash('sha256').update(safePath).digest('hex').slice(0, 32)
       const iconPath = path.join(ICONS_DIR, `${hash}.png`)
 
       if (fs.existsSync(iconPath)) {
@@ -181,8 +194,8 @@ export function registerIconHandlers() {
       }
 
       const candidates: Array<{ sourcePath: string; iconIndex: number }> = []
-      if (filePath.toLowerCase().endsWith('.lnk')) {
-        const shortcut = resolveShortcut(filePath)
+      if (safePath.toLowerCase().endsWith('.lnk')) {
+        const shortcut = resolveShortcut(safePath)
         if (shortcut.iconPath) {
           candidates.push({ sourcePath: shortcut.iconPath, iconIndex: shortcut.iconIndex })
         }
@@ -190,7 +203,7 @@ export function registerIconHandlers() {
           candidates.push({ sourcePath: shortcut.targetPath, iconIndex: 0 })
         }
       }
-      candidates.push({ sourcePath: filePath, iconIndex: 0 })
+      candidates.push({ sourcePath: safePath, iconIndex: 0 })
 
       for (const candidate of candidates) {
         const pngData = await getIconPng(candidate.sourcePath, candidate.iconIndex)
@@ -213,7 +226,7 @@ export function registerIconHandlers() {
       if (!match) return null
       const appId = match[1]
 
-      const steamPaths = getSteamInstallPaths()
+      const steamPaths = await getSteamInstallPaths()
 
       // Search common Steam install paths
       for (const steamPath of steamPaths) {

@@ -6,9 +6,12 @@ import {
   Lightning,
   MagnifyingGlass,
   Palette,
-  RocketLaunch
+  RocketLaunch,
+  Warning
 } from '@phosphor-icons/react'
 import type { Config, QuickAction, UISettings } from '../../../../shared/types'
+import { useDialogA11y } from '../../hooks/useDialogA11y'
+import type { CorruptBackupInfo, DataHealth, UpdateInstallStatus } from '../../../../shared/electron'
 
 type SectionId = 'general' | 'hotkeys' | 'search' | 'appearance' | 'about'
 
@@ -33,7 +36,11 @@ export const SettingsModal = React.memo(function SettingsModal({
   onExportDiagnostics,
   onOpenDataDirectory,
   onOpenBackupsDirectory,
-  onOpenUpdateLog
+  onOpenUpdateLog,
+  installStatus,
+  dataHealth,
+  onRestoreCorruptBackup,
+  onOpenCorruptBackupsDirectory
 }: {
   config: Config
   currentVersion: string
@@ -47,8 +54,20 @@ export const SettingsModal = React.memo(function SettingsModal({
   onExportDiagnostics: () => Promise<void>
   onOpenDataDirectory: () => Promise<boolean>
   onOpenBackupsDirectory: () => Promise<boolean>
-  onOpenUpdateLog: () => Promise<boolean>
+  onOpenUpdateLog: () => void
+  /** 最近一次更新安装的结果；上次装到一半中断时用来提醒用户 */
+  installStatus?: UpdateInstallStatus
+  /** 数据健康状态；存在损坏留档时给出恢复入口 */
+  dataHealth?: DataHealth
+  onRestoreCorruptBackup: (backup: CorruptBackupInfo) => void
+  onOpenCorruptBackupsDirectory: () => void
 }) {
+  // Esc 关闭、焦点进出、Tab 循环：此前设置面板按 Esc 关不掉
+  const { ref: dialogRef, dialogProps } = useDialogA11y<HTMLDivElement>({
+    onClose,
+    labelledBy: 'settings-title'
+  })
+
   const [activeSection, setActiveSection] = useState<SectionId>('general')
   const [hotkey, setHotkey] = useState(config.hotkey)
   const [searchHotkey, setSearchHotkey] = useState(config.searchHotkey || 'Ctrl+K')
@@ -177,9 +196,9 @@ export const SettingsModal = React.memo(function SettingsModal({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="glass rounded-2xl w-[860px] h-[640px] max-w-full max-h-[88vh] overflow-hidden shadow-xl shadow-brand-500/5 modal-enter flex flex-col">
+      <div ref={dialogRef} {...dialogProps} className="glass rounded-2xl w-[860px] h-[640px] max-w-full max-h-[88vh] overflow-hidden shadow-xl shadow-brand-500/5 modal-enter flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-brand-100/50 shrink-0">
-          <h2 className="text-lg font-display font-bold text-slate-800">设置</h2>
+          <h2 id="settings-title" className="text-lg font-display font-bold text-slate-800">设置</h2>
           <button
             onClick={onClose}
             aria-label="关闭"
@@ -666,10 +685,53 @@ export const SettingsModal = React.memo(function SettingsModal({
                   </button>
                 </Row>
 
+                {installStatus?.state === 'aborted' && (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50/60 border border-amber-200/60 rounded-xl text-xs text-amber-700">
+                    <Warning size={16} className="mt-0.5 shrink-0" />
+                    <div>
+                      <div className="font-medium">上次更新可能没有装完</div>
+                      <div className="mt-0.5 text-amber-600/90">{installStatus.reason}</div>
+                      <div className="mt-0.5 text-amber-600/90">可点下方「打开日志」查看完整安装时间线。</div>
+                    </div>
+                  </div>
+                )}
+
+                {dataHealth && dataHealth.backups.length > 0 && (
+                  <div className="flex items-start gap-2 p-3 bg-rose-50/60 border border-rose-200/60 rounded-xl text-xs text-rose-700">
+                    <Warning size={16} className="mt-0.5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium">检测到损坏的数据备份</div>
+                      <div className="mt-0.5 text-rose-600/90">
+                        数据文件曾解析失败，原始内容已留档（当前会话不会覆盖这些文件）。
+                        确认下面的留档内容有用，可以恢复回去。
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        {dataHealth.backups.map(backup => (
+                          <div key={backup.backupPath} className="flex items-center justify-between gap-2 rounded-lg bg-white/70 px-2 py-1">
+                            <span className="truncate font-mono text-[11px]" title={backup.fileName}>{backup.fileName}</span>
+                            <button
+                              onClick={() => onRestoreCorruptBackup(backup)}
+                              className="shrink-0 rounded-md border border-rose-300/70 bg-white px-2 py-0.5 text-[11px] font-medium text-rose-700 transition-colors hover:bg-rose-50"
+                            >
+                              恢复
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={onOpenCorruptBackupsDirectory}
+                        className="mt-2 text-[11px] underline underline-offset-2"
+                      >
+                        打开数据目录
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <SubTitle>日志与目录</SubTitle>
                 <div className="space-y-2">
                   <Row label="更新安装日志">
-                    <button onClick={onOpenUpdateLog} className="px-3 py-1 bg-white text-slate-600 border border-slate-200 rounded-lg hover:border-brand-300 text-xs font-medium transition-colors">打开日志</button>
+                    <button onClick={() => onOpenUpdateLog()} className="px-3 py-1 bg-white text-slate-600 border border-slate-200 rounded-lg hover:border-brand-300 text-xs font-medium transition-colors">打开日志</button>
                   </Row>
                   <Row label="诊断日志">
                     <button onClick={onExportDiagnostics} className="px-3 py-1 bg-white text-slate-600 border border-slate-200 rounded-lg hover:border-brand-300 text-xs font-medium transition-colors">导出诊断</button>

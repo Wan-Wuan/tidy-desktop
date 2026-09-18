@@ -12,9 +12,9 @@ import path from 'node:path'
  * token 需要 Contents 写权限（经典 token 勾 repo）。
  */
 
-const owner = 'Wan-Wuan'
-const repo = 'tidy-desktop'
-const apiBase = `https://api.github.com/repos/${owner}/${repo}`
+import { github } from './lib/repo.mjs'
+
+const { owner, repo, apiBase } = github
 const root = process.cwd()
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const version = process.argv[2] || pkg.version

@@ -9,6 +9,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveApps: (data: AppsData) => ipcRenderer.invoke('save-apps', data),
   getCategories: () => ipcRenderer.invoke('get-categories'),
   saveCategories: (data: CategoriesData) => ipcRenderer.invoke('save-categories', data),
+  getDataHealth: () => ipcRenderer.invoke('get-data-health'),
+  restoreCorruptBackup: (payload: { backupPath: string; targetFile: string }) => ipcRenderer.invoke('restore-corrupt-backup', payload),
+  openCorruptBackupsDirectory: () => ipcRenderer.invoke('open-corrupt-backups-directory'),
   openApp: (appPath: string) => ipcRenderer.invoke('open-app', appPath),
   openAppAsAdmin: (appPath: string) => ipcRenderer.invoke('open-app-as-admin', appPath),
   openFolder: (folderPath: string) => ipcRenderer.invoke('open-folder', folderPath),
@@ -50,6 +53,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   copyTextToClipboard: (text: string) => ipcRenderer.invoke('copy-text-to-clipboard', text),
   clearIconCache: () => ipcRenderer.invoke('clear-icon-cache'),
   openUpdateLog: () => ipcRenderer.invoke('open-update-log'),
+  getUpdateInstallStatus: () => ipcRenderer.invoke('get-update-install-status'),
+  resetUpdateInstallLog: () => ipcRenderer.invoke('reset-update-install-log'),
   moveSearchWindowToCursorDisplay: () => ipcRenderer.invoke('move-search-window-to-cursor-display'),
   onBlur: (callback: () => void) => {
     const handler = () => callback()

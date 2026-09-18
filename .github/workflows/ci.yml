@@ -1,0 +1,41 @@
+# 持续集成：在 Windows 上做「质量门禁」，发布仍走本地。
+#
+# 为什么发布不进 CI：
+#   1. Gitee 没有官方 GitHub Actions runner，无法在 CI 里同步 Gitee 镜像；
+#   2. Windows 安装包约 95MB，且需要代码签名令牌（CSC_LINK），
+#      把这类密钥放进 CI 既不划算也不安全。
+# 因此 CI 只负责保证合入 master 的代码是健康的：装依赖 -> 类型检查 -> 测试 -> 构建。
+#
+# 说明：ESLint 首轮告警较多，暂不进 CI，先在本地跑 `npx eslint .` 收敛。
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  quality-gate:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 类型检查（主进程 + 渲染层）
+        run: npm run typecheck
+
+      - name: 单元测试
+        run: npm run test
+
+      - name: 构建
+        run: npm run build

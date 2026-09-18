@@ -26,11 +26,6 @@ export const AppCard = React.memo(function AppCard({
   onSendFile,
   onMouseDown,
   onContextMenu,
-  onDragStart,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-  onDragEnd,
   onKeyDown
 }: {
   app: AppItem
@@ -44,11 +39,6 @@ export const AppCard = React.memo(function AppCard({
   onSendFile: (app: AppItem) => void
   onMouseDown: (e: React.MouseEvent, app: AppItem) => void
   onContextMenu: (e: React.MouseEvent, app: AppItem) => void
-  onDragStart: (e: React.DragEvent, app: AppItem) => void
-  onDragOver: (e: React.DragEvent, app: AppItem) => void
-  onDragLeave: (e: React.DragEvent) => void
-  onDrop: (e: React.DragEvent, app: AppItem) => void
-  onDragEnd: (e: React.DragEvent) => void
   onKeyDown: (e: React.KeyboardEvent, app: AppItem) => void
 }) {
   const pSize = ui?.cardSize === 'small' ? 'p-2' : ui?.cardSize === 'large' ? 'p-5' : 'p-4'
@@ -64,18 +54,12 @@ export const AppCard = React.memo(function AppCard({
       data-dragover={isDragOver ? 'true' : undefined}
       data-selected={isSelected ? 'true' : undefined}
       data-dragging={isDragging ? 'true' : undefined}
-      draggable
       tabIndex={0}
       role="button"
       aria-label={`打开 ${app.name}`}
       onKeyDown={(e) => onKeyDown(e, app)}
       onMouseDown={(e) => onMouseDown(e, app)}
       onContextMenu={(e) => onContextMenu(e, app)}
-      onDragStart={(e) => onDragStart(e, app)}
-      onDragOver={(e) => onDragOver(e, app)}
-      onDragLeave={onDragLeave}
-      onDrop={(e) => onDrop(e, app)}
-      onDragEnd={onDragEnd}
       style={{ borderRadius: br }}
       className={`app-tile glass-card focus-ring ${pSize} card-hover cursor-pointer group relative select-none ${
         isDragging ? 'opacity-30 scale-95 blur-[2px]' : ''
