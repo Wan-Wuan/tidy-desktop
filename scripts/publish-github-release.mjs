@@ -63,18 +63,37 @@ try {
 }
 
 if (!release?.id) {
+  // Release 说明优先用 release/notes-<tag>.md（可从 CHANGELOG 提取生成），
+  // 没有再退回一行占位文本。
+  const notesPath = path.join(root, 'release', `notes-${tag}.md`)
+  const body = fs.existsSync(notesPath)
+    ? fs.readFileSync(notesPath, 'utf8')
+    : `Release ${tag}`
   release = await request(`${apiBase}/releases`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       tag_name: tag,
       name: tag,
-      body: `Release ${tag}`,
+      body,
       target_commitish: 'master',
       draft: false,
       prerelease: false
     })
   })
+}
+
+// Release 已存在但正文是占位文本、而说明文件已经就绪时，补一次更新
+if (release?.id && (release.body === `Release ${tag}` || !release.body)) {
+  const notesPath = path.join(root, 'release', `notes-${tag}.md`)
+  if (fs.existsSync(notesPath)) {
+    await request(`${apiBase}/releases/${release.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: fs.readFileSync(notesPath, 'utf8') })
+    })
+    console.log('  updated release notes from', path.basename(notesPath))
+  }
 }
 
 if (!release?.id) throw new Error(`GitHub did not return a Release ID for ${tag}`)
