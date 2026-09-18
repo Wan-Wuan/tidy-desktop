@@ -40,21 +40,6 @@ function toColor(triplet: string): string {
   return /^\d+\s+\d+\s+\d+$/.test(triplet) ? `rgb(${triplet})` : triplet
 }
 
-/**
- * 把一个半透明颜色叠成接近不透明的背景。
- *
- * 幽灵在拖拽期间每帧都在移动，一旦它带 backdrop-filter，浏览器就要每帧重新渲染
- * "它背后那块画面"再做一次模糊——而它背后正好是上百张同样带 backdrop-filter 的卡片，
- * 于是每帧都要把该区域连同卡片自身的模糊一起重算。这是拖拽掉帧最重的一处。
- *
- * 拿掉 backdrop-filter 后改成叠四层同色：alpha 由 0.58 抬到约 0.97，
- * 观感与原来的毛玻璃几乎一致，但不再需要读背景。
- */
-function stackedSurface(color: string): string {
-  const coat = `linear-gradient(${color}, ${color})`
-  return [coat, coat, coat, color].join(', ')
-}
-
 function iconGradient(type: AppItem['type']): string {
   if (type === 'folder') return 'linear-gradient(to bottom right, #FFF7ED, #FFEDD5)'
   if (type === 'steam') return 'linear-gradient(to bottom right, #F5F3FF, #EDE9FE)'
@@ -108,12 +93,30 @@ export function useDragGhost(
       `translate(${px - w / 2}px, ${py - h / 2}px) rotate(${GHOST_TILT}deg) scale(${scale})`
 
     const div = document.createElement('div')
+    /* 毛玻璃观感的来路（2026-09-18 第三轮）：
+       幽灵带 backdrop-filter 本身不是问题——问题在于"它背后的画面每帧都在变"。
+       早先分组容器的高亮底色挂在卡片背后并带 150ms 过渡、卡片 hover 又是 220ms 过渡，
+       两者都在拖拽期间持续作废卡片自身的模糊缓存，幽灵每帧读到的背景都是刚重算过的，
+       等于每帧全量渲染一遍"上百张带模糊的卡片"，这才是掉帧主因。
+
+       那两处修掉之后，拖拽期间背后的合成层内容是静止的：分组底色已移除、
+       hover 过渡已被 .app-shell[data-drag-active] 冻结、落点判定也收敛进了 rAF。
+       Chromium 的栅格缓存能一直命中，幽灵每帧只做"采样一小块 + 对 112px 区域模糊一次"，
+       这个代价是毛玻璃 UI 的正常开销。
+
+       ⚠️ 如果 [drag-perf] 的 long>20ms 重新升高，说明背后又有东西在拖拽期间变化了，
+       先查那个，而不是再拿掉这里的模糊。 */
+    const glassFilter = readThemeVar('--glass-base-filter') || 'blur(12px) saturate(1.12)'
     div.style.cssText =
       'position:fixed;left:0;top:0;z-index:99999;pointer-events:none;box-sizing:border-box;' +
       `width:${w}px;height:${h}px;padding:${size.pad}px;border-radius:${br}px;` +
-      /* 不能用 backdrop-filter，原因见 stackedSurface 的注释 */
-      `background:${stackedSurface(readThemeVar('--card-bg'))};` +
+      `background:${readThemeVar('--card-bg')};` +
       `border:1px solid ${readThemeVar('--card-border')};` +
+      /* 幽灵挂在 body 上、不在 .theme-* 作用域里，--card-bg 拿不到，
+         所以用 readThemeVar 从 .app-shell 读出计算值；
+         --glass-base-filter 定义在 :root 上，理论上 var() 能解析，
+         这里同样走 readThemeVar 保持与主题单一来源，读不到再退回字面量。 */
+      `backdrop-filter:${glassFilter};-webkit-backdrop-filter:${glassFilter};` +
       'display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:12px;' +
       "font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif;" +
       'box-shadow:0 18px 40px rgba(15,23,42,0.22),0 6px 14px rgba(15,23,42,0.12),' +
