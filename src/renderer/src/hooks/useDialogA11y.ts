@@ -54,8 +54,31 @@ export function useDialogA11y<T extends HTMLElement>({ onClose, labelledBy }: Di
     }
 
     return () => {
+      const target = previouslyFocusedRef.current
+      if (!target || !target.isConnected) return
       // 归还焦点，否则关闭弹窗后焦点会掉到 body 上，键盘用户要重新 Tab 一圈
-      previouslyFocusedRef.current?.focus?.()
+      target.focus({ preventScroll: true })
+      /* 但归还的焦点不该留下焦点环。
+         Escape 是键盘操作，浏览器会把这次**程序化**聚焦判定为 focus-visible，
+         于是刚刚点过的那个按钮（或它所在的分类/子分类 chip）上会挂着一圈高亮不放，
+         用户观感上像是"我什么都没选中，怎么亮着"。
+         这里打个标记让 CSS 跳过这一次的环；用户下一次真正交互时再把标记撤掉，
+         键盘用户继续 Tab 导航时焦点环会照常出现。 */
+      target.setAttribute('data-focus-restored', 'true')
+      const clearMarker = () => {
+        target.removeAttribute('data-focus-restored')
+        document.removeEventListener('mousedown', clearMarker, true)
+        document.removeEventListener('keydown', clearMarker, true)
+        target.removeEventListener('blur', clearMarker)
+      }
+      /* 延到下一个任务再挂监听：关闭用的那次 keydown 此刻正在派发中，
+         立刻挂上会被它自己触发，标记等于白打。 */
+      window.setTimeout(() => {
+        if (!target.isConnected) return
+        document.addEventListener('mousedown', clearMarker, true)
+        document.addEventListener('keydown', clearMarker, true)
+        target.addEventListener('blur', clearMarker)
+      }, 0)
     }
   }, [])
 

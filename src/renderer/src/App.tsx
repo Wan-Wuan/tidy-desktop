@@ -412,43 +412,22 @@ function App() {
       window.electronAPI.startDragFile(filePath)
     }
 
-    const handleLeftDragMove = (e: MouseEvent) => {
-      if (!leftDragRef.current) return
-      if (!leftDragRef.current.active) {
-        const dx = e.clientX - leftDragRef.current.startX
-        const dy = e.clientY - leftDragRef.current.startY
-        if (Math.abs(dx) + Math.abs(dy) < 3) return
-        leftDragRef.current.active = true
-        setDraggedAppId(leftDragRef.current.appId)
-        draggedAppIdRef.current = leftDragRef.current.appId
-        document.body.style.cursor = 'grabbing'
-        createDragGhost(leftDragRef.current.appId, e.clientX, e.clientY)
-        /* 看门狗：拖到窗口外松手时 mouseup 可能收不到，拖拽状态就会永久卡住
-           （表现为排序整个失灵、幽灵贴图留在屏幕上）。到点强制收尾。
-           这是从原 HTML5 拖拽实现里迁移过来的保障，不能丢。 */
-        if (dragWatchdogRef.current) window.clearTimeout(dragWatchdogRef.current)
-        dragWatchdogRef.current = window.setTimeout(() => {
-          dragWatchdogRef.current = null
-          leftDragRef.current = null
-          clearDragState()
-        }, 30000)
-      }
-      /* 文件卡片被拖出窗口 → 这次手势的意图是"发送/上传"而不是"归类"。
-         用落点意图区分两种功能，同一个左键手势就能同时覆盖它们，不需要用修饰键或另一个按钮。
-         拖拽全程留在窗口内时不会走到这里，所以归类照常工作。 */
-      const pendingFile = pendingFileDragRef.current
-      if (pendingFile && isPointerOutsideWindow(e)) {
-        switchToNativeDrag(pendingFile)
-        return
-      }
-      moveDragGhost(e.clientX, e.clientY)
-      const el = document.elementFromPoint(e.clientX, e.clientY)
+    /* 落点判定（elementFromPoint）会强制同步的样式重算 + 布局，代价很高。
+       mousemove 在高回报率鼠标下每秒能来几百次，每来一次就强制一次布局——
+       这是拖拽时最主要的 CPU 尖峰来源（快速拖动时尤其明显）。
+       这里把判定收敛到「每帧最多一次」：中间那些坐标没有意义，只保留最后一次。 */
+    let dropTargetRaf = 0
+    let dropTargetX = 0
+    let dropTargetY = 0
+
+    const applyDropTargetAt = (x: number, y: number) => {
+      const el = document.elementFromPoint(x, y)
       const rawTarget = findDropTarget(el)
-      const target = rawTarget && rawTarget.type === 'app' && rawTarget.id === leftDragRef.current!.appId
+      const draggedId = leftDragRef.current?.appId
+      const target = rawTarget && rawTarget.type === 'app' && rawTarget.id === draggedId
         ? null
         : rawTarget
-      /* mousemove 同样是每秒几十次，目标没变就一个 setState 都别发，
-         否则整个网格会被反复重渲染到卡死。 */
+      /* 目标没变就一个 setState 都别发，否则整个网格会被反复重渲染到卡死。 */
       const targetKey = target ? `${target.type}:${target.id}` : null
       if (leftDragTargetRef.current === targetKey) return
       leftDragTargetRef.current = targetKey
@@ -482,6 +461,52 @@ function App() {
         setDragOverCategory(null)
         setDragOverSubId(null)
       }
+    }
+
+    const scheduleDropTargetUpdate = (x: number, y: number) => {
+      dropTargetX = x
+      dropTargetY = y
+      if (dropTargetRaf) return
+      dropTargetRaf = requestAnimationFrame(() => {
+        dropTargetRaf = 0
+        // 排进帧里执行时拖拽可能已经结束（快速甩动后立刻松手），此时不该再改高亮
+        if (!leftDragRef.current?.active) return
+        applyDropTargetAt(dropTargetX, dropTargetY)
+      })
+    }
+
+    const handleLeftDragMove = (e: MouseEvent) => {
+      if (!leftDragRef.current) return
+      if (!leftDragRef.current.active) {
+        const dx = e.clientX - leftDragRef.current.startX
+        const dy = e.clientY - leftDragRef.current.startY
+        if (Math.abs(dx) + Math.abs(dy) < 3) return
+        leftDragRef.current.active = true
+        setDraggedAppId(leftDragRef.current.appId)
+        draggedAppIdRef.current = leftDragRef.current.appId
+        document.body.style.cursor = 'grabbing'
+        createDragGhost(leftDragRef.current.appId, e.clientX, e.clientY)
+        /* 看门狗：拖到窗口外松手时 mouseup 可能收不到，拖拽状态就会永久卡住
+           （表现为排序整个失灵、幽灵贴图留在屏幕上）。到点强制收尾。
+           这是从原 HTML5 拖拽实现里迁移过来的保障，不能丢。 */
+        if (dragWatchdogRef.current) window.clearTimeout(dragWatchdogRef.current)
+        dragWatchdogRef.current = window.setTimeout(() => {
+          dragWatchdogRef.current = null
+          leftDragRef.current = null
+          clearDragState()
+        }, 30000)
+      }
+      /* 文件卡片被拖出窗口 → 这次手势的意图是"发送/上传"而不是"归类"。
+         用落点意图区分两种功能，同一个左键手势就能同时覆盖它们，不需要用修饰键或另一个按钮。
+         拖拽全程留在窗口内时不会走到这里，所以归类照常工作。 */
+      const pendingFile = pendingFileDragRef.current
+      if (pendingFile && isPointerOutsideWindow(e)) {
+        switchToNativeDrag(pendingFile)
+        return
+      }
+      moveDragGhost(e.clientX, e.clientY)
+      // 落点判定收敛到帧内执行，不再每次 mousemove 都强制一次布局
+      scheduleDropTargetUpdate(e.clientX, e.clientY)
     }
 
     const handleLeftDragUp = async (e: MouseEvent) => {
@@ -532,6 +557,11 @@ function App() {
       document.removeEventListener('mousemove', handleLeftDragMove)
       document.removeEventListener('mouseup', handleLeftDragUp)
       document.documentElement.removeEventListener('mouseleave', handlePointerLeavesWindow)
+      // 待执行的落点判定要撤销，否则卸载后 rAF 仍会跑一次
+      if (dropTargetRaf) {
+        cancelAnimationFrame(dropTargetRaf)
+        dropTargetRaf = 0
+      }
       removeDragGhost()
     }
   }, [])

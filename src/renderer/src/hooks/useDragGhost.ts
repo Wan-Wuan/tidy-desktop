@@ -136,7 +136,28 @@ export function useDragGhost(
     dragGhostRef.current = div
     dragGhostPosRef.current = { x, y }
 
-    // 入场：淡入 + 弹性放大到抬起状态
+    /* 入场：淡入 + 弹性放大到抬起状态。
+       ⚠️ 入场跑完必须把 transform 的 transition 撤掉，这是拖拽流畅度的关键。
+       这个过渡原本是为"入场一次性放大"写的，但它会一直留在元素上——于是 moveDragGhost
+       每帧写入的新 transform 都被浏览器当成一次「新的过渡目标」，幽灵只会以 120ms 的
+       弹性曲线去追一个还在移动的目标：表现为跟不上手、发飘，快速拖拽时越拖越落后。
+       撤掉之后每帧的 transform 直接生效，幽灵与光标 1:1 对齐。
+       opacity 的过渡留着无害（入场后再也不会改它）。 */
+    let entryTransitionSettled = false
+    const settleEntryTransition = () => {
+      if (entryTransitionSettled) return
+      entryTransitionSettled = true
+      // 幽灵可能已经被替换/移除，别去改一个已经下线的元素
+      if (dragGhostRef.current !== div) return
+      div.style.transition = 'opacity 150ms ease-out'
+    }
+    div.addEventListener('transitionend', (ev) => {
+      // 只认幽灵自身的 transform 收尾，忽略子元素的过渡事件
+      if (ev.target === div && ev.propertyName === 'transform') settleEntryTransition()
+    })
+    // 兜底：位移为零或元素不可见时 transitionend 不会派发
+    window.setTimeout(settleEntryTransition, 260)
+
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (div.parentNode) {
