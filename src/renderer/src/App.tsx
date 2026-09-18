@@ -1,12 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import {
-  AppWindow,
-  FolderPlus,
-  GearSix,
-  MagicWand,
-  Plus,
-  X
-} from '@phosphor-icons/react'
 import { AppItem, AutoCategoryRule, Category, Subcategory, Config, UiCommand } from '../../shared/types'
 import type { CorruptBackupInfo, DataHealth, UpdateInstallStatus } from '../../shared/electron'
 import { parseSteamUrl, ALL_FILE_EXTS_SET, getFileExtension } from '../../shared/utils'
@@ -14,10 +6,7 @@ import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { sortAppsForDisplay as sortAppsForDisplayPure } from './utils/sortApps'
 import { computeReorder } from './utils/reorder'
 import { buildShortcutTargetMap, getDroppedPathIdentities, getDroppedPaths, normalizeDroppedPath } from './utils/dropPaths'
-import { hasDisplayableIcon, needsIconUpdate } from './utils/iconUtils'
 import {
-  countCategoryApps,
-  countSubcategoryApps,
   removeCategoryFromApps,
   removeSubcategoryFromApps
 } from './utils/categoryDeletion'
@@ -26,18 +15,27 @@ import { applyAccentScale, generateAccentScale } from './utils/colorScale'
 import { useDragGhost } from './hooks/useDragGhost'
 import { useStableCallback } from './hooks/useStableCallback'
 import { useMaintenance } from './hooks/useMaintenance'
-import { UpdateButton, UpdateDialog } from './components/UpdateButton'
+import { useAppData } from './hooks/useAppData'
+import { useIconBackfill, appNeedsIconUpdate } from './hooks/useIconBackfill'
+import { useUndoSnapshot, type MaintenanceApi } from './hooks/useUndoSnapshot'
+import { useAppSelection } from './hooks/useAppSelection'
+import { useCategoryDialogs, type CategoryCrudApi } from './hooks/useCategoryDialogs'
+import { UpdateDialog } from './components/UpdateButton'
 import { SidebarResizeHandle } from './components/SidebarResizeHandle'
 import { WindowResizeHandles } from './components/WindowResizeHandles'
 import {
   CategoryContextMenuOverlay,
   CategoryDeleteDialogOverlay,
-  CategoryEditDialogOverlay,
-  UndoToast
+  CategoryEditDialogOverlay
 } from './components/CategoryOverlays'
-import type { CategoryContextMenu, CategoryContextMenuTarget, CategoryDeleteDialog, CategoryEditDialog } from './components/CategoryOverlays'
 import { AppContextMenuOverlay } from './components/AppContextMenuOverlay'
-import { AppCard } from './components/AppCard'
+// 第 7 步：把顶部概览 / 分类导航 / 卡片网格 / 多选条 / 提示栈拆成纯展示组件，
+// App 只负责把状态与回调透传过去，行为与原来内联 JSX 完全一致。
+import { HeaderOverview } from './components/HeaderOverview'
+import { CategoryNav } from './components/CategoryNav'
+import { AppGrid } from './components/AppGrid'
+import { SelectionBar } from './components/SelectionBar'
+import { ToastStack } from './components/ToastStack'
 import { canNativeDrag, isDocFile } from './utils/fileKind'
 import type { AppContextMenuState, MoveTarget } from './components/AppContextMenuOverlay'
 import {
@@ -50,24 +48,24 @@ import {
 
 
 type ParsedDrop = { apps: AppItem[]; duplicateCount: number; unsupportedCount: number }
-type UndoSnapshot = {
-  label: string
-  apps: AppItem[]
-  categories: Category[]
-  subcategories: Subcategory[]
-  activeCategory: string | null
-}
-
-function appNeedsIconUpdate(app: AppItem): boolean {
-  return app.type !== 'folder' && needsIconUpdate(app.icon)
-}
 
 function App() {
-  const [config, setConfig] = useState<Config | null>(null)
-  const [apps, setApps] = useState<AppItem[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
-  const [subcategories, setSubcategories] = useState<Subcategory[]>([])
-  const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  // 集中持有应用数据五组状态 + 对应 ref 镜像（含跨 await 前刷新镜像的逻辑）。
+  const {
+    config,
+    setConfig,
+    apps,
+    setApps,
+    appsRef,
+    categories,
+    setCategories,
+    categoriesRef,
+    subcategories,
+    setSubcategories,
+    activeCategory,
+    setActiveCategory,
+    activeCategoryRef
+  } = useAppData()
   const {
     state: updateState,
     version: updateVersion,
@@ -93,16 +91,12 @@ function App() {
   const [dragOverSubId, setDragOverSubId] = useState<string | null>(null)
   /** 拖应用悬停在网格里的子分类分组上时的目标分组（'__none__' 表示未归类分组） */
   const [dragOverGroupSubId, setDragOverGroupSubId] = useState<string | null>(null)
-  const [undoSnapshot, setUndoSnapshot] = useState<UndoSnapshot | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const categoryBarRef = useRef<HTMLDivElement>(null)
   const subcategoryBarRef = useRef<HTMLDivElement>(null)
   const dragCounterRef = useRef(0)
   const draggedAppIdRef = useRef<string | null>(null)
-  const appsRef = useRef<AppItem[]>([])
-  const categoriesRef = useRef<Category[]>([])
-  const activeCategoryRef = useRef<string | null>(null)
   const isExternalDragRef = useRef(false)
   /* 正在被拖拽的卡片如果是文件（图片/文档），这里记下它的路径。
      用途：同一个左键拖拽要同时支持「归类」和「发送」两种意图，靠落点区分——
@@ -113,7 +107,27 @@ function App() {
   const leftDragTargetRef = useRef<string | null>(null)
   /** 拖拽看门狗：mouseup 与 mouseleave 双双丢失时兜底收尾，避免预览贴图永久残留 */
   const dragWatchdogRef = useRef<number | null>(null)
-  const iconBackfillTimerRef = useRef<number | null>(null)
+
+  // 图标按需补全：载入后、拖入新应用后把缺图标的补上（细节见 useIconBackfill）。
+  const { scheduleIconBackfill, extractIconsForApps } = useIconBackfill({ appsRef, setApps })
+
+  // 撤销快照：破坏性操作前拍下整份数据，用户点撤销时整份还原（细节见 useUndoSnapshot）。
+  // 维护模块在本函数更靠后才调用，它的两个输出经 maintenanceApiRef 转发给撤销逻辑。
+  const maintenanceApiRef = useRef<MaintenanceApi | null>(null)
+  const { undoSnapshot, setUndoSnapshot, captureUndoSnapshot, restoreUndoSnapshot } = useUndoSnapshot({
+    appsRef,
+    categoriesRef,
+    subcategories,
+    activeCategoryRef,
+    setApps,
+    setCategories,
+    setSubcategories,
+    setActiveCategory,
+    maintenanceApiRef
+  })
+
+  // 多选状态（选中集合 / 框选锚点 / 一键清空），细节见 useAppSelection。
+  const { selectedAppIds, setSelectedAppIds, selectedAppIdSet, lastClickedIndexRef, clearAppSelection } = useAppSelection()
 
   // 创建跟随鼠标的幽灵卡片（左键自绘拖拽引擎使用；幽灵自身的 DOM 引用在 useDragGhost 内部维护）
   const { createDragGhost, moveDragGhost, removeDragGhost } = useDragGhost(appsRef, config?.ui)
@@ -165,16 +179,6 @@ function App() {
     setDragOverGroupSubId(null)
   }, [removeDragGhost])
 
-  const captureUndoSnapshot = (label: string) => {
-    setUndoSnapshot({
-      label,
-      apps: appsRef.current.map(app => ({ ...app })),
-      categories: categoriesRef.current.map(category => ({ ...category })),
-      subcategories: subcategories.map(subcategory => ({ ...subcategory })),
-      activeCategory: activeCategoryRef.current
-    })
-  }
-
   // 维护操作集（图标刷新/自动分类/健康检查/导入/备份等）
   const {
     maintenanceSummary,
@@ -222,23 +226,11 @@ function App() {
     localStorage.setItem(key, currentVersion)
   }, [currentVersion, showMaintenanceSummary])
 
-  useEffect(() => {
-    appsRef.current = apps
-  }, [apps])
-
   // 主题色（accent）：写入 brand 色阶 CSS 变量；留空回落到默认靛蓝
   useEffect(() => {
     const accent = config?.ui?.accentColor?.trim()
     applyAccentScale(accent ? generateAccentScale(accent) : null, document.documentElement)
   }, [config?.ui?.accentColor])
-
-  useEffect(() => {
-    categoriesRef.current = categories
-  }, [categories])
-
-  useEffect(() => {
-    activeCategoryRef.current = activeCategory
-  }, [activeCategory])
 
   // 记住上次浏览的分类，跳过首次挂载（loadData 已按持久化值恢复）
   useEffect(() => {
@@ -274,10 +266,6 @@ function App() {
 
   useEffect(() => {
     return () => {
-      if (iconBackfillTimerRef.current) {
-        window.clearTimeout(iconBackfillTimerRef.current)
-        iconBackfillTimerRef.current = null
-      }
       // 看门狗是个 30 秒的长定时器，卸载时必须清掉，
       // 否则它会在组件销毁后触发 clearDragState（对已卸载组件 setState）
       if (dragWatchdogRef.current) {
@@ -334,12 +322,32 @@ function App() {
   }, [showCopyToast])
 
   const [sidebarWidthDraft, setSidebarWidthDraft] = useState<number | null>(null)
-  const [categoryContextMenu, setCategoryContextMenu] = useState<CategoryContextMenu | null>(null)
-  const [categoryEditDialog, setCategoryEditDialog] = useState<CategoryEditDialog | null>(null)
-  const [categoryDeleteDialog, setCategoryDeleteDialog] = useState<CategoryDeleteDialog | null>(null)
+  // 分类右键菜单 + 编辑/删除弹窗的全部状态与接线（细节见 useCategoryDialogs）。
+  // 底层 CRUD handler 在本函数更靠后才定义，经 crudApiRef 转发，避免闭包踩 TDZ。
+  const crudApiRef = useRef<CategoryCrudApi | null>(null)
+  const {
+    categoryContextMenu,
+    setCategoryContextMenu,
+    categoryEditDialog,
+    setCategoryEditDialog,
+    categoryDeleteDialog,
+    setCategoryDeleteDialog,
+    openCategoryContextMenu,
+    createCategoryFromMenu,
+    renameCategoryFromMenu,
+    addSubcategoryFromMenu,
+    deleteCategoryFromMenu,
+    renameSubcategoryFromMenu,
+    deleteSubcategoryFromMenu,
+    submitCategoryEditDialog
+  } = useCategoryDialogs({
+    subcategories,
+    appsRef,
+    setActiveCategory,
+    activeCategoryRef,
+    crudApiRef
+  })
   const [appContextMenu, setAppContextMenu] = useState<AppContextMenuState | null>(null)
-  const [selectedAppIds, setSelectedAppIds] = useState<string[]>([])
-  const lastClickedIndexRef = useRef<number | null>(null)
   /* 拖拽结束后抑制紧随其后的那次 click。
      左键松手时浏览器一定会补发 click，而卡片上挂着 onClick（打开应用）——
      不拦住的话"拖完排序"就会顺手把应用打开。由 handleLeftDragUp 置位、handleCardClick 消费。 */
@@ -360,7 +368,7 @@ function App() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showSettings, showAddApp, showEditApp, showSmartOrganize, appContextMenu, categoryContextMenu, categoryEditDialog, categoryDeleteDialog, selectedAppIds])
+  }, [showSettings, showAddApp, showEditApp, showSmartOrganize, appContextMenu, categoryContextMenu, categoryEditDialog, categoryDeleteDialog, selectedAppIds, setSelectedAppIds])
 
   useEffect(() => {
     /* 左键自定义拖拽：普通应用拖到应用/分类/子分类上完成排序或归类。
@@ -620,7 +628,7 @@ function App() {
       window.removeEventListener('keydown', closeOnKey)
       window.removeEventListener('blur', closeMenu)
     }
-  }, [categoryContextMenu])
+  }, [categoryContextMenu, setCategoryContextMenu])
 
   useEffect(() => {
     if (!appContextMenu) return
@@ -639,52 +647,6 @@ function App() {
       window.removeEventListener('blur', closeMenu)
     }
   }, [appContextMenu])
-
-  const backfillMissingIcons = async (sourceApps: AppItem[]) => {
-    const BATCH_SIZE = 3
-    const allIcons: { id: string; icon: string }[] = []
-    for (let i = 0; i < sourceApps.length; i += BATCH_SIZE) {
-      const batch = sourceApps.slice(i, i + BATCH_SIZE)
-      const results = await Promise.allSettled(
-        batch.map(async app => {
-          const icon = await window.electronAPI.extractIcon(app.path)
-          return { id: app.id, icon: icon || '' }
-        })
-      )
-      for (const r of results) {
-        if (r.status === 'fulfilled' && r.value.icon) {
-          allIcons.push(r.value)
-        }
-      }
-      await new Promise(resolve => window.setTimeout(resolve, 80))
-    }
-    if (allIcons.length === 0) return
-
-    setApps(prev => {
-      let changed = false
-      const updated = prev.map(app => {
-        if (!appNeedsIconUpdate(app)) return app
-        const found = allIcons.find(result => result.id === app.id)
-        if (!found) return app
-        changed = true
-        return { ...app, icon: found.icon }
-      })
-      if (changed) {
-        window.electronAPI.saveApps({ apps: updated })
-      }
-      return changed ? updated : prev
-    })
-  }
-
-  const scheduleIconBackfill = (sourceApps: AppItem[]) => {
-    if (iconBackfillTimerRef.current) {
-      window.clearTimeout(iconBackfillTimerRef.current)
-    }
-    iconBackfillTimerRef.current = window.setTimeout(() => {
-      iconBackfillTimerRef.current = null
-      backfillMissingIcons(sourceApps)
-    }, 3500)
-  }
 
   /* 加载数据。包一层 useStableCallback 让它有稳定标识：
      它自己只用到 setState / ref / 导入的纯函数，但调用它的两处（挂载 effect、
@@ -1134,31 +1096,6 @@ function App() {
     dataTransfer.getData('text/plain')
   )
 
-  const extractIconsForApps = async (newApps: AppItem[]) => {
-    const appsWithIcons: AppItem[] = []
-    for (const app of newApps) {
-      let iconPath: string | null = null
-      if (app.type === 'steam') {
-        iconPath = await window.electronAPI.extractSteamIcon(app.path)
-      }
-      if (!iconPath) {
-        iconPath = await window.electronAPI.extractIcon(app.path)
-      }
-      appsWithIcons.push(iconPath ? { ...app, icon: iconPath } : app)
-    }
-
-    if (appsWithIcons.length > 0) {
-      const currentApps = appsRef.current
-      const updatedApps = currentApps.map(a => {
-        const found = appsWithIcons.find(n => n.id === a.id)
-        return found || a
-      })
-      appsRef.current = updatedApps
-      setApps(updatedApps)
-      await window.electronAPI.saveApps({ apps: updatedApps })
-    }
-  }
-
   const handleUpdateConfig = async (newConfig: Config) => {
     const success = await window.electronAPI.saveConfig(newConfig)
     if (!success) {
@@ -1373,8 +1310,6 @@ function App() {
     void handleOpenApp(app)
   }
 
-  const clearAppSelection = () => setSelectedAppIds([])
-
   const batchMoveToCategory = async (categoryId: string) => {
     if (!categoryId || selectedAppIds.length === 0) return
     const ids = new Set(selectedAppIds)
@@ -1477,86 +1412,9 @@ function App() {
   const cardOnContextMenu = useStableCallback(handleCardContextMenu)
   const cardOnKeyDown = useStableCallback(handleCardKeyDown)
 
-  // 选中判定用 Set：原来是 selectedAppIds.includes()，每张卡片各扫一遍，整体 O(n²)
-  const selectedAppIdSet = useMemo(() => new Set(selectedAppIds), [selectedAppIds])
-
   const handleSaveAutoCategoryRules = async (rules: AutoCategoryRule[]) => {
     if (!config) return false
     return handleUpdateConfig({ ...config, autoCategoryRules: rules })
-  }
-
-  const openCategoryContextMenu = (e: React.MouseEvent, menu: CategoryContextMenuTarget) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const menuWidth = 180
-    const menuHeight = 220
-    setCategoryContextMenu({
-      ...menu,
-      x: Math.min(e.clientX, window.innerWidth - menuWidth - 8),
-      y: Math.min(e.clientY, window.innerHeight - menuHeight - 8)
-    } as CategoryContextMenu)
-  }
-
-  const createCategoryFromMenu = () => {
-    setCategoryContextMenu(null)
-    setCategoryEditDialog({ type: 'create-category', title: '新建分类', name: '', icon: '📁' })
-  }
-
-  const renameCategoryFromMenu = (category: Category) => {
-    setCategoryContextMenu(null)
-    setCategoryEditDialog({ type: 'rename-category', title: '重命名分类', id: category.id, name: category.name, icon: category.icon })
-  }
-
-  const addSubcategoryFromMenu = (category: Category) => {
-    setCategoryContextMenu(null)
-    setCategoryEditDialog({ type: 'add-subcategory', title: '添加子分类', parentId: category.id, name: '', icon: '•' })
-  }
-
-  const deleteCategoryFromMenu = (category: Category) => {
-    const childIds = subcategories.filter(sub => sub.parentId === category.id).map(sub => sub.id)
-    setCategoryContextMenu(null)
-    setCategoryDeleteDialog({
-      type: 'category',
-      id: category.id,
-      name: category.name,
-      appCount: countCategoryApps(appsRef.current, category.id, childIds)
-    })
-  }
-
-  const renameSubcategoryFromMenu = (subcategory: Subcategory) => {
-    setCategoryContextMenu(null)
-    setCategoryEditDialog({ type: 'rename-subcategory', title: '重命名子分类', id: subcategory.id, name: subcategory.name, icon: subcategory.icon })
-  }
-
-  const deleteSubcategoryFromMenu = (subcategory: Subcategory) => {
-    setCategoryContextMenu(null)
-    setCategoryDeleteDialog({
-      type: 'subcategory',
-      id: subcategory.id,
-      name: subcategory.name,
-      appCount: countSubcategoryApps(appsRef.current, subcategory.id)
-    })
-  }
-
-  const submitCategoryEditDialog = async () => {
-    if (!categoryEditDialog) return
-    const name = categoryEditDialog.name.trim()
-    const icon = categoryEditDialog.icon.trim() || '•'
-    if (!name) return
-
-    if (categoryEditDialog.type === 'create-category') {
-      await handleAddCategory(name, icon || '📁')
-    } else if (categoryEditDialog.type === 'rename-category') {
-      await handleUpdateCategory(categoryEditDialog.id, name, icon)
-    } else if (categoryEditDialog.type === 'add-subcategory') {
-      await handleAddSubcategory(name, icon, categoryEditDialog.parentId)
-      setActiveCategory(categoryEditDialog.parentId)
-      activeCategoryRef.current = categoryEditDialog.parentId
-    } else {
-      await handleUpdateSubcategory(categoryEditDialog.id, name, icon)
-    }
-
-    setCategoryEditDialog(null)
   }
 
   const displaySubcategories = useMemo(
@@ -1593,7 +1451,7 @@ function App() {
   useEffect(() => {
     setActiveSubcategoryId(null)
     setSelectedAppIds([])
-  }, [activeCategory])
+  }, [activeCategory, setSelectedAppIds])
 
   const handleSubcategoryWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     const el = e.currentTarget
@@ -1857,28 +1715,6 @@ function App() {
     }
   })
 
-  const restoreUndoSnapshot = async () => {
-    if (!undoSnapshot) return
-
-    appsRef.current = undoSnapshot.apps
-    categoriesRef.current = undoSnapshot.categories
-    activeCategoryRef.current = undoSnapshot.activeCategory
-    setApps(undoSnapshot.apps)
-    setCategories(undoSnapshot.categories)
-    setSubcategories(undoSnapshot.subcategories)
-    setActiveCategory(undoSnapshot.activeCategory)
-    await Promise.all([
-      window.electronAPI.saveApps({ apps: undoSnapshot.apps }),
-      window.electronAPI.saveCategories({ categories: undoSnapshot.categories, subcategories: undoSnapshot.subcategories })
-    ])
-    setUndoSnapshot(null)
-    showMaintenanceSummary({
-      title: `已撤销：${undoSnapshot.label}`,
-      items: ['应用、分类和子分类已恢复到操作前状态。']
-    })
-    await handleRunHealthCheck()
-  }
-
   const handleExportDiagnostics = async () => {
     const result = await window.electronAPI.exportDiagnostics()
     if (result.success) {
@@ -1968,6 +1804,20 @@ function App() {
     return success
   }
 
+  /* 把维护模块、底层 CRUD 的最新实现写进 ref，供 useUndoSnapshot / useCategoryDialogs
+     在用户触发时读取。它们在本函数更靠后才就绪，不能用闭包直接捕获（会踩 TDZ），
+     因此走 ref 转发——和 leftDragActionsRef 同一套路。每轮渲染都刷新，保证拿到最新闭包。 */
+  maintenanceApiRef.current = {
+    showMaintenanceSummary,
+    handleRunHealthCheck
+  }
+  crudApiRef.current = {
+    handleAddCategory,
+    handleUpdateCategory,
+    handleAddSubcategory,
+    handleUpdateSubcategory
+  }
+
   return (
     <div
       className={`app-shell layout-${activeLayout} flex flex-col h-screen relative theme-${config?.ui?.theme || 'aurora'}`}
@@ -1997,471 +1847,93 @@ function App() {
         onCommit={(width) => void commitSidebarWidth(width)}
       />
 
-      <header className="app-header glass px-5 py-3 sticky top-0 z-20 rounded-b-2xl">
-        <div className="app-header-primary flex items-center justify-between gap-3">
-        <div className="app-brand flex shrink-0 items-center gap-3">
-          <img
-            src="./favicon.svg"
-            alt=""
-            aria-hidden="true"
-            draggable={false}
-            className="w-8 h-8 rounded-lg shadow-md shadow-brand-500/20"
-          />
-          <h1 className="text-lg font-display font-bold text-brand-700 tracking-tight">Tidy Desktop</h1>
-        </div>
-        <div className="app-header-actions flex min-w-0 items-center justify-end">
-          <div className={`header-actions-group ${toolbarIconOnly ? 'header-actions-icon-only' : ''}`}>
-            <button
-              onClick={() => setShowAddApp(true)}
-              aria-label="添加应用"
-              title="添加应用"
-              className="header-action"
-            >
-              <Plus size={15} weight="bold" aria-hidden="true" />
-              <span className="max-[899px]:hidden">添加应用</span>
-            </button>
-            <button
-              onClick={handleAddFolder}
-              aria-label="添加文件夹"
-              title="添加文件夹"
-              className="header-action"
-            >
-              <FolderPlus size={15} weight="bold" aria-hidden="true" />
-              <span className="max-[899px]:hidden">添加文件夹</span>
-            </button>
-            <button
-              onClick={() => setShowSmartOrganize(true)}
-              aria-label="整理中心"
-              title="整理中心"
-              className="header-action"
-            >
-              <MagicWand size={15} weight="bold" aria-hidden="true" />
-              <span className="max-[899px]:hidden">整理中心</span>
-            </button>
-            <button
-              onClick={() => setShowSettings(true)}
-              aria-label="设置"
-              title="设置"
-              className="header-action"
-            >
-              <GearSix size={15} weight="bold" aria-hidden="true" />
-              <span className="max-[899px]:hidden">设置</span>
-            </button>
-            <button
-              onClick={() => window.electronAPI.hideMainWindow()}
-              aria-label="关闭窗口"
-              title="关闭窗口"
-              className="header-action header-action-close"
-            >
-              <X size={15} weight="bold" aria-hidden="true" />
-            </button>
-          </div>
-          <UpdateButton state={updateState} version={updateVersion} progress={updateProgress ?? undefined} />
-        </div>
-        </div>
-        <div className="app-overview mt-3 border-t border-brand-100/70 pt-3 flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-900 text-[11px] font-bold text-white shadow-sm shadow-slate-900/20">{currentVersion ? `v${currentVersion.split('.').slice(0, 2).join('.')}` : '✦'}</span>
-              <div>
-                <h2 className="text-sm font-display font-bold text-slate-900 truncate">{activeCategoryLabel}</h2>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
-                  <span className="rounded-full bg-slate-900 px-2 py-0.5 text-white border border-slate-900">{overviewHealth}</span>
-                  <span className="rounded-full bg-white/80 px-2 py-0.5 border border-slate-200/80">{overviewStats.visible}/{overviewStats.total} 可见</span>
-                  <span className="rounded-full bg-white/80 px-2 py-0.5 border border-slate-200/80">{displaySubcategories.length} 个子分类</span>
-                  <span className="rounded-full bg-white/80 px-2 py-0.5 border border-slate-200/80">{overviewStats.folders} 个文件夹</span>
-                  {overviewStats.missingIcons > 0 && (
-                    <button
-                      onClick={handleRefreshAllIcons}
-                      disabled={!!iconRefreshProgress}
-                      className="focus-ring cursor-pointer rounded-full bg-amber-50 px-2 py-0.5 text-amber-700 border border-amber-200 hover:bg-amber-500 hover:text-white hover:border-amber-500 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
-                    >
-                      {iconRefreshProgress ? `刷新中 ${iconRefreshProgress.done}/${iconRefreshProgress.total}` : `${overviewStats.missingIcons} 个图标待补全`}
-                    </button>
-                  )}
-                  {overviewStats.hidden > 0 && (
-                    <button
-                      onClick={handleRestoreHiddenApps}
-                      className="focus-ring cursor-pointer rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 border border-slate-200 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-colors"
-                    >
-                      恢复 {overviewStats.hidden} 个隐藏项
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+      <HeaderOverview
+        toolbarIconOnly={toolbarIconOnly}
+        setShowAddApp={setShowAddApp}
+        handleAddFolder={handleAddFolder}
+        setShowSmartOrganize={setShowSmartOrganize}
+        setShowSettings={setShowSettings}
+        updateState={updateState}
+        updateVersion={updateVersion}
+        updateProgress={updateProgress}
+        currentVersion={currentVersion}
+        activeCategoryLabel={activeCategoryLabel}
+        overviewHealth={overviewHealth}
+        overviewStats={overviewStats}
+        displaySubcategories={displaySubcategories}
+        handleRefreshAllIcons={handleRefreshAllIcons}
+        iconRefreshProgress={iconRefreshProgress}
+        handleRestoreHiddenApps={handleRestoreHiddenApps}
+        smartLaunchApps={smartLaunchApps}
+        handleOpenApp={handleOpenApp}
+      />
 
-          <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-            {smartLaunchApps.length > 0 && (
-              <div className="hidden min-w-0 items-center gap-2 lg:flex">
-                <span className="shrink-0 text-[11px] font-semibold text-slate-500">智能启动</span>
-                {smartLaunchApps.map(app => (
-                  <button
-                    key={app.id}
-                    onClick={() => handleOpenApp(app)}
-                    className="group focus-ring cursor-pointer inline-flex max-w-[132px] items-center gap-1.5 rounded-lg border border-brand-100/80 bg-white/80 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white"
-                    title={app.name}
-                  >
-                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded bg-brand-50 group-hover:bg-white/15">
-                      {hasDisplayableIcon(app.icon) ? (
-                        <img src={app.icon} alt="" className="h-4 w-4" draggable={false} />
-                      ) : (
-                        app.type === 'folder'
-                          ? <FolderPlus size={14} weight="duotone" aria-hidden="true" />
-                          : <AppWindow size={14} weight="duotone" aria-hidden="true" />
-                      )}
-                    </span>
-                    <span className="truncate">{app.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {smartLaunchApps.length === 0 && overviewStats.total > 0 && (
-              <div className="hidden text-[11px] font-medium text-slate-500 lg:block">
-                打开几次项目后会生成智能启动
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      <CategoryNav
+        categoryBarRef={categoryBarRef}
+        activeCategory={activeCategory}
+        setActiveCategory={setActiveCategory}
+        openCategoryContextMenu={openCategoryContextMenu}
+        categories={categories}
+        subcategories={subcategories}
+        dragOverCategory={dragOverCategory}
+        setDragOverCategory={setDragOverCategory}
+        draggedAppIdRef={draggedAppIdRef}
+        moveDragGhost={moveDragGhost}
+        clearDragState={clearDragState}
+        handleMoveAppToCategory={handleMoveAppToCategory}
+        getDroppedPathsFromEvent={getDroppedPathsFromEvent}
+        appsRef={appsRef}
+        setApps={setApps}
+        parsePathsToApps={parsePathsToApps}
+        extractIconsForApps={extractIconsForApps}
+        showDropResult={showDropResult}
+        renderSubcategoryButton={renderSubcategoryButton}
+        createCategoryFromMenu={createCategoryFromMenu}
+        addSubcategoryFromMenu={addSubcategoryFromMenu}
+        subcategoryBarRef={subcategoryBarRef}
+        handleSubcategoryWheel={handleSubcategoryWheel}
+        displaySubcategories={displaySubcategories}
+      />
 
-      <div ref={categoryBarRef} className="category-nav px-5 pt-3 pb-2 flex gap-2 items-start overflow-x-auto">
-        <button
-          data-active={activeCategory === null}
-          aria-current={activeCategory === null ? 'page' : undefined}
-          onClick={() => { setActiveCategory(null) }}
-          onContextMenu={(e) => openCategoryContextMenu(e, { type: 'all' })}
-          className={`focus-ring cursor-pointer px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${
-            activeCategory === null
-              ? 'bg-brand-600 text-white shadow-md shadow-brand-500/25'
-              : 'bg-white/60 text-slate-700 hover:bg-brand-600 hover:text-white hover:border-brand-600 border border-brand-100/50'
-          }`}
-        >
-          全部
-        </button>
-        {categories.map(cat => {
-          const catSubs = subcategories.filter(s => s.parentId === cat.id)
-          const isCatActive = activeCategory === cat.id
-          return (
-          <div key={cat.id} className="flex flex-col items-stretch gap-1.5 flex-shrink-0">
-            <button
-              data-category-id={cat.id}
-              data-dragover={dragOverCategory === cat.id ? 'true' : undefined}
-              data-active={isCatActive}
-              aria-current={isCatActive ? 'page' : undefined}
-              onClick={() => { setActiveCategory(cat.id) }}
-              onContextMenu={(e) => openCategoryContextMenu(e, { type: 'category', id: cat.id })}
-              onDragOver={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                moveDragGhost(e.clientX, e.clientY)
-                const appId = draggedAppIdRef.current || e.dataTransfer.getData('text/plain')
-                const hasFiles = e.dataTransfer.types.includes('Files')
-                if (appId || hasFiles) {
-                  e.dataTransfer.dropEffect = appId ? 'move' : 'copy'
-                  setDragOverCategory(cat.id)
-                }
-              }}
-              onDragLeave={() => setDragOverCategory(null)}
-              onDrop={async (e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                // 先取出要移动的应用，再统一收尾——拖到别的分类会换分组、
-                // 源卡片 DOM 被重建、dragend 丢失，拖完再清就晚了，贴图会留在屏幕上
-                const internalAppId = draggedAppIdRef.current
-                clearDragState()
-
-                // 优先处理内部拖拽（包括原生拖拽放回应用内的情况）
-                if (internalAppId) {
-                  await handleMoveAppToCategory(internalAppId, cat.id)
-                  return
-                }
-
-                const filePaths = getDroppedPathsFromEvent(e.dataTransfer)
-                if (filePaths.length > 0) {
-                  const result = await parsePathsToApps(filePaths, cat.id)
-                  const newApps = result.apps
-                  if (newApps.length > 0) {
-                    const updatedApps = [...appsRef.current, ...newApps]
-                    appsRef.current = updatedApps
-                    setApps(updatedApps)
-                    await window.electronAPI.saveApps({ apps: updatedApps })
-                    await extractIconsForApps(newApps)
-                  }
-                  showDropResult(result)
-                } else {
-                  const appId = e.dataTransfer.getData('text/plain')
-                  if (appId) {
-                    await handleMoveAppToCategory(appId, cat.id)
-                  }
-                }
-              }}
-              className={`focus-ring cursor-pointer px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${
-                /* 拖拽悬停的判断必须排在 isCatActive 前面：
-                   否则拖到"当前已选中的分类"上时走的是激活分支，不会变绿 */
-                dragOverCategory === cat.id
-                  ? 'bg-emerald-500 text-white scale-105 shadow-lg shadow-emerald-400/30 ring-2 ring-emerald-300'
-                  : isCatActive
-                    ? 'bg-brand-600 text-white shadow-md shadow-brand-500/25'
-                    : 'bg-white/60 text-slate-700 hover:bg-brand-600 hover:text-white hover:border-brand-600 border border-brand-100/50'
-              }`}
-            >
-              {cat.icon} {cat.name}
-            </button>
-            {/* 点击主分类后，子分类列表直接在该主分类下方展开 */}
-            {isCatActive && (
-              <div className="subcategory-dropdown flex flex-col gap-1">
-                {catSubs.map(sub => renderSubcategoryButton(sub))}
-                {catSubs.length === 0 && (
-                  <span className="px-3 py-1 text-[11px] text-slate-400 whitespace-nowrap">暂无子分类</span>
-                )}
-              </div>
-            )}
-          </div>
-          )
-        })}
-        <div className="category-bar-add-buttons flex gap-2 items-center">
-          <button
-            onClick={createCategoryFromMenu}
-            className="focus-ring cursor-pointer px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
-          >
-            + 分类
-          </button>
-          <button
-            onClick={() => {
-              if (categories.length === 0) {
-                alert('请先创建一个主分类，然后再添加子分类。')
-                return
-              }
-              const parentCategory = categories.find(category => category.id === activeCategory) || categories[0]
-              addSubcategoryFromMenu(parentCategory)
-            }}
-            className="focus-ring cursor-pointer px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
-          >
-            + 子分类
-          </button>
-        </div>
-      </div>
-
-      {/* 独立子分类栏：横向工作区布局使用，保持原有样式 */}
-      <div
-        ref={subcategoryBarRef}
-        onWheel={handleSubcategoryWheel}
-        className="subcategory-bar-standalone subcategory-nav subcategory-scroll px-5 pb-3 flex gap-2 overflow-x-auto"
-      >
-        {displaySubcategories.map(sub => renderSubcategoryButton(sub))}
-        {activeCategory !== null && displaySubcategories.length === 0 && (
-          <span className="self-center text-xs text-slate-400">当前分类暂无子分类，点击上方「+ 子分类」创建</span>
-        )}
-        <div className="subcategory-bar-add-buttons flex gap-2 items-center ml-1">
-          <button
-            onClick={createCategoryFromMenu}
-            className="focus-ring cursor-pointer px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
-          >
-            + 分类
-          </button>
-          <button
-            onClick={() => {
-              if (categories.length === 0) {
-                alert('请先创建一个主分类，然后再添加子分类。')
-                return
-              }
-              const parentCategory = categories.find(category => category.id === activeCategory) || categories[0]
-              addSubcategoryFromMenu(parentCategory)
-            }}
-            className="focus-ring cursor-pointer px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
-          >
-            + 子分类
-          </button>
-        </div>
-      </div>
-
-      <main
-        ref={dropZoneRef}
-        onScroll={handleContentScroll}
-        className="app-content relative flex-1 overflow-y-scroll px-5 py-4"
-        style={{ scrollbarGutter: 'stable', willChange: 'scroll-position', backdropFilter: 'blur(40px) saturate(1.2)', WebkitBackdropFilter: 'blur(40px) saturate(1.2)' }}
-      >
-        <div key={activeCategory} className="tab-fade-enter" style={{ contain: 'content' }}>
-        {(() => {
-          return (
-            <div>
-              {groupedApps.map((group, gi) => {
-                const groupKey = group.sub?.id || '__none__'
-                const isGroupDropTarget = dragOverGroupSubId === groupKey
-                return (
-                <div
-                  key={groupKey}
-                  id={group.sub ? `subcat-${group.sub.id}` : undefined}
-                  data-subcategory-drop={groupKey}
-                  className={`${gi > 0 ? 'mt-6' : ''} rounded-xl`}
-                  /* 这里原本挂着内部 HTML5 拖拽的三个处理器（onDragOver / onDragLeave / onDrop），
-                     用于计算精确落点、高亮目标卡片与执行重排。拖拽统一到左键的自绘引擎后，
-                     内部拖拽不再产生 HTML5 的 dragover/drop 事件，这些分支全部失效，已删除。
-                     外层 <main> 上的 handleDragOver / handleDrop 仍负责「外部文件拖入导入」，
-                     事件会自然冒泡上去，功能不受影响。
-
-                     ⚠️ 这里**不能**给整个分组容器加拖拽高亮的底色（bg-brand-500/10），
-                     也不能挂 transition-colors：分组容器在卡片的**背后**，而每张卡片都带
-                     backdrop-filter——改一次容器底色就等于改了整组卡片的背景，
-                     配上过渡就是整整 150ms 里每帧都让这组几十张卡重新算模糊，
-                     拖拽每次划过一个分组就卡一下。落点反馈放在分组标题上（见下）。 */
-                >
-                  {group.sub && (
-                    <div className={`flex items-center gap-2.5 mb-3 px-2 py-1 rounded-lg transition-colors ${
-                      isGroupDropTarget ? 'bg-brand-500/15' : ''
-                    }`}>
-                      <span className="text-sm">{group.sub.icon}</span>
-                      <span className="text-sm font-semibold font-display text-brand-700">{group.sub.name}</span>
-                      <div className="flex-1 h-px bg-gradient-to-r from-brand-200/60 to-transparent"></div>
-                      {isGroupDropTarget && (
-                        <span className="shrink-0 text-[11px] font-medium text-brand-600">
-                          {group.sub ? '放到此处归入' : '放到此处移出子分类'}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  <div className={`grid gap-3 stagger-enter ${
-                    config?.ui?.gridColumns === 4 ? 'grid-cols-4' :
-                    config?.ui?.gridColumns === 5 ? 'grid-cols-5' :
-                    config?.ui?.gridColumns === 7 ? 'grid-cols-7' :
-                    config?.ui?.gridColumns === 8 ? 'grid-cols-8' :
-                    'grid-cols-6'
-                  }`} style={{ gridAutoRows: 'min-content', contain: 'layout style' }}>
-                    {group.apps.map(app => (
-                      <AppCard
-                        key={app.id}
-                        app={app}
-                        ui={config?.ui}
-                        isDragging={draggedAppId === app.id}
-                        isDragOver={dragOverAppId === app.id}
-                        isSelected={selectedAppIdSet.has(app.id)}
-                        onOpen={cardOnOpen}
-                        onEdit={cardOnEdit}
-                        onDelete={cardOnDelete}
-                        onSendFile={cardOnSendFile}
-                        onMouseDown={cardOnMouseDown}
-                        onContextMenu={cardOnContextMenu}
-                        onKeyDown={cardOnKeyDown}
-                      />
-                    ))}
-                  </div>
-                  {isDraggingApp && group.apps.length === 0 && (
-                    <div className={`rounded-xl border-2 border-dashed px-4 py-5 text-center text-xs transition-colors ${
-                      isGroupDropTarget
-                        ? 'border-brand-500 bg-brand-500/10 text-brand-600'
-                        : 'border-brand-300/60 text-slate-400'
-                    }`}>
-                      拖到此处归入「{group.sub?.name ?? '未分类'}」
-                    </div>
-                  )}
-                </div>
-                )
-              })}
-            </div>
-          )
-        })()}
-
-        {filteredApps.length === 0 && (
-          <div className="text-center py-16">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-500 flex items-center justify-center">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7" rx="1.5"/>
-                <rect x="14" y="3" width="7" height="7" rx="1.5"/>
-                <rect x="3" y="14" width="7" height="7" rx="1.5"/>
-                <rect x="14" y="14" width="7" height="7" rx="1.5"/>
-              </svg>
-            </div>
-            <p className="text-slate-600 text-sm font-medium">暂无应用</p>
-            <p className="text-slate-500 text-xs mt-1">点击「添加应用」或「添加文件夹」，也可以直接拖入快捷方式</p>
-          </div>
-        )}
-        </div>
-      </main>
+      <AppGrid
+        dropZoneRef={dropZoneRef}
+        handleContentScroll={handleContentScroll}
+        activeCategory={activeCategory}
+        dragOverGroupSubId={dragOverGroupSubId}
+        groupedApps={groupedApps}
+        config={config}
+        draggedAppId={draggedAppId}
+        dragOverAppId={dragOverAppId}
+        selectedAppIdSet={selectedAppIdSet}
+        cardOnOpen={cardOnOpen}
+        cardOnEdit={cardOnEdit}
+        cardOnDelete={cardOnDelete}
+        cardOnSendFile={cardOnSendFile}
+        cardOnMouseDown={cardOnMouseDown}
+        cardOnContextMenu={cardOnContextMenu}
+        cardOnKeyDown={cardOnKeyDown}
+        filteredApps={filteredApps}
+      />
 
 
-      {selectedAppIds.length > 0 && (
-        <div className="glass fixed bottom-16 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-xl border border-brand-200/80 px-4 py-2.5 shadow-xl">
-          <span className="text-sm font-semibold text-slate-800">已选 {selectedAppIds.length} 项</span>
-          <select
-            value=""
-            onChange={e => { if (e.target.value) void batchMoveToCategory(e.target.value) }}
-            aria-label="批量移动到分类"
-            className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none"
-          >
-            <option value="">移动到分类…</option>
-            {categories.map(category => (
-              <option key={category.id} value={category.id}>{category.icon} {category.name}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => void batchHideApps()}
-            className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
-          >
-            隐藏
-          </button>
-          <button
-            onClick={() => void batchDeleteApps()}
-            className="focus-ring cursor-pointer rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-red-600"
-          >
-            删除
-          </button>
-          <button
-            onClick={clearAppSelection}
-            aria-label="取消选择"
-            className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
-          >
-            取消
-          </button>
-        </div>
-      )}
+      <SelectionBar
+        selectedAppIds={selectedAppIds}
+        batchMoveToCategory={batchMoveToCategory}
+        categories={categories}
+        batchHideApps={batchHideApps}
+        batchDeleteApps={batchDeleteApps}
+        clearAppSelection={clearAppSelection}
+      />
 
-      {undoSnapshot && (
-        <UndoToast
-          label={undoSnapshot.label}
-          onUndo={restoreUndoSnapshot}
-          onClose={() => setUndoSnapshot(null)}
-        />
-      )}
-
-      {copyToast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="glass fixed bottom-6 left-1/2 z-[95] -translate-x-1/2 rounded-xl border border-brand-200/70 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-xl shadow-slate-900/10"
-        >
-          {copyToast}
-        </div>
-      )}
-
-      {maintenanceSummary && !showSmartOrganize && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="glass fixed right-5 top-24 z-[90] w-[min(360px,calc(100vw-40px))] rounded-xl border border-brand-200/70 px-4 py-3 shadow-xl shadow-slate-900/10"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-slate-800">{maintenanceSummary.title}</div>
-              <div className="mt-1 space-y-0.5">
-                {maintenanceSummary.items.map((item, index) => (
-                  <div key={`${item}-${index}`} className="text-xs leading-5 text-slate-600">{item}</div>
-                ))}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={clearMaintenanceSummary}
-              aria-label="关闭提示"
-              title="关闭提示"
-              className="focus-ring shrink-0 rounded p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
+      <ToastStack
+        undoSnapshot={undoSnapshot}
+        restoreUndoSnapshot={restoreUndoSnapshot}
+        setUndoSnapshot={setUndoSnapshot}
+        copyToast={copyToast}
+        maintenanceSummary={maintenanceSummary}
+        showSmartOrganize={showSmartOrganize}
+        clearMaintenanceSummary={clearMaintenanceSummary}
+      />
 
       {categoryContextMenu && (
         <CategoryContextMenuOverlay
