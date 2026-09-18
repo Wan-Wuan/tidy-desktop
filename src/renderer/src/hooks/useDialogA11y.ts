@@ -27,6 +27,31 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])'
 ].join(',')
 
+/* 记录最后一次输入来自键盘还是指针，与 Chromium 判定 :focus-visible 的启发式一致。
+   弹窗打开时的自动聚焦是程序化 focus：鼠标点开的场景浏览器不会画焦点环，
+   键盘操作的场景会画。我们只在前者打标记压制焦点环——键盘用户保留环是正确反馈。 */
+let lastInputWasKeyboard = false
+if (typeof document !== 'undefined') {
+  document.addEventListener('keydown', () => { lastInputWasKeyboard = true }, true)
+  document.addEventListener('pointerdown', () => { lastInputWasKeyboard = false }, true)
+}
+
+/** 给元素打上"这次程序化聚焦不画焦点环"的标记，元素失去焦点时自动撤销 */
+function suppressFocusRingOnce(el: HTMLElement) {
+  if (el.hasAttribute('data-focus-restored')) return
+  el.setAttribute('data-focus-restored', 'true')
+  const clear = () => {
+    el.removeAttribute('data-focus-restored')
+    el.removeEventListener('blur', clear)
+  }
+  /* ⚠️ 只监听 blur。早期版本还挂了 document 级的 mousedown/keydown：
+     只要用户再按任意键（比如再按一次 Esc 隐藏主窗口、或任何快捷键），
+     标记就被撤掉，而元素此刻仍持有焦点——焦点环恰好在这一刻冒出来，
+     且之后一直挂着，表现为"按 Esc 后残留黄框"。blur 只在焦点真正离开时触发，
+     元素持有焦点期间标记始终有效。 */
+  el.addEventListener('blur', clear)
+}
+
 export interface DialogA11yOptions {
   onClose: () => void
   /** 标题元素的 id，用于 aria-labelledby */
@@ -50,7 +75,11 @@ export function useDialogA11y<T extends HTMLElement>({ onClose, labelledBy }: Di
       // 容器本身不可聚焦时补一个 tabindex，保证"没有可聚焦子元素"的弹窗也能接住键盘
       if (!container.hasAttribute('tabindex')) container.setAttribute('tabindex', '-1')
       const first = container.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
-      ;(first ?? container).focus()
+      const initial = first ?? container
+      initial.focus({ preventScroll: true })
+      /* 鼠标点开的弹窗，自动聚焦的元素（往往是右上角的关闭 X）不该出现焦点环；
+         键盘打开时不打标记，键盘用户的焦点环照常显示。 */
+      if (!lastInputWasKeyboard) suppressFocusRingOnce(initial)
     }
 
     return () => {
@@ -60,25 +89,10 @@ export function useDialogA11y<T extends HTMLElement>({ onClose, labelledBy }: Di
       target.focus({ preventScroll: true })
       /* 但归还的焦点不该留下焦点环。
          Escape 是键盘操作，浏览器会把这次**程序化**聚焦判定为 focus-visible，
-         于是刚刚点过的那个按钮（或它所在的分类/子分类 chip）上会挂着一圈高亮不放，
-         用户观感上像是"我什么都没选中，怎么亮着"。
-         这里打个标记让 CSS 跳过这一次的环；用户下一次真正交互时再把标记撤掉，
-         键盘用户继续 Tab 导航时焦点环会照常出现。 */
-      target.setAttribute('data-focus-restored', 'true')
-      const clearMarker = () => {
-        target.removeAttribute('data-focus-restored')
-        document.removeEventListener('mousedown', clearMarker, true)
-        document.removeEventListener('keydown', clearMarker, true)
-        target.removeEventListener('blur', clearMarker)
-      }
-      /* 延到下一个任务再挂监听：关闭用的那次 keydown 此刻正在派发中，
-         立刻挂上会被它自己触发，标记等于白打。 */
-      window.setTimeout(() => {
-        if (!target.isConnected) return
-        document.addEventListener('mousedown', clearMarker, true)
-        document.addEventListener('keydown', clearMarker, true)
-        target.addEventListener('blur', clearMarker)
-      }, 0)
+         于是刚刚点过的那个元素上会挂着一圈高亮不放。
+         打标记让 CSS 跳过这一次的环；元素失去焦点（用户点了别处 / Tab 走了）时自动撤销，
+         键盘用户之后 Tab 回来时焦点环照常出现。 */
+      suppressFocusRingOnce(target)
     }
   }, [])
 

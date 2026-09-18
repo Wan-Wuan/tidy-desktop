@@ -1267,14 +1267,20 @@ function App() {
     await window.electronAPI.saveApps({ apps: updatedApps })
   }
 
-  const handleReorderSubcategory = async (sourceId: string, targetId: string) => {
+  const handleReorderSubcategory = async (sourceId: string, targetId: string, insertAfter: boolean) => {
     const sourceIndex = subcategories.findIndex(s => s.id === sourceId)
     const targetIndex = subcategories.findIndex(s => s.id === targetId)
     if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return
 
     const updated = [...subcategories]
     const [moved] = updated.splice(sourceIndex, 1)
-    updated.splice(targetIndex, 0, moved)
+    /* ⚠️ 必须在移除 source 之后的数组上重新定位 target：
+       source 在 target 前面时，删除会让 target 的下标整体前移一位，
+       沿用删除前的 targetIndex 就会插错一格——表现正是"拖到哪、落点却差一位"。
+       与 utils/reorder.ts 里应用重排的语义保持一致。 */
+    const insertAt = updated.findIndex(s => s.id === targetId)
+    if (insertAt === -1) return
+    updated.splice(insertAfter ? insertAt + 1 : insertAt, 0, moved)
     setSubcategories(updated)
     await window.electronAPI.saveCategories({ categories, subcategories: updated })
   }
@@ -1644,7 +1650,11 @@ function App() {
         const appId = reorderSubId ? null : (draggedAppIdRef.current || e.dataTransfer.getData('text/plain'))
         clearDragState()
         if (reorderSubId) {
-          await handleReorderSubcategory(reorderSubId, sub.id)
+          /* 用松手位置在 chip 上的左右半边决定插到目标前还是后：
+             拖到哪就停在哪，与应用卡片的网格重排同一套语义。 */
+          const rect = e.currentTarget.getBoundingClientRect()
+          const insertAfter = e.clientX > rect.left + rect.width / 2
+          await handleReorderSubcategory(reorderSubId, sub.id, insertAfter)
         } else if (appId) {
           await handleMoveAppToSubcategory(appId, sub.id)
         }
