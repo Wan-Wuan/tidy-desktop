@@ -2,7 +2,7 @@ import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { app } from 'electron'
-import { DONE_MARK, SESSION_MARK, ensureInstallLogHeader, installLog } from './installLog'
+import { DONE_MARK, ensureInstallLogHeader, installLog } from './installLog'
 
 /**
  * 更新安装助手。

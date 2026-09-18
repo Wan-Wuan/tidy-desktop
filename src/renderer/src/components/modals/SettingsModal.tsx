@@ -3,7 +3,6 @@ import {
   CheckCircle,
   Info,
   Keyboard,
-  Lightning,
   MagnifyingGlass,
   Palette,
   RocketLaunch,
@@ -159,7 +158,6 @@ export const SettingsModal = React.memo(function SettingsModal({
     return () => window.removeEventListener('keydown', handler)
   }, [recording])
 
-  const cardSizeLabels: Record<string, string> = { small: '小', medium: '中', large: '大' }
   const accentPresets = [
     { name: '靛蓝', value: '' },
     { name: '蓝', value: '#3B82F6' },

@@ -1,18 +1,9 @@
 import React from 'react'
 import { AppWindow, FolderPlus } from '@phosphor-icons/react'
 import type { AppItem, UISettings } from '../../../shared/types'
-import { DOC_FILE_EXTS, isImageFile } from '../../../shared/utils'
+import { isImageFile } from '../../../shared/utils'
 import { hasDisplayableIcon } from '../utils/iconUtils'
-
-export function isDocFile(app: AppItem): boolean {
-  if (app.type !== 'app') return false
-  const ext = app.path.toLowerCase().substring(app.path.lastIndexOf('.'))
-  return DOC_FILE_EXTS.includes(ext)
-}
-
-export function canNativeDrag(app: AppItem): boolean {
-  return isDocFile(app) || isImageFile(app)
-}
+import { isDocFile } from '../utils/fileKind'
 
 export const AppCard = React.memo(function AppCard({
   app,

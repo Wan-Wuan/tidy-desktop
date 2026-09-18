@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { UpdateInfo, UpdateProgress } from '../../../shared/electron.d'
+import type { UpdateProgress } from '../../../shared/electron.d'
 
 type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing'
 

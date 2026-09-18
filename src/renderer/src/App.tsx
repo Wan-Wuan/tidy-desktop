@@ -7,9 +7,9 @@ import {
   Plus,
   X
 } from '@phosphor-icons/react'
-import { AppItem, AutoCategoryRule, Category, Subcategory, Config, ShortcutImportItem, UiCommand } from '../../shared/types'
+import { AppItem, AutoCategoryRule, Category, Subcategory, Config, UiCommand } from '../../shared/types'
 import type { CorruptBackupInfo, DataHealth, UpdateInstallStatus } from '../../shared/electron'
-import { isFolderPath, parseSteamUrl, ALL_FILE_EXTS_SET, getFileExtension } from '../../shared/utils'
+import { parseSteamUrl, ALL_FILE_EXTS_SET, getFileExtension } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { sortAppsForDisplay as sortAppsForDisplayPure } from './utils/sortApps'
 import { computeReorder } from './utils/reorder'
@@ -26,7 +26,6 @@ import { applyAccentScale, generateAccentScale } from './utils/colorScale'
 import { useDragGhost } from './hooks/useDragGhost'
 import { useStableCallback } from './hooks/useStableCallback'
 import { useMaintenance } from './hooks/useMaintenance'
-import type { MaintenanceSummary } from './hooks/useMaintenance'
 import { UpdateButton, UpdateDialog } from './components/UpdateButton'
 import { SidebarResizeHandle } from './components/SidebarResizeHandle'
 import { WindowResizeHandles } from './components/WindowResizeHandles'
@@ -38,7 +37,8 @@ import {
 } from './components/CategoryOverlays'
 import type { CategoryContextMenu, CategoryContextMenuTarget, CategoryDeleteDialog, CategoryEditDialog } from './components/CategoryOverlays'
 import { AppContextMenuOverlay } from './components/AppContextMenuOverlay'
-import { AppCard, canNativeDrag, isDocFile } from './components/AppCard'
+import { AppCard } from './components/AppCard'
+import { canNativeDrag, isDocFile } from './utils/fileKind'
 import type { AppContextMenuState, MoveTarget } from './components/AppContextMenuOverlay'
 import {
   AddAppModal,
@@ -100,7 +100,6 @@ function App() {
   const subcategoryBarRef = useRef<HTMLDivElement>(null)
   const dragCounterRef = useRef(0)
   const draggedAppIdRef = useRef<string | null>(null)
-  const dragTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const appsRef = useRef<AppItem[]>([])
   const categoriesRef = useRef<Category[]>([])
   const activeCategoryRef = useRef<string | null>(null)
@@ -110,14 +109,13 @@ function App() {
      拖拽全程在窗口内 = 归类；拖出窗口 = 切换成系统原生拖拽（发送/上传到微信、浏览器等）。 */
   const pendingFileDragRef = useRef<string | null>(null)
   const leftDragRef = useRef<{ appId: string; active: boolean; startX: number; startY: number } | null>(null)
-  /** 右键拖拽当前悬停的放置目标（'type:id'），用于避免 mousemove 里重复 setState */
+  /** 当前悬停的放置目标（'type:id'），用于避免 mousemove 里重复 setState */
   const leftDragTargetRef = useRef<string | null>(null)
-  /** 拖拽看门狗：drop 与 dragend 双双丢失时兜底收尾，避免预览贴图永久残留 */
+  /** 拖拽看门狗：mouseup 与 mouseleave 双双丢失时兜底收尾，避免预览贴图永久残留 */
   const dragWatchdogRef = useRef<number | null>(null)
-  const dragGhostRef = useRef<HTMLDivElement | null>(null)
   const iconBackfillTimerRef = useRef<number | null>(null)
 
-  // 创建跟随鼠标的幽灵卡片（HTML5拖拽和右键拖拽共用）
+  // 创建跟随鼠标的幽灵卡片（左键自绘拖拽引擎使用；幽灵自身的 DOM 引用在 useDragGhost 内部维护）
   const { createDragGhost, moveDragGhost, removeDragGhost } = useDragGhost(appsRef, config?.ui)
 
   /* dragover 每秒触发几十次，若每次都 setState 会让整个网格反复重渲染并卡死。
@@ -210,10 +208,6 @@ function App() {
   })
 
   useEffect(() => {
-    loadData()
-  }, [])
-
-  useEffect(() => {
     if (!currentVersion) return
     const key = 'tidy-desktop:last-version'
     const lastVersion = localStorage.getItem(key)
@@ -280,9 +274,6 @@ function App() {
 
   useEffect(() => {
     return () => {
-      if (dragTimeoutRef.current) {
-        clearTimeout(dragTimeoutRef.current)
-      }
       if (iconBackfillTimerRef.current) {
         window.clearTimeout(iconBackfillTimerRef.current)
         iconBackfillTimerRef.current = null
@@ -606,7 +597,10 @@ function App() {
       }
       removeDragGhost()
     }
-  }, [])
+    /* 这四个都来自 useDragGhost / clearDragState，标识稳定（内部是 useCallback + ref），
+       加进依赖不会让监听反复解绑重绑。监听里需要"最新实现"的部分（重排、归类）
+       统一走 leftDragActionsRef 转发，见上面的说明。 */
+  }, [clearDragState, createDragGhost, moveDragGhost, removeDragGhost])
 
   /* dragend 兜底：万一源节点被异常移除，React 的 onDragEnd 就收不到事件，
      拖拽状态会永久卡住（表现为排序整个失灵）。在 document 上再兜一层。 */
@@ -692,7 +686,11 @@ function App() {
     }, 3500)
   }
 
-  const loadData = async () => {
+  /* 加载数据。包一层 useStableCallback 让它有稳定标识：
+     它自己只用到 setState / ref / 导入的纯函数，但调用它的两处（挂载 effect、
+     从损坏备份恢复）都需要"最新实现"——普通函数写完每次渲染都是新引用，
+     挂进依赖数组就会变成"依赖每次都变"，挂载 effect 更会退化成每渲染跑一次。 */
+  const loadDataFn = async () => {
     const [configData, appsData, categoriesData] = await Promise.all([
       window.electronAPI.getConfig(),
       window.electronAPI.getApps(),
@@ -734,6 +732,14 @@ function App() {
       scheduleIconBackfill(appsNeedingIconUpdate)
     }
   }
+  const loadData = useStableCallback(loadDataFn)
+
+  /* 挂载时加载一次数据。
+     放在 loadData 声明之后：依赖数组在渲染期求值，写在前面会踩 TDZ。
+     loadData 的标识稳定，所以这个 effect 仍然只跑一次。 */
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
 
   /* 数据健康检查。
      数据文件损坏时主进程会拒绝写入并把原始内容留档成 .corrupt-*，
@@ -1723,7 +1729,7 @@ function App() {
     if (isExternalDragRef.current) {
       e.dataTransfer.dropEffect = 'copy'
     }
-  }, [])
+  }, [moveDragGhost])
 
   const handleDragEnd = useCallback(() => {
     removeDragGhost()
@@ -1732,9 +1738,12 @@ function App() {
     setDraggedAppId(null)
     setDragOverCategory(null)
     setDragOverAppId(null)
-  }, [])
+  }, [removeDragGhost])
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
+  /* 这里刻意不用 useCallback：它只挂在 shell 的 onDrop 上，不是 memo 组件的 props，
+     标识稳定没有任何收益；而它依赖的 parsePathsToApps / showDropResult 都是每次渲染
+     重建的普通函数，硬塞进依赖数组只会让"依赖每次都变"，警告换个形式再来一遍。 */
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     dragCounterRef.current = 0
@@ -1811,7 +1820,7 @@ function App() {
       await extractIconsForApps(newApps)
     }
     showDropResult(result)
-  }, [clearDragState])
+  }
 
   const handleReorderApp = async (sourceId: string, targetId: string, insertAfter = false) => {
     const currentApps = appsRef.current

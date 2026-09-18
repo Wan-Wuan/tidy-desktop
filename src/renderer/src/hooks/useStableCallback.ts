@@ -27,7 +27,7 @@ export function useStableCallback<T extends (...args: any[]) => any>(fn: T): T {
     ref.current = fn
   })
 
-  // 依赖数组必须为空：壳的标识一旦变化，memo 就白做了
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // 依赖数组必须为空：壳的标识一旦变化，memo 就白做了。
+  // 这里不需要 eslint-disable——闭包只引用 ref（不受 exhaustive-deps 管辖）。
   return useCallback(((...args: Parameters<T>): ReturnType<T> => ref.current(...args)) as T, [])
 }

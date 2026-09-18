@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'
 import { AppItem, Config, Category, UiCommand } from '../../shared/types'
 import { getFolderSuggestion, checkSearchEngine } from '../../shared/utils'
 import { hasDisplayableIcon } from './utils/iconUtils'
@@ -524,7 +524,11 @@ function SearchApp() {
     // 窗口高度由 useLayoutEffect 实测同步
   }, [activeEngine, config, filterApps])
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+  /* 刻意不用 useCallback：它只作为输入框的 onKeyDown 使用，标识稳定没有收益；
+     而它用到的 hideCurrentResult / openCurrentAsAdmin / openCurrentContainingFolder
+     都是每次渲染重建的普通函数，塞进依赖数组只会把警告换成另一种形式。
+     不记忆化反而更安全——每次按键用的都是最新一次渲染的闭包。 */
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       // 有内容（结果或输入）时先清空，无内容时才隐藏
       if (resultsRef.current.length > 0 || queryRef.current || activeEngine) {
@@ -572,7 +576,7 @@ function SearchApp() {
       // 复用 clearActiveEngine 统一处理状态清理；窗口高度由 useLayoutEffect 实测同步
       clearActiveEngine()
     }
-  }, [activeEngine, handleSearch, clearActiveEngine])
+  }
 
   const hasResults = results.length > 0
 

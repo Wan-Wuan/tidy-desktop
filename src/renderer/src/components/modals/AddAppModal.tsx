@@ -34,11 +34,17 @@ export const AddAppModal = React.memo(function AddAppModal({ categories, onClose
     return value.split(/[,，\s]+/).map(item => item.trim()).filter(Boolean)
   }
 
+  /* 分类列表变化时校正选择（例如打开弹窗后某个分类被删掉了）。
+     用函数式 updater 读当前值，而不是把 categoryId 放进依赖数组——
+     一旦把 categoryId 写进依赖，用户每选一个分类都会重新触发本 effect，
+     又把它按"默认分类"改回去，选择器等于点不动。
+     同理，只在"当前选择已失效"时才回落，不再无条件覆盖用户的挑选。 */
   useEffect(() => {
-    const valid = getInitialCategory()
-    if (valid !== categoryId) {
-      setCategoryId(valid)
-    }
+    setCategoryId(prev => {
+      if (prev && categories.some(c => c.id === prev)) return prev
+      if (defaultCategory && categories.some(c => c.id === defaultCategory)) return defaultCategory
+      return categories[0]?.id ?? ''
+    })
   }, [categories, defaultCategory])
 
   const parseSteamUrl = (url: string): { name: string; steamUrl: string } | null => {

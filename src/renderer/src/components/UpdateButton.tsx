@@ -11,7 +11,10 @@ export function UpdateButton({ state, version, progress }: UpdateButtonProps) {
   if (state !== 'downloading') return null
 
   return (
-    <div className="px-3.5 py-1.5 bg-brand-500/10 text-brand-600 rounded-lg text-sm font-medium flex items-center gap-1.5">
+    <div
+      className="px-3.5 py-1.5 bg-brand-500/10 text-brand-600 rounded-lg text-sm font-medium flex items-center gap-1.5"
+      title={version ? `正在下载 ${version}` : '正在下载更新'}
+    >
       <svg
         className="animate-spin"
         width="14"
