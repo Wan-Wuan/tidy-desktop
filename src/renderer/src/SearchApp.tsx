@@ -4,6 +4,7 @@ import { getFolderSuggestion, checkSearchEngine } from '../../shared/utils'
 import { hasDisplayableIcon } from './utils/iconUtils'
 import { applyAccentScale, generateAccentScale } from './utils/colorScale'
 import { matchesTerm, getSearchScore, compactSearchText } from './utils/searchScore'
+import { persistApps } from './utils/persist'
 
 interface SearchEngineInfo {
   key: string
@@ -335,18 +336,17 @@ function SearchApp() {
     // 窗口高度由 useLayoutEffect 实测同步
   }, [])
 
-  const persistApps = async (nextApps: AppItem[]) => {
-    setApps(nextApps)
-    await window.electronAPI.saveApps({ apps: nextApps })
-  }
-
+  /* 说明：搜索窗口是独立入口，没有 App 层的轻提示（ToastStack），所以不注入
+     persist 的 notifier——落盘失败这里静默。但统一走 utils/persist 至少保证了
+     「兜住 IPC 异常、不产生未捕获 rejection、返回真实成功与否」。 */
   const recordLaunch = async (app: SearchResult) => {
     if (app.id.startsWith('__')) return
     const nextApps = apps.map(item => item.id === app.id
       ? { ...item, launchCount: (item.launchCount || 0) + 1, lastOpenedAt: Date.now() }
       : item
     )
-    await persistApps(nextApps)
+    setApps(nextApps)
+    await persistApps(nextApps, '启动记录')
   }
 
   const handleOpenItem = async (app: SearchResult) => {
@@ -391,7 +391,8 @@ function SearchApp() {
     const app = getCurrentResult()
     if (!app || app.id.startsWith('__')) return
     const nextApps = apps.map(item => item.id === app.id ? { ...item, hidden: true } : item)
-    await persistApps(nextApps)
+    setApps(nextApps)
+    await persistApps(nextApps, '隐藏')
     const nextResults = resultsRef.current.filter(item => item.id !== app.id)
     resultsRef.current = nextResults
     setResults(nextResults)

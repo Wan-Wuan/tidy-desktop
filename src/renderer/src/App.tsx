@@ -6,7 +6,7 @@ import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { sortAppsForDisplay as sortAppsForDisplayPure } from './utils/sortApps'
 import { computeReorder } from './utils/reorder'
 import { isDocFile } from './utils/fileKind'
-import { persistApps, persistCategories, setPersistNotifier } from './utils/persist'
+import { persistApps, persistCategories, persistConfig, setPersistNotifier } from './utils/persist'
 import { buildShortcutTargetMap, getDroppedPathIdentities, getDroppedPaths, normalizeDroppedPath } from './utils/dropPaths'
 import {
   removeCategoryFromApps,
@@ -208,9 +208,12 @@ function App() {
       skipActiveCategoryPersistRef.current = false
       return
     }
-    window.electronAPI.getConfig().then(latest => {
-      window.electronAPI.saveConfig({ ...latest, lastActiveCategoryId: activeCategory })
-    })
+    /* 这里刻意不走 persistConfig：切换分类很频繁，失败时弹提示会打扰用户，
+       而「记住上次分类」本身是非关键信息（丢了只是下次打开回到「全部」）。
+       但必须 catch——否则 getConfig 失败会成为未捕获的 rejection。 */
+    window.electronAPI.getConfig()
+      .then(latest => window.electronAPI.saveConfig({ ...latest, lastActiveCategoryId: activeCategory }))
+      .catch(() => { /* 记住上次分类失败不影响使用，静默 */ })
   }, [activeCategory])
 
   /* 复制结果的轻提示：以前用 alert()，会弹出系统模态框打断操作 */
@@ -490,7 +493,7 @@ function App() {
     )
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '启动记录')
   }
 
   const handleOpenApp = async (app: AppItem) => {
@@ -551,7 +554,7 @@ function App() {
     const updatedApps = [...currentApps, newApp]
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '添加应用')
     setShowAddApp(false)
 
     // Extract icon: for Steam, try Steam cache first; for others, extract from file
@@ -568,7 +571,7 @@ function App() {
       const withIcon = updatedApps.map(a => a.id === newApp.id ? { ...a, icon: iconPath } : a)
       appsRef.current = withIcon
       setApps(withIcon)
-      await window.electronAPI.saveApps({ apps: withIcon })
+      await persistApps(withIcon, '应用图标')
     }
   }
 
@@ -599,7 +602,7 @@ function App() {
     const updatedApps = currentApps.map(a => a.id === id ? updatedApp : a)
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '修改应用')
     setShowEditApp(false)
     setEditingApp(null)
 
@@ -618,7 +621,7 @@ function App() {
         const withIcon = updatedApps.map(a => a.id === id ? { ...a, icon: iconPath } : a)
         appsRef.current = withIcon
         setApps(withIcon)
-        await window.electronAPI.saveApps({ apps: withIcon })
+        await persistApps(withIcon, '应用图标')
       }
     }
   }
@@ -663,7 +666,7 @@ function App() {
     const updatedApps = [...currentApps, newApp]
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '添加文件夹')
 
     let iconPath: string | null = null
     try {
@@ -673,7 +676,7 @@ function App() {
       const withIcon = updatedApps.map(a => a.id === newApp.id ? { ...a, icon: iconPath } : a)
       appsRef.current = withIcon
       setApps(withIcon)
-      await window.electronAPI.saveApps({ apps: withIcon })
+      await persistApps(withIcon, '文件夹图标')
     }
   }
 
@@ -687,7 +690,7 @@ function App() {
     const updatedApps = currentApps.filter(app => app.id !== id)
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '删除应用')
   }
 
   const handleMoveAppToCategory = async (appId: string, categoryId: string) => {
@@ -817,7 +820,7 @@ function App() {
     setCategories(updatedCategories)
     setActiveCategory(newCategory.id)
     activeCategoryRef.current = newCategory.id
-    await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories })
+    await persistCategories(updatedCategories, subcategories, '新建分类')
   }
 
   const persistCategoryDeletion = async (
@@ -874,14 +877,14 @@ function App() {
     )
     categoriesRef.current = updatedCategories
     setCategories(updatedCategories)
-    await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories })
+    await persistCategories(updatedCategories, subcategories, '修改分类')
   }
 
   const handleAddSubcategory = async (name: string, icon: string, parentId: string | null) => {
     const newSub: Subcategory = { id: crypto.randomUUID(), name, icon, parentId }
     const updated = [...subcategories, newSub]
     setSubcategories(updated)
-    await window.electronAPI.saveCategories({ categories, subcategories: updated })
+    await persistCategories(categories, updated, '新建子分类')
   }
 
   const handleDeleteSubcategory = async (id: string, keepApps: boolean) => {
@@ -898,7 +901,7 @@ function App() {
   const handleUpdateSubcategory = async (id: string, name: string, icon: string) => {
     const updated = subcategories.map(s => s.id === id ? { ...s, name, icon } : s)
     setSubcategories(updated)
-    await window.electronAPI.saveCategories({ categories, subcategories: updated })
+    await persistCategories(categories, updated, '修改子分类')
   }
 
   const handleMoveAppToSubcategory = async (appId: string, subcategoryId: string | null) => {
@@ -963,7 +966,7 @@ function App() {
       )
       appsRef.current = updatedApps
       setApps(updatedApps)
-      await window.electronAPI.saveApps({ apps: updatedApps })
+      await persistApps(updatedApps, '归类')
       return
     }
     await handleMoveAppToCategory(app.id, target.id)
@@ -1371,7 +1374,7 @@ function App() {
     if (!config) return
     const nextConfig = { ...config, onboardingCompleted: true }
     setConfig(nextConfig)
-    await window.electronAPI.saveConfig(nextConfig)
+    await persistConfig(nextConfig, '引导状态')
     setShowOnboarding(false)
   }
 
