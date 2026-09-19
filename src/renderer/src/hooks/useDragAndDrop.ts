@@ -328,7 +328,13 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
       leftDragRef.current = null
       // 无论是否真的拖动过，这次手势结束都要清掉"待发送文件"的登记
       pendingFileDragRef.current = null
-      if (!active) return
+      if (!active) {
+        /* 没越过 3px 阈值就松手 = 一次普通单击，不算拖拽。但 mousedown 已经
+           置位了 isDragEngaged（冻结卡片 hover 过渡），这里必须复位——
+           否则单击之后 data-drag-active 永久停在 true，卡片 hover 效果全废。 */
+        setIsDragEngaged(false)
+        return
+      }
       /* 拖拽已经发生，这次按理不会打开应用。
          但左键松手后浏览器仍会补发一次 click，而卡片上挂着 onClick →
          不拦住的话"拖完排序"就会顺手把应用打开。这里置位，由 handleCardClick 消费。 */
@@ -432,12 +438,12 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    // 更新自定义幽灵位置
-    moveDragGhost(e.clientX, e.clientY)
+    // 外部文件拖入时没有自绘幽灵（幽灵只在左键内部拖拽时创建），
+    // 这里只需要给系统一个"可以接受"的 dropEffect 即可。
     if (isExternalDragRef.current) {
       e.dataTransfer.dropEffect = 'copy'
     }
-  }, [moveDragGhost])
+  }, [])
 
   const handleDragEnd = useCallback(() => {
     removeDragGhost()
