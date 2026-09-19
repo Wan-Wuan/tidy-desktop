@@ -115,9 +115,13 @@ export function AppGrid({
                       isDragging={draggedAppId === app.id}
                       isDragOver={dragOverAppId === app.id}
                       /* 插入位置指示线只画在当前悬停的那张卡片上：
-                         false = 落在它前面，true = 落在它后面 */
+                         false = 落在它前面，true = 落在它后面。
+                         非手动排序时不画——那种模式下顺序由排序规则决定，拖拽只改归属
+                         （见 handleReorderApp 的提前返回），画线会承诺一个不会发生的落点。 */
                       insertAfter={
-                        dragOverAppId === app.id && dropInsertAfter !== null
+                        dragOverAppId === app.id &&
+                        dropInsertAfter !== null &&
+                        (config?.ui?.sortMode ?? 'manual') === 'manual'
                           ? dropInsertAfter
                           : undefined
                       }
