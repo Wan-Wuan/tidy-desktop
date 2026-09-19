@@ -6,6 +6,12 @@ data/
 .DS_Store
 Thumbs.db
 *.mp4
+# 本地临时输出（typecheck / lint / test / build 的重定向文件），不要提交
+.tmp*
+.tsc-out.txt
+.vitest-out.txt
+.build-out.txt
+.eslint.json
 .claude/
 .workbuddy/
 .workbuddy-ai/
