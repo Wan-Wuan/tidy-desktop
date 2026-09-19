@@ -54,6 +54,9 @@ export function useDragGhost(
   const dragGhostRafRef = useRef(0)
   const dragGhostPosRef = useRef({ x: 0, y: 0 })
   const ghostSizeRef = useRef({ w: 0, h: 0 })
+  /* 入场过渡的兜底定时器（transitionend 不派发时 260ms 后收尾）也要能被移除，
+     否则高频连续拖拽下旧定时器堆积、并可能在幽灵已被替换后仍持有其引用。 */
+  const settleTimerRef = useRef<number | null>(null)
   const uiRef = useRef(ui)
   uiRef.current = ui
 
@@ -61,6 +64,10 @@ export function useDragGhost(
     if (dragGhostRafRef.current) {
       cancelAnimationFrame(dragGhostRafRef.current)
       dragGhostRafRef.current = 0
+    }
+    if (settleTimerRef.current) {
+      window.clearTimeout(settleTimerRef.current)
+      settleTimerRef.current = null
     }
     if (dragGhostRef.current) {
       dragGhostRef.current.remove()
@@ -163,6 +170,10 @@ export function useDragGhost(
        opacity 的过渡留着无害（入场后再也不会改它）。 */
     let entryTransitionSettled = false
     const settleEntryTransition = () => {
+      if (settleTimerRef.current) {
+        window.clearTimeout(settleTimerRef.current)
+        settleTimerRef.current = null
+      }
       if (entryTransitionSettled) return
       entryTransitionSettled = true
       // 幽灵可能已经被替换/移除，别去改一个已经下线的元素
@@ -174,7 +185,7 @@ export function useDragGhost(
       if (ev.target === div && ev.propertyName === 'transform') settleEntryTransition()
     })
     // 兜底：位移为零或元素不可见时 transitionend 不会派发
-    window.setTimeout(settleEntryTransition, 260)
+    settleTimerRef.current = window.setTimeout(settleEntryTransition, 260)
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {

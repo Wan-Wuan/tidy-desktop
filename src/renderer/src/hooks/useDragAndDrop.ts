@@ -57,6 +57,13 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
      true = 插到它后面。既是松手时的依据，也用来画那条插入位置指示线——
      没有这条线，用户看到的是"拖到卡片右边，卡片却落到左边"，只能归因成"不准"。 */
   const [dropInsertAfter, setDropInsertAfter] = useState<boolean | null>(null)
+  /* 左键按下即置位的"拖拽已开始"信号，用于驱动 .app-shell[data-drag-active] 冻结
+     卡片 hover 过渡。为什么不能用 draggedAppId：它要等指针越过 3px 位移阈值才 setState，
+     再等一次 re-render 才反映到 data-drag-active 上——mousedown 到越过阈值之间，
+     卡片 hover 的 transform/box-shadow/backdrop-filter 过渡仍在跑，快速滑过一排卡片
+     会同时新起十几条 220ms 过渡，正是"频繁拖拽就卡"的一截来源。用独立 state 在
+     mousedown（React 离散事件）里同步置位，冻结早一整个"阈值判定 + 一帧渲染"的窗口。 */
+  const [isDragEngaged, setIsDragEngaged] = useState(false)
 
   const draggedAppIdRef = useRef<string | null>(null)
   const isExternalDragRef = useRef(false)
@@ -104,6 +111,7 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
     dragOverGroupRef.current = null
     dragOverAppRef.current = null
     leftDragTargetRef.current = null
+    setIsDragEngaged(false)
     setDraggedAppId(null)
     setDraggedSubId(null)
     setDragOverAppId(null)
@@ -388,6 +396,9 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
     if (e.button !== 0) return
     // preventDefault 压掉浏览器默认行为：不压的话拖动会变成选中卡片文字或拖动图片。
     e.preventDefault()
+    // 左键按下即冻结卡片过渡（见 isDragEngaged 的注释）：mousedown 是离散事件，
+    // React 会同步提交这次 setState，data-drag-active 在阈值判定前就位。
+    setIsDragEngaged(true)
     leftDragRef.current = { appId: app.id, active: false, startX: e.clientX, startY: e.clientY }
     // 文件额外记下路径：一旦拖出窗口就切换成系统原生拖拽
     pendingFileDragRef.current = canNativeDrag(app) ? app.path : null
@@ -432,6 +443,7 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
     removeDragGhost()
     dragCounterRef.current = 0
     isExternalDragRef.current = false
+    setIsDragEngaged(false)
     setDraggedAppId(null)
     setDragOverCategory(null)
     setDragOverAppId(null)
@@ -448,6 +460,7 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
   return {
     // 拖拽中的高亮目标（渲染用）
     draggedAppId,
+    isDragEngaged,
     dragOverCategory,
     setDragOverCategory,
     dragOverAppId,

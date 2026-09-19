@@ -106,6 +106,7 @@ function App() {
   // 搬迁到 useDragAndDrop（拆分第 6 步），App 只保留数据层动作（reorder/toCategory/toSubcategory）。
   const {
     draggedAppId,
+    isDragEngaged,
     dragOverCategory,
     setDragOverCategory,
     dragOverAppId,
@@ -1457,7 +1458,7 @@ function App() {
       /* 拖拽进行中给 CSS 一个总开关：冻结卡片 hover 的过渡与模糊变化。
          hover 过渡期间每帧都要重绘该卡片（含 backdrop-filter 重新算模糊），
          鼠标快速划过一排卡片时会有十几条这样的动画同时在跑，是掉帧主力之一。 */
-      data-drag-active={isDraggingApp || draggedSubId !== null ? 'true' : undefined}
+      data-drag-active={isDragEngaged || draggedSubId !== null ? 'true' : undefined}
       style={shellStyle}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
