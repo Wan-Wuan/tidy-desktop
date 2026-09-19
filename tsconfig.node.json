@@ -1,13 +1,15 @@
 {
-  // 本配置用于校验 vite.config.ts 这类「仅 Node 侧」的脚本（ESM + bundler 解析）。
-  // 目前没有任何 npm 脚本引用它（vite 自身用 esbuild 解析配置，不经 tsc），故暂时闲置；
-  // 保留它是为了将来接入 typecheck:node，或供编辑器对 vite.config.ts 做类型提示。
+  // 校验 vite.config.ts 这类「仅 Node 侧」的脚本（ESM + bundler 解析）。
+  // vite 自身用 esbuild 解析配置、不经 tsc，所以这份配置的价值在于把配置文件的
+  // 类型错误也纳入 `npm run typecheck:node`，而不是留给编辑器碰运气。
+  // 注意不要加 "composite": true——它是给 project references 用的，且与 --noEmit 冲突；
+  // 本仓库没有任何地方引用它。
   "compilerOptions": {
-    "composite": true,
     "skipLibCheck": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "types": ["node"]
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts", "vitest.config.ts"]
 }
