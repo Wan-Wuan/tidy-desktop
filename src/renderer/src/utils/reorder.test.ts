@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AppItem } from '../../../shared/types'
-import { computeReorder } from './reorder'
+import { computeReorder, isPointerPastMidpoint } from './reorder'
 
 function app(id: string, subcategoryId: string | null = null): AppItem {
   return {
@@ -56,5 +56,25 @@ describe('computeReorder', () => {
     const snapshot = list.map(a => a.id)
     computeReorder(list, 'C', 'A', true, null)
     expect(list.map(a => a.id)).toEqual(snapshot)
+  })
+})
+
+/* 落点判定规则：拖到目标右半边 → 插到它后面。
+   左键拖拽引擎统一切换时这条规则一度断线（不管拖哪半边都按"插到前面"处理），
+   这里锁住它，避免再被无声丢掉。 */
+describe('isPointerPastMidpoint', () => {
+  const left = 100
+  const width = 120 // 卡片 100..220，中线 160
+
+  it('左半边返回 false（插到目标之前）', () => {
+    expect(isPointerPastMidpoint(left, width, 120)).toBe(false)
+  })
+
+  it('右半边返回 true（插到目标之后）', () => {
+    expect(isPointerPastMidpoint(left, width, 200)).toBe(true)
+  })
+
+  it('正落在中线上不算越过，仍插到之前', () => {
+    expect(isPointerPastMidpoint(left, width, 160)).toBe(false)
   })
 })

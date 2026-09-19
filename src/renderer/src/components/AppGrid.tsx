@@ -17,6 +17,8 @@ interface AppGridProps {
   config: Config | null
   draggedAppId: string | null
   dragOverAppId: string | null
+  /** 落点在悬停卡片的哪一半：true 插到它后面。仅对当前悬停的那张卡片有意义 */
+  dropInsertAfter: boolean | null
   selectedAppIdSet: Set<string>
   cardOnOpen: (e: React.MouseEvent, app: AppItem) => void
   cardOnEdit: (app: AppItem) => void
@@ -39,6 +41,7 @@ export function AppGrid({
   config,
   draggedAppId,
   dragOverAppId,
+  dropInsertAfter,
   selectedAppIdSet,
   cardOnOpen,
   cardOnEdit,
@@ -111,6 +114,13 @@ export function AppGrid({
                       ui={config?.ui}
                       isDragging={draggedAppId === app.id}
                       isDragOver={dragOverAppId === app.id}
+                      /* 插入位置指示线只画在当前悬停的那张卡片上：
+                         false = 落在它前面，true = 落在它后面 */
+                      insertAfter={
+                        dragOverAppId === app.id && dropInsertAfter !== null
+                          ? dropInsertAfter
+                          : undefined
+                      }
                       isSelected={selectedAppIdSet.has(app.id)}
                       onOpen={cardOnOpen}
                       onEdit={cardOnEdit}

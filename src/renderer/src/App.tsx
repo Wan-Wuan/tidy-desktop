@@ -4,7 +4,7 @@ import type { CorruptBackupInfo, DataHealth, UpdateInstallStatus } from '../../s
 import { parseSteamUrl, ALL_FILE_EXTS_SET, getFileExtension } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { sortAppsForDisplay as sortAppsForDisplayPure } from './utils/sortApps'
-import { computeReorder } from './utils/reorder'
+import { computeReorder, isPointerPastMidpoint } from './utils/reorder'
 import { buildShortcutTargetMap, getDroppedPathIdentities, getDroppedPaths, normalizeDroppedPath } from './utils/dropPaths'
 import {
   removeCategoryFromApps,
@@ -91,6 +91,10 @@ function App() {
   const [dragOverSubId, setDragOverSubId] = useState<string | null>(null)
   /** 拖应用悬停在网格里的子分类分组上时的目标分组（'__none__' 表示未归类分组） */
   const [dragOverGroupSubId, setDragOverGroupSubId] = useState<string | null>(null)
+  /* 拖应用悬停在某张卡片上时，落点在该卡片的哪一半：false/null = 插到它前面，
+     true = 插到它后面。既是松手时的依据，也用来画那条插入位置指示线——
+     没有这条线，用户看到的是"拖到卡片右边，卡片却落到左边"，只能归因成"不准"。 */
+  const [dropInsertAfter, setDropInsertAfter] = useState<boolean | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const categoryBarRef = useRef<HTMLDivElement>(null)
@@ -135,11 +139,12 @@ function App() {
   /* dragover 每秒触发几十次，若每次都 setState 会让整个网格反复重渲染并卡死。
      用 ref 记住当前目标，只有真正切换到另一个分组时才更新 state。 */
   const dragOverGroupRef = useRef<string | null>(null)
-  /* group onDragOver 里算出的精确插入位置（最近卡片 + 鼠标 x 在卡片左/右半）。
-     用 ref 避免高频 setState；只在真正换到另一张卡片或前后改变时才更新。 */
-  const groupInsertPlanRef = useRef<{ groupKey: string; targetId: string; insertAfter: boolean } | null>(null)
+  /* 落点的"插到目标前还是后"以前记在这里（由 HTML5 分组处理器写入）。
+     统一切到左键自绘引擎后那套处理器被删了，这个 ref 只剩写和清、无人读——
+     插入意图因此在迁移中丢失。现在改为在落点判定的帧内现算并存进 dropInsertAfter，
+     不再需要这个 ref。 */
   /* 与 dragOverGroupRef 同样的 ref 守卫，给 dragOverAppId 用：
-     dragover 高频触发，同一目标卡片内移动不必反复 setState。 */
+     mousemove 高频触发，同一目标卡片内移动不必反复 setState。 */
   const dragOverAppRef = useRef<string | null>(null)
 
   /* 右键拖拽的 mousemove/mouseup 监听只挂一次（下面的 effect 依赖数组是空数组）。
@@ -169,7 +174,6 @@ function App() {
     draggedAppIdRef.current = null
     dragOverGroupRef.current = null
     dragOverAppRef.current = null
-    groupInsertPlanRef.current = null
     leftDragTargetRef.current = null
     setDraggedAppId(null)
     setDraggedSubId(null)
@@ -177,6 +181,7 @@ function App() {
     setDragOverCategory(null)
     setDragOverSubId(null)
     setDragOverGroupSubId(null)
+    setDropInsertAfter(null)
   }, [removeDragGhost])
 
   // 维护操作集（图标刷新/自动分类/健康检查/导入/备份等）
@@ -419,6 +424,14 @@ function App() {
     let dropTargetX = 0
     let dropTargetY = 0
 
+    /** 落点是否在这张应用卡片（data-app-id）的右半边 */
+    const isPastCardMidpoint = (el: Element | null, x: number) => {
+      const card = el?.closest('[data-app-id]')
+      if (!card) return false
+      const rect = card.getBoundingClientRect()
+      return isPointerPastMidpoint(rect.left, rect.width, x)
+    }
+
     const applyDropTargetAt = (x: number, y: number) => {
       const el = document.elementFromPoint(x, y)
       const rawTarget = findDropTarget(el)
@@ -426,13 +439,19 @@ function App() {
       const target = rawTarget && rawTarget.type === 'app' && rawTarget.id === draggedId
         ? null
         : rawTarget
+      /* 落点在卡片哪一半 = 松手后插到它前面还是后面。这里现算，
+         并把结果一并作为"目标"的一部分：同一张卡片内左右来回移动时，
+         指示线与松手结果都要跟着变，不能因为卡片没换就跳过更新。 */
+      const insertAfter = target?.type === 'app' ? isPastCardMidpoint(el, x) : null
       /* 目标没变就一个 setState 都别发，否则整个网格会被反复重渲染到卡死。 */
-      const targetKey = target ? `${target.type}:${target.id}` : null
+      const sideKey = insertAfter === null ? '' : insertAfter ? ':after' : ':before'
+      const targetKey = target ? `${target.type}:${target.id}${sideKey}` : null
       if (leftDragTargetRef.current === targetKey) return
       leftDragTargetRef.current = targetKey
 
       if (!target) {
         setDragOverAppId(null)
+        setDropInsertAfter(null)
         setDragOverCategory(null)
         setDragOverSubId(null)
         setDragOverGroupSubId(null)
@@ -440,18 +459,22 @@ function App() {
       }
       if (target.type === 'app') {
         setDragOverAppId(target.id)
+        setDropInsertAfter(insertAfter)
         setDragOverCategory(null)
         setDragOverSubId(null)
         setDragOverGroupSubId(null)
       } else if (target.type === 'category') {
         setDragOverCategory(target.id)
         setDragOverAppId(null)
+        // 非卡片目标没有"前后"之分，必须清掉指示线，否则从卡片移开后线还留着
+        setDropInsertAfter(null)
         setDragOverSubId(null)
         setDragOverGroupSubId(null)
       } else if (target.type === 'subcategory') {
         setDragOverSubId(target.id)
         setDragOverAppId(null)
         setDragOverCategory(null)
+        setDropInsertAfter(null)
         setDragOverGroupSubId(null)
       } else if (target.type === 'subcategory-drop') {
         setDragOverGroupSubId(target.id)
@@ -459,6 +482,7 @@ function App() {
         setDragOverAppId(null)
         setDragOverCategory(null)
         setDragOverSubId(null)
+        setDropInsertAfter(null)
       }
     }
 
@@ -561,13 +585,17 @@ function App() {
       suppressNextCardClickRef.current = true
       const el = document.elementFromPoint(e.clientX, e.clientY)
       const target = findDropTarget(el)
+      /* 用**松手位置**现算插到目标前还是后，与拖拽过程中画的指示线同一套判断，
+         所以"线画在哪、松手就落在哪"。刻意不读拖拽中的 state：最后一帧之后
+         指针可能又移动了一小段，读旧值就会差一位。 */
+      const insertAfter = target?.type === 'app' ? isPastCardMidpoint(el, e.clientX) : false
       // 先收尾再执行移动：下面的操作会 setApps 换分组、移动源卡片 DOM，
       // 事后再清容易漏（之前就漏了 dragOverAppRef / groupInsertPlanRef）
       clearDragState()
       const actions = leftDragActionsRef.current
       if (target && actions) {
         if (target.type === 'app' && target.id !== appId) {
-          await actions.reorder(appId, target.id)
+          await actions.reorder(appId, target.id, insertAfter)
         } else if (target.type === 'category') {
           await actions.toCategory(appId, target.id)
         } else if (target.type === 'subcategory') {
@@ -1904,6 +1932,7 @@ function App() {
         config={config}
         draggedAppId={draggedAppId}
         dragOverAppId={dragOverAppId}
+        dropInsertAfter={dropInsertAfter}
         selectedAppIdSet={selectedAppIdSet}
         cardOnOpen={cardOnOpen}
         cardOnEdit={cardOnEdit}

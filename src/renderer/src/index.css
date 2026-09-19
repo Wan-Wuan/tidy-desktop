@@ -1358,6 +1358,31 @@ body {
   opacity: 0.18;
 }
 
+/* 拖拽落点指示线：拖到卡片左半边 → 松手后插到它前面；右半边 → 插到后面。
+   这条线是"松手后会落在哪"的直接答案——没有它，用户看到的是"拖到卡片右边、
+   卡片却出现在左边"，只能判断成"落点不准"。
+   画在卡片内侧：.glass-card 是 overflow:hidden，画到外面会被直接裁掉。 */
+.app-tile[data-insert]::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: rgb(var(--brand-500));
+  box-shadow: 0 0 0 1px rgb(var(--white) / 0.65);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.app-tile[data-insert='before']::before {
+  left: 2px;
+}
+
+.app-tile[data-insert='after']::before {
+  right: 2px;
+}
+
 /* 权重 0,3,0：高于上面的 `.layout-* .app-tile`（0,2,0）重置规则，
    阴影要写在这里才会真正生效。
    同样排除拖拽悬停/选中态——鼠标一定悬停在目标卡片上，若不排除，

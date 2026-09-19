@@ -10,6 +10,7 @@ export const AppCard = React.memo(function AppCard({
   ui,
   isDragging,
   isDragOver,
+  insertAfter,
   isSelected,
   onOpen,
   onEdit,
@@ -23,6 +24,8 @@ export const AppCard = React.memo(function AppCard({
   ui?: UISettings
   isDragging: boolean
   isDragOver: boolean
+  /** 拖拽落点要插到本卡片前还是后；undefined = 本卡片不是当前落点，不画指示线 */
+  insertAfter?: boolean
   isSelected: boolean
   onOpen: (e: React.MouseEvent, app: AppItem) => void
   onEdit: (app: AppItem) => void
@@ -45,6 +48,8 @@ export const AppCard = React.memo(function AppCard({
       data-dragover={isDragOver ? 'true' : undefined}
       data-selected={isSelected ? 'true' : undefined}
       data-dragging={isDragging ? 'true' : undefined}
+      /* 落点指示：before = 松手后插到本卡片前面，after = 插到后面 */
+      data-insert={insertAfter === undefined ? undefined : insertAfter ? 'after' : 'before'}
       tabIndex={0}
       role="button"
       aria-label={`打开 ${app.name}`}

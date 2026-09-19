@@ -33,3 +33,17 @@ export function computeReorder(
   })
   return updated
 }
+
+/**
+ * 指针落在目标的右半边吗？——「落点 → 插入到目标前还是后」的判定规则。
+ *
+ * 单独抽成纯函数是为了能被测试锁住：这条规则以前由 HTML5 分组处理器算进一个 ref，
+ * 统一切到左键自绘引擎时没人再接它，于是不管拖到卡片哪一半都按「插到前面」处理，
+ * 表现为「拖到卡片右边，卡片却落到左边」。规则本身很短，但它是落点准确性的全部依据，
+ * 值得有测试兜着。
+ *
+ * 取三个数值而不是 DOMRect，便于测试，也避免耦合 DOM 类型。
+ */
+export function isPointerPastMidpoint(left: number, width: number, x: number): boolean {
+  return x > left + width / 2
+}
