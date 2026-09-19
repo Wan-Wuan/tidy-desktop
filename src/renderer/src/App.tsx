@@ -5,7 +5,7 @@ import { parseSteamUrl, ALL_FILE_EXTS_SET, getFileExtension } from '../../shared
 import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { sortAppsForDisplay as sortAppsForDisplayPure } from './utils/sortApps'
 import { computeReorder } from './utils/reorder'
-import { findDropTarget, isPastCardMidpoint, isPointerOutsideWindow } from './utils/dropTarget'
+import { isDocFile } from './utils/fileKind'
 import { buildShortcutTargetMap, getDroppedPathIdentities, getDroppedPaths, normalizeDroppedPath } from './utils/dropPaths'
 import {
   removeCategoryFromApps,
@@ -37,7 +37,7 @@ import { CategoryNav } from './components/CategoryNav'
 import { AppGrid } from './components/AppGrid'
 import { SelectionBar } from './components/SelectionBar'
 import { ToastStack } from './components/ToastStack'
-import { canNativeDrag, isDocFile } from './utils/fileKind'
+import { useDragAndDrop } from './hooks/useDragAndDrop'
 import type { AppContextMenuState, MoveTarget } from './components/AppContextMenuOverlay'
 import {
   AddAppModal,
@@ -85,33 +85,46 @@ function App() {
   const [showEditApp, setShowEditApp] = useState(false)
   const [editingApp, setEditingApp] = useState<AppItem | null>(null)
   const [showSmartOrganize, setShowSmartOrganize] = useState(false)
-  const [draggedAppId, setDraggedAppId] = useState<string | null>(null)
-  const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
-  const [dragOverAppId, setDragOverAppId] = useState<string | null>(null)
-  const [draggedSubId, setDraggedSubId] = useState<string | null>(null)
-  const [dragOverSubId, setDragOverSubId] = useState<string | null>(null)
-  /** 拖应用悬停在网格里的子分类分组上时的目标分组（'__none__' 表示未归类分组） */
-  const [dragOverGroupSubId, setDragOverGroupSubId] = useState<string | null>(null)
-  /* 拖应用悬停在某张卡片上时，落点在该卡片的哪一半：false/null = 插到它前面，
-     true = 插到它后面。既是松手时的依据，也用来画那条插入位置指示线——
-     没有这条线，用户看到的是"拖到卡片右边，卡片却落到左边"，只能归因成"不准"。 */
-  const [dropInsertAfter, setDropInsertAfter] = useState<boolean | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const categoryBarRef = useRef<HTMLDivElement>(null)
   const subcategoryBarRef = useRef<HTMLDivElement>(null)
-  const dragCounterRef = useRef(0)
-  const draggedAppIdRef = useRef<string | null>(null)
-  const isExternalDragRef = useRef(false)
-  /* 正在被拖拽的卡片如果是文件（图片/文档），这里记下它的路径。
-     用途：同一个左键拖拽要同时支持「归类」和「发送」两种意图，靠落点区分——
-     拖拽全程在窗口内 = 归类；拖出窗口 = 切换成系统原生拖拽（发送/上传到微信、浏览器等）。 */
-  const pendingFileDragRef = useRef<string | null>(null)
-  const leftDragRef = useRef<{ appId: string; active: boolean; startX: number; startY: number } | null>(null)
-  /** 当前悬停的放置目标（'type:id'），用于避免 mousemove 里重复 setState */
-  const leftDragTargetRef = useRef<string | null>(null)
-  /** 拖拽看门狗：mouseup 与 mouseleave 双双丢失时兜底收尾，避免预览贴图永久残留 */
-  const dragWatchdogRef = useRef<number | null>(null)
+
+  // 创建跟随鼠标的幽灵卡片（左键自绘拖拽引擎使用；幽灵自身的 DOM 引用在 useDragGhost 内部维护）
+  const { createDragGhost, moveDragGhost, removeDragGhost } = useDragGhost(appsRef, config?.ui)
+
+  /* 拖拽引擎的动作（重排/归类）在本函数更靠后才定义，经 ref 转发给 useDragAndDrop。
+     监听只挂一次，动作实现每次渲染刷新进 ref，避免闭包过期（细节见 useDragAndDrop
+     里的 leftDragActionsRef 说明）。 */
+  const leftDragActionsRef = useRef<{
+    reorder: (sourceId: string, targetId: string, insertAfter?: boolean) => Promise<void>
+    toCategory: (appId: string, categoryId: string) => Promise<void>
+    toSubcategory: (appId: string, subcategoryId: string | null) => Promise<void>
+  } | null>(null)
+
+  // 拖拽引擎：左键自绘拖拽 + 外部文件拖入守卫。整套手势/落点/收尾逻辑从本文件
+  // 搬迁到 useDragAndDrop（拆分第 6 步），App 只保留数据层动作（reorder/toCategory/toSubcategory）。
+  const {
+    draggedAppId,
+    dragOverCategory,
+    setDragOverCategory,
+    dragOverAppId,
+    dragOverSubId,
+    dragOverGroupSubId,
+    dropInsertAfter,
+    draggedSubId,
+    setDraggedSubId,
+    setDragOverSubId,
+    suppressNextCardClickRef,
+    draggedAppIdRef,
+    clearDragState,
+    resetExternalDrag,
+    handleCardMouseDown,
+    handleDragEnter,
+    handleDragLeave,
+    handleDragOver,
+    handleDragEnd
+  } = useDragAndDrop({ ghost: { createDragGhost, moveDragGhost, removeDragGhost }, actions: leftDragActionsRef.current! })
 
   // 图标按需补全：载入后、拖入新应用后把缺图标的补上（细节见 useIconBackfill）。
   const { scheduleIconBackfill, extractIconsForApps } = useIconBackfill({ appsRef, setApps })
@@ -133,57 +146,6 @@ function App() {
 
   // 多选状态（选中集合 / 框选锚点 / 一键清空），细节见 useAppSelection。
   const { selectedAppIds, setSelectedAppIds, selectedAppIdSet, lastClickedIndexRef, clearAppSelection } = useAppSelection()
-
-  // 创建跟随鼠标的幽灵卡片（左键自绘拖拽引擎使用；幽灵自身的 DOM 引用在 useDragGhost 内部维护）
-  const { createDragGhost, moveDragGhost, removeDragGhost } = useDragGhost(appsRef, config?.ui)
-
-  /* dragover 每秒触发几十次，若每次都 setState 会让整个网格反复重渲染并卡死。
-     用 ref 记住当前目标，只有真正切换到另一个分组时才更新 state。 */
-  const dragOverGroupRef = useRef<string | null>(null)
-  /* 落点的"插到目标前还是后"以前记在这里（由 HTML5 分组处理器写入）。
-     统一切到左键自绘引擎后那套处理器被删了，这个 ref 只剩写和清、无人读——
-     插入意图因此在迁移中丢失。现在改为在落点判定的帧内现算并存进 dropInsertAfter，
-     不再需要这个 ref。 */
-  /* 与 dragOverGroupRef 同样的 ref 守卫，给 dragOverAppId 用：
-     mousemove 高频触发，同一目标卡片内移动不必反复 setState。 */
-  const dragOverAppRef = useRef<string | null>(null)
-
-  /* 右键拖拽的 mousemove/mouseup 监听只挂一次（下面的 effect 依赖数组是空数组）。
-     如果直接在监听里调用这些函数，拿到的是**首渲染时**的闭包版本——
-     handleReorderApp 内部要读 config.ui.sortMode，而首渲染时 config 还是 null，
-     于是它永远走 'manual' 分支：用户切到「按名称/启动次数」排序后，右键拖拽的
-     落点会与实际显示顺序对不上。这里用 ref 转发最新实现。
-     （另外两个 handleMoveAppToXxx 目前只读 appsRef，暂不受影响，
-       但一并转发，避免以后改动时再踩同一个坑。） */
-  const leftDragActionsRef = useRef<{
-    reorder: (sourceId: string, targetId: string, insertAfter?: boolean) => Promise<void>
-    toCategory: (appId: string, categoryId: string) => Promise<void>
-    toSubcategory: (appId: string, subcategoryId: string | null) => Promise<void>
-  } | null>(null)
-
-  /* 统一的拖拽收尾。
-     ⚠️ 跨子分类拖动会让应用换到别的分组，源卡片的 DOM 被 React 移动/重建，
-     于是 dragend 丢失——所有"靠 dragend 清理"的逻辑都会失效，预览贴图会永久
-     留在屏幕上。所以 drop 处理里必须主动调它，而且要在任何 await 之前调，
-     不能把清理挂在异步操作后面。 */
-  const clearDragState = useCallback(() => {
-    if (dragWatchdogRef.current) {
-      window.clearTimeout(dragWatchdogRef.current)
-      dragWatchdogRef.current = null
-    }
-    removeDragGhost()
-    draggedAppIdRef.current = null
-    dragOverGroupRef.current = null
-    dragOverAppRef.current = null
-    leftDragTargetRef.current = null
-    setDraggedAppId(null)
-    setDraggedSubId(null)
-    setDragOverAppId(null)
-    setDragOverCategory(null)
-    setDragOverSubId(null)
-    setDragOverGroupSubId(null)
-    setDropInsertAfter(null)
-  }, [removeDragGhost])
 
   // 维护操作集（图标刷新/自动分类/健康检查/导入/备份等）
   const {
@@ -248,41 +210,6 @@ function App() {
       window.electronAPI.saveConfig({ ...latest, lastActiveCategoryId: activeCategory })
     })
   }, [activeCategory])
-
-  useEffect(() => {
-    const resetExternalDrag = (e: DragEvent) => {
-      if (e.relatedTarget === null) {
-        dragCounterRef.current = 0
-        isExternalDragRef.current = false
-      }
-    }
-    const handleGlobalDragEnd = () => {
-      dragCounterRef.current = 0
-      isExternalDragRef.current = false
-      // 全局兜底：把所有拖拽态（含预览贴图）一次性收干净
-      clearDragState()
-    }
-    document.addEventListener('dragleave', resetExternalDrag)
-    document.addEventListener('dragend', handleGlobalDragEnd)
-    return () => {
-      document.removeEventListener('dragleave', resetExternalDrag)
-      document.removeEventListener('dragend', handleGlobalDragEnd)
-    }
-  }, [clearDragState])
-
-  useEffect(() => {
-    return () => {
-      // 看门狗是个 30 秒的长定时器，卸载时必须清掉，
-      // 否则它会在组件销毁后触发 clearDragState（对已卸载组件 setState）
-      if (dragWatchdogRef.current) {
-        window.clearTimeout(dragWatchdogRef.current)
-        dragWatchdogRef.current = null
-      }
-    }
-  }, [])
-
-  /* 注意：图片/文档的原生拖拽不再单独挂一套 mousemove 监听。
-     它现在由下面那个自绘拖拽引擎在「指针拖出窗口」时按需切换，见 switchToNativeDrag。 */
 
   /* 复制结果的轻提示：以前用 alert()，会弹出系统模态框打断操作 */
   const [copyToast, setCopyToast] = useState<string | null>(null)
@@ -354,10 +281,6 @@ function App() {
     crudApiRef
   })
   const [appContextMenu, setAppContextMenu] = useState<AppContextMenuState | null>(null)
-  /* 拖拽结束后抑制紧随其后的那次 click。
-     左键松手时浏览器一定会补发 click，而卡片上挂着 onClick（打开应用）——
-     不拦住的话"拖完排序"就会顺手把应用打开。由 handleLeftDragUp 置位、handleCardClick 消费。 */
-  const suppressNextCardClickRef = useRef(false)
   const skipActiveCategoryPersistRef = useRef(true)
 
   useEffect(() => {
@@ -375,243 +298,6 @@ function App() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [showSettings, showAddApp, showEditApp, showSmartOrganize, appContextMenu, categoryContextMenu, categoryEditDialog, categoryDeleteDialog, selectedAppIds, setSelectedAppIds])
-
-  useEffect(() => {
-    /* 左键自定义拖拽：普通应用拖到应用/分类/子分类上完成排序或归类。
-       图片/文档的拖拽走系统原生拖拽（见下面那个 effect），不经过这里。
-
-       为什么不用 HTML5 draggable：它的         dragover 受浏览器节流，幽灵卡片跟手度明显
-       不如这里用 elementFromPoint 每帧定位。所以内部拖拽统一走这一套，draggable 已移除。 */
-
-    /* switchToNativeDrag 用于「拖出窗口」时发送/上传到微信、浏览器等外部应用。
-       ⚠️ 顺序不能变：必须先把内部拖拽状态收干净再启动原生拖拽。
-       原生拖拽会接管鼠标，之后我们的 mouseup 收不到，残留的幽灵贴图和落点高亮就再也清不掉了。 */
-    const switchToNativeDrag = (filePath: string) => {
-      leftDragRef.current = null
-      pendingFileDragRef.current = null
-      /* 抑制点击。注意：原生拖拽被系统接管后通常**不会**补发 click，
-         所以这个标志可能没人来消费——留个 500ms 自愈定时器把它清掉，
-         否则它会一直悬着，把之后第一次正常点击吃掉（表现为"点了没反应"）。 */
-      suppressNextCardClickRef.current = true
-      window.setTimeout(() => { suppressNextCardClickRef.current = false }, 500)
-      document.body.style.cursor = ''
-      clearDragState()
-      window.electronAPI.startDragFile(filePath)
-    }
-
-    /* 落点判定（elementFromPoint）会强制同步的样式重算 + 布局，代价很高。
-       mousemove 在高回报率鼠标下每秒能来几百次，每来一次就强制一次布局——
-       这是拖拽时最主要的 CPU 尖峰来源（快速拖动时尤其明显）。
-       这里把判定收敛到「每帧最多一次」：中间那些坐标没有意义，只保留最后一次。 */
-    let dropTargetRaf = 0
-    let dropTargetX = 0
-    let dropTargetY = 0
-
-    const applyDropTargetAt = (x: number, y: number) => {
-      const el = document.elementFromPoint(x, y)
-      const rawTarget = findDropTarget(el)
-      const draggedId = leftDragRef.current?.appId
-      const target = rawTarget && rawTarget.type === 'app' && rawTarget.id === draggedId
-        ? null
-        : rawTarget
-      /* 落点在卡片哪一半 = 松手后插到它前面还是后面。这里现算，
-         并把结果一并作为"目标"的一部分：同一张卡片内左右来回移动时，
-         指示线与松手结果都要跟着变，不能因为卡片没换就跳过更新。 */
-      const insertAfter = target?.type === 'app' ? isPastCardMidpoint(el, x) : null
-      /* 目标没变就一个 setState 都别发，否则整个网格会被反复重渲染到卡死。 */
-      const sideKey = insertAfter === null ? '' : insertAfter ? ':after' : ':before'
-      const targetKey = target ? `${target.type}:${target.id}${sideKey}` : null
-      if (leftDragTargetRef.current === targetKey) return
-      leftDragTargetRef.current = targetKey
-
-      if (!target) {
-        setDragOverAppId(null)
-        setDropInsertAfter(null)
-        setDragOverCategory(null)
-        setDragOverSubId(null)
-        setDragOverGroupSubId(null)
-        return
-      }
-      if (target.type === 'app') {
-        setDragOverAppId(target.id)
-        setDropInsertAfter(insertAfter)
-        setDragOverCategory(null)
-        setDragOverSubId(null)
-        setDragOverGroupSubId(null)
-      } else if (target.type === 'category') {
-        setDragOverCategory(target.id)
-        setDragOverAppId(null)
-        // 非卡片目标没有"前后"之分，必须清掉指示线，否则从卡片移开后线还留着
-        setDropInsertAfter(null)
-        setDragOverSubId(null)
-        setDragOverGroupSubId(null)
-      } else if (target.type === 'subcategory') {
-        setDragOverSubId(target.id)
-        setDragOverAppId(null)
-        setDragOverCategory(null)
-        setDropInsertAfter(null)
-        setDragOverGroupSubId(null)
-      } else if (target.type === 'subcategory-drop') {
-        setDragOverGroupSubId(target.id)
-        dragOverGroupRef.current = target.id
-        setDragOverAppId(null)
-        setDragOverCategory(null)
-        setDragOverSubId(null)
-        setDropInsertAfter(null)
-      }
-    }
-
-    const scheduleDropTargetUpdate = (x: number, y: number) => {
-      dropTargetX = x
-      dropTargetY = y
-      if (dropTargetRaf) return
-      dropTargetRaf = requestAnimationFrame(() => {
-        dropTargetRaf = 0
-        // 排进帧里执行时拖拽可能已经结束（快速甩动后立刻松手），此时不该再改高亮
-        if (!leftDragRef.current?.active) return
-        applyDropTargetAt(dropTargetX, dropTargetY)
-      })
-    }
-
-    /* ── 拖拽帧率自检（仅开发环境；打包后渲染层走 file: 协议，自动关闭）──
-       拖拽结束会在 DevTools Console 打一行 [drag-perf] 汇总：
-       frames=总帧数 avg=平均帧间隔 worst=最差一帧 long>20ms=掉帧数。
-       卡顿消失的判据：long 是 0 或个位数，avg 接近 16.7ms。 */
-    const dragPerfOn = window.location.protocol !== 'file:'
-    let perfFrames = 0
-    let perfWorst = 0
-    let perfLong = 0
-    let perfLast = 0
-    let perfStart = 0
-    let perfRaf = 0
-    const startDragPerf = () => {
-      if (!dragPerfOn) return
-      if (perfRaf) cancelAnimationFrame(perfRaf)
-      perfFrames = 0
-      perfWorst = 0
-      perfLong = 0
-      perfLast = performance.now()
-      perfStart = perfLast
-      const tick = (now: number) => {
-        if (!leftDragRef.current?.active) {
-          const total = now - perfStart
-          const avg = perfFrames > 0 ? total / perfFrames : 0
-          console.log(`[drag-perf] frames=${perfFrames} avg=${avg.toFixed(1)}ms worst=${perfWorst.toFixed(1)}ms long>20ms=${perfLong}`)
-          perfRaf = 0
-          return
-        }
-        const delta = now - perfLast
-        perfLast = now
-        perfFrames++
-        if (delta > perfWorst) perfWorst = delta
-        if (delta > 20) perfLong++
-        perfRaf = requestAnimationFrame(tick)
-      }
-      perfRaf = requestAnimationFrame(tick)
-    }
-
-    const handleLeftDragMove = (e: MouseEvent) => {
-      if (!leftDragRef.current) return
-      if (!leftDragRef.current.active) {
-        const dx = e.clientX - leftDragRef.current.startX
-        const dy = e.clientY - leftDragRef.current.startY
-        if (Math.abs(dx) + Math.abs(dy) < 3) return
-        leftDragRef.current.active = true
-        setDraggedAppId(leftDragRef.current.appId)
-        draggedAppIdRef.current = leftDragRef.current.appId
-        document.body.style.cursor = 'grabbing'
-        createDragGhost(leftDragRef.current.appId, e.clientX, e.clientY)
-        startDragPerf()
-        /* 看门狗：拖到窗口外松手时 mouseup 可能收不到，拖拽状态就会永久卡住
-           （表现为排序整个失灵、幽灵贴图留在屏幕上）。到点强制收尾。
-           这是从原 HTML5 拖拽实现里迁移过来的保障，不能丢。 */
-        if (dragWatchdogRef.current) window.clearTimeout(dragWatchdogRef.current)
-        dragWatchdogRef.current = window.setTimeout(() => {
-          dragWatchdogRef.current = null
-          leftDragRef.current = null
-          clearDragState()
-        }, 30000)
-      }
-      /* 文件卡片被拖出窗口 → 这次手势的意图是"发送/上传"而不是"归类"。
-         用落点意图区分两种功能，同一个左键手势就能同时覆盖它们，不需要用修饰键或另一个按钮。
-         拖拽全程留在窗口内时不会走到这里，所以归类照常工作。 */
-      const pendingFile = pendingFileDragRef.current
-      if (pendingFile && isPointerOutsideWindow(e)) {
-        switchToNativeDrag(pendingFile)
-        return
-      }
-      moveDragGhost(e.clientX, e.clientY)
-      // 落点判定收敛到帧内执行，不再每次 mousemove 都强制一次布局
-      scheduleDropTargetUpdate(e.clientX, e.clientY)
-    }
-
-    const handleLeftDragUp = async (e: MouseEvent) => {
-      document.body.style.cursor = ''
-      removeDragGhost()
-      if (!leftDragRef.current) return
-      const { appId, active } = leftDragRef.current
-      leftDragRef.current = null
-      // 无论是否真的拖动过，这次手势结束都要清掉"待发送文件"的登记
-      pendingFileDragRef.current = null
-      if (!active) return
-      /* 拖拽已经发生，这次按理不会打开应用。
-         但左键松手后浏览器仍会补发一次 click，而卡片上挂着 onClick →
-         不拦住的话"拖完排序"就会顺手把应用打开。这里置位，由 handleCardClick 消费。 */
-      suppressNextCardClickRef.current = true
-      const el = document.elementFromPoint(e.clientX, e.clientY)
-      const target = findDropTarget(el)
-      /* 用**松手位置**现算插到目标前还是后，与拖拽过程中画的指示线同一套判断，
-         所以"线画在哪、松手就落在哪"。刻意不读拖拽中的 state：最后一帧之后
-         指针可能又移动了一小段，读旧值就会差一位。 */
-      const insertAfter = target?.type === 'app' ? isPastCardMidpoint(el, e.clientX) : false
-      // 先收尾再执行移动：下面的操作会 setApps 换分组、移动源卡片 DOM，
-      // 事后再清容易漏（之前就漏了 dragOverAppRef / groupInsertPlanRef）
-      clearDragState()
-      const actions = leftDragActionsRef.current
-      if (target && actions) {
-        if (target.type === 'app' && target.id !== appId) {
-          await actions.reorder(appId, target.id, insertAfter)
-        } else if (target.type === 'category') {
-          await actions.toCategory(appId, target.id)
-        } else if (target.type === 'subcategory') {
-          await actions.toSubcategory(appId, target.id)
-        } else if (target.type === 'subcategory-drop') {
-          await actions.toSubcategory(appId, target.id === '__none__' ? null : target.id)
-        }
-      }
-    }
-
-    /* 兜底：指针移出窗口时 mousemove 可能不再派发，光靠坐标判断会漏掉最后一段。
-       documentElement 的 mouseleave 是"指针离开窗口"最可靠的信号。 */
-    const handlePointerLeavesWindow = () => {
-      const pendingFile = pendingFileDragRef.current
-      if (!pendingFile) return
-      if (!leftDragRef.current?.active) return
-      switchToNativeDrag(pendingFile)
-    }
-
-    document.addEventListener('mousemove', handleLeftDragMove)
-    document.addEventListener('mouseup', handleLeftDragUp)
-    document.documentElement.addEventListener('mouseleave', handlePointerLeavesWindow)
-    return () => {
-      document.removeEventListener('mousemove', handleLeftDragMove)
-      document.removeEventListener('mouseup', handleLeftDragUp)
-      document.documentElement.removeEventListener('mouseleave', handlePointerLeavesWindow)
-      // 待执行的落点判定要撤销，否则卸载后 rAF 仍会跑一次
-      if (dropTargetRaf) {
-        cancelAnimationFrame(dropTargetRaf)
-        dropTargetRaf = 0
-      }
-      if (perfRaf) {
-        cancelAnimationFrame(perfRaf)
-        perfRaf = 0
-      }
-      removeDragGhost()
-    }
-    /* 这四个都来自 useDragGhost / clearDragState，标识稳定（内部是 useCallback + ref），
-       加进依赖不会让监听反复解绑重绑。监听里需要"最新实现"的部分（重排、归类）
-       统一走 leftDragActionsRef 转发，见上面的说明。 */
-  }, [clearDragState, createDragGhost, moveDragGhost, removeDragGhost])
 
   /* dragend 兜底：万一源节点被异常移除，React 的 onDragEnd 就收不到事件，
      拖拽状态会永久卡住（表现为排序整个失灵）。在 document 上再兜一层。 */
@@ -1350,21 +1036,6 @@ function App() {
     clearAppSelection()
   }
 
-  const handleCardMouseDown = (e: React.MouseEvent, app: AppItem) => {
-    // 只有左键参与拖拽。右键不再承担任何拖拽职责（见 2026-09-18 拖拽改造），
-    // 它只负责弹出上下文菜单。
-    if (e.button !== 0) return
-    // preventDefault 压掉浏览器默认行为：不压的话拖动会变成选中卡片文字或拖动图片。
-    e.preventDefault()
-    /* 所有类型都进同一套内部拖拽引擎——文件（图片/文档）同样要能拖到分类/子分类上归类。
-       这里以前按 canNativeDrag 分成互斥的两路，图片/文档被锁进"原生拖拽"，结果
-       "归类"对文件变成不可达（拖文件只会触发发送）。现在只留一条路，
-       发送意图改由「拖出窗口」来触发，见 handleLeftDragMove 里的 switchToNativeDrag。 */
-    leftDragRef.current = { appId: app.id, active: false, startX: e.clientX, startY: e.clientY }
-    // 文件额外记下路径：一旦拖出窗口就切换成系统原生拖拽
-    pendingFileDragRef.current = canNativeDrag(app) ? app.path : null
-  }
-
   const handleCardContextMenu = (e: React.MouseEvent, app: AppItem) => {
     // 右键只弹菜单。以前这里还要处理"右键拖拽释放后 Windows 补发 contextmenu"，
     // 拖拽改到左键之后那条链路不存在了，屏蔽逻辑一并删掉。
@@ -1561,54 +1232,13 @@ function App() {
     setActiveSubcategoryId(previous => previous === current ? previous : current)
   }, [displaySubcategories])
 
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (draggedAppIdRef.current) return
-    if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/uri-list')) {
-      isExternalDragRef.current = true
-      dragCounterRef.current++
-    }
-  }, [])
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (draggedAppIdRef.current) return
-    dragCounterRef.current--
-    if (dragCounterRef.current <= 0) {
-      dragCounterRef.current = 0
-      isExternalDragRef.current = false
-    }
-  }, [])
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    // 更新自定义幽灵位置
-    moveDragGhost(e.clientX, e.clientY)
-    if (isExternalDragRef.current) {
-      e.dataTransfer.dropEffect = 'copy'
-    }
-  }, [moveDragGhost])
-
-  const handleDragEnd = useCallback(() => {
-    removeDragGhost()
-    dragCounterRef.current = 0
-    isExternalDragRef.current = false
-    setDraggedAppId(null)
-    setDragOverCategory(null)
-    setDragOverAppId(null)
-  }, [removeDragGhost])
-
   /* 这里刻意不用 useCallback：它只挂在 shell 的 onDrop 上，不是 memo 组件的 props，
      标识稳定没有任何收益；而它依赖的 parsePathsToApps / showDropResult 都是每次渲染
      重建的普通函数，硬塞进依赖数组只会让"依赖每次都变"，警告换个形式再来一遍。 */
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    dragCounterRef.current = 0
-    isExternalDragRef.current = false
+    resetExternalDrag()
 
     // 拖应用落到网格空白处（不属于任何分组/卡片）时走到这里。
     // 不能只 return——拖拽态要等 100ms 后的 dragend 才清，这段时间预览贴图还挂在屏幕上
