@@ -233,6 +233,34 @@ function App() {
   }, [])
   const [activeSubcategoryId, setActiveSubcategoryId] = useState<string | null>(null)
 
+  /* 应用/分类数据的持久化封装：saveApps / saveCategories 返回 boolean 成功标志，
+     而它们**可能返回 false 而不是抛异常**（主进程里数据文件损坏时会直接 return false，
+     见 fileHandlers.ts 的 isDataFileCorrupted 守卫）。原来的调用点全部忽略返回值，
+     于是「UI 已乐观更新、数据却悄悄没落盘」没有任何提示，用户下次启动才惊觉丢失。
+     这里统一检查返回值，失败时弹轻提示；同时把异常（IPC 通道故障等）也兜住，
+     避免未捕获的 Promise rejection。 */
+  const persistApps = useCallback(async (apps: AppItem[], hint = '应用数据') => {
+    try {
+      const ok = await window.electronAPI.saveApps({ apps })
+      if (!ok) showCopyToast(`保存${hint}失败，本次改动可能未持久化`)
+      return ok
+    } catch {
+      showCopyToast(`保存${hint}失败，本次改动可能未持久化`)
+      return false
+    }
+  }, [showCopyToast])
+
+  const persistCategories = useCallback(async (categories: Category[], subcategories: Subcategory[], hint = '分类') => {
+    try {
+      const ok = await window.electronAPI.saveCategories({ categories, subcategories })
+      if (!ok) showCopyToast(`保存${hint}失败，本次改动可能未持久化`)
+      return ok
+    } catch {
+      showCopyToast(`保存${hint}失败，本次改动可能未持久化`)
+      return false
+    }
+  }, [showCopyToast])
+
   /* 更新安装日志的打开结果。
      以前文件不存在时主进程只返回 false，界面表现为「点了没反应」；
      现在把「没有记录」和「打开失败」区分开，并顺带提示上次更新是否中断。 */
@@ -688,7 +716,7 @@ function App() {
     )
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '归类')
   }
 
   const parsePathsToApps = async (filePaths: string[], categoryId: string): Promise<ParsedDrop> => {
@@ -897,7 +925,7 @@ function App() {
     const updatedApps = currentApps.map(a => a.id === appId ? { ...a, subcategoryId } : a)
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '归类')
   }
 
   const handleReorderSubcategory = async (sourceId: string, targetId: string, insertAfter: boolean) => {
@@ -915,7 +943,7 @@ function App() {
     if (insertAt === -1) return
     updated.splice(insertAfter ? insertAt + 1 : insertAt, 0, moved)
     setSubcategories(updated)
-    await window.electronAPI.saveCategories({ categories, subcategories: updated })
+    await persistCategories(categories, updated, '子分类排序')
   }
 
   const openAppContextMenu = (e: React.MouseEvent, app: AppItem) => {
@@ -964,7 +992,7 @@ function App() {
     const updatedApps = appsRef.current.map(a => a.id === app.id ? { ...a, hidden: true } : a)
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '隐藏')
   }
 
   const handleCardClick = (e: React.MouseEvent, app: AppItem) => {
@@ -1006,7 +1034,7 @@ function App() {
     const updatedApps = appsRef.current.map(a => ids.has(a.id) ? { ...a, categoryId, subcategoryId: null } : a)
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '归类')
     clearAppSelection()
   }
 
@@ -1016,7 +1044,7 @@ function App() {
     const updatedApps = appsRef.current.map(a => ids.has(a.id) ? { ...a, hidden: true } : a)
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '隐藏')
     clearAppSelection()
   }
 
@@ -1029,7 +1057,7 @@ function App() {
     const updatedApps = appsRef.current.filter(a => !ids.has(a.id))
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '批量删除')
     showMaintenanceSummary({
       title: '批量删除完成',
       items: [`已移除 ${ids.size} 个项目。`]
@@ -1279,7 +1307,7 @@ function App() {
       const updatedApps = [...appsRef.current, newApp]
       appsRef.current = updatedApps
       setApps(updatedApps)
-      await window.electronAPI.saveApps({ apps: updatedApps })
+      await persistApps(updatedApps, 'Steam 游戏')
 
       // Extract Steam icon (from local cache or Steam CDN)
       const iconPath = await window.electronAPI.extractSteamIcon(steamMatch.steamUrl)
@@ -1287,7 +1315,7 @@ function App() {
         const withIcon = updatedApps.map(a => a.id === newApp.id ? { ...a, icon: iconPath } : a)
         appsRef.current = withIcon
         setApps(withIcon)
-        await window.electronAPI.saveApps({ apps: withIcon })
+        await persistApps(withIcon, 'Steam 图标')
       }
       return
     }
@@ -1308,7 +1336,7 @@ function App() {
       const updatedApps = [...appsRef.current, ...newApps]
       appsRef.current = updatedApps
       setApps(updatedApps)
-      await window.electronAPI.saveApps({ apps: updatedApps })
+      await persistApps(updatedApps, '导入')
       await extractIconsForApps(newApps)
     }
     showDropResult(result)
@@ -1336,7 +1364,7 @@ function App() {
     if (updated === null) return
     appsRef.current = updated
     setApps(updated)
-    await window.electronAPI.saveApps({ apps: updated })
+    await persistApps(updated, '排序')
   }
 
   /* 每次渲染后把最新的实现放进 ref，供只挂一次的右键拖拽监听取用。
