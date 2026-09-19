@@ -4,7 +4,7 @@ import { getFolderSuggestion, checkSearchEngine } from '../../shared/utils'
 import { hasDisplayableIcon } from './utils/iconUtils'
 import { applyAccentScale, generateAccentScale } from './utils/colorScale'
 import { matchesTerm, getSearchScore, compactSearchText } from './utils/searchScore'
-import { persistApps } from './utils/persist'
+import { persistApps, setPersistNotifier } from './utils/persist'
 
 interface SearchEngineInfo {
   key: string
@@ -112,6 +112,29 @@ function SearchApp() {
   const dataReloadTimerRef = useRef<NodeJS.Timeout | null>(null)
   // 0 表示"尚未测量"，首次 useLayoutEffect 会填入实测值并同步窗口
   const currentHeightRef = useRef(0)
+
+  /* 落盘失败提示：搜索窗口没有 App 层的 ToastStack，这里自带一个极简提示条。
+     持久化模块（utils/persist）的 notifier 是入口级单例——两个 HTML 入口各自有
+     独立的 JS 上下文，互不冲突，所以本窗口挂载时注入自己的实现、卸载时归还。 */
+  const [persistError, setPersistError] = useState<string | null>(null)
+  const persistErrorTimerRef = useRef<number | null>(null)
+  useEffect(() => {
+    setPersistNotifier((message) => {
+      setPersistError(message)
+      if (persistErrorTimerRef.current) window.clearTimeout(persistErrorTimerRef.current)
+      persistErrorTimerRef.current = window.setTimeout(() => {
+        persistErrorTimerRef.current = null
+        setPersistError(null)
+      }, 4000)
+    })
+    return () => {
+      setPersistNotifier(null)
+      if (persistErrorTimerRef.current) {
+        window.clearTimeout(persistErrorTimerRef.current)
+        persistErrorTimerRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     loadData()
@@ -336,9 +359,7 @@ function SearchApp() {
     // 窗口高度由 useLayoutEffect 实测同步
   }, [])
 
-  /* 说明：搜索窗口是独立入口，没有 App 层的轻提示（ToastStack），所以不注入
-     persist 的 notifier——落盘失败这里静默。但统一走 utils/persist 至少保证了
-     「兜住 IPC 异常、不产生未捕获 rejection、返回真实成功与否」。 */
+  /* 落盘走 utils/persist：失败时经本窗口注入的 notifier 弹提示条（见上方 persistError）。 */
   const recordLaunch = async (app: SearchResult) => {
     if (app.id.startsWith('__')) return
     const nextApps = apps.map(item => item.id === app.id
@@ -675,6 +696,18 @@ function SearchApp() {
           <span><kbd>Enter</kbd> 打开</span>
           <span><kbd>Ctrl</kbd> + <kbd>Enter</kbd> 打开所在文件夹</span>
           <span><kbd>Delete</kbd> 隐藏结果</span>
+        </div>
+      )}
+
+      {/* 落盘失败提示。⚠️ 必须 fixed + 条件渲染：本窗口高度由 useLayoutEffect 实测
+          .search-container 后同步给主进程，常驻元素（哪怕隐藏）会改变实测高度。 */}
+      {persistError && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="fixed bottom-4 left-1/2 z-[95] -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900/85 px-4 py-2 text-xs font-medium text-white shadow-xl shadow-slate-900/25"
+        >
+          {persistError}
         </div>
       )}
     </div>
