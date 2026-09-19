@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { AppItem, AutoCategoryRule, Category, Subcategory, Config, UiCommand } from '../../shared/types'
-import type { CorruptBackupInfo, DataHealth, UpdateInstallStatus } from '../../shared/electron'
+import type { CorruptBackupInfo, DataHealth } from '../../shared/electron'
 import { parseSteamUrl, ALL_FILE_EXTS_SET, getFileExtension } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { sortAppsForDisplay as sortAppsForDisplayPure } from './utils/sortApps'
@@ -243,28 +243,6 @@ function App() {
   useEffect(() => {
     setPersistNotifier(showCopyToast)
     return () => setPersistNotifier(null)
-  }, [showCopyToast])
-
-  /* 更新安装日志的打开结果。
-     以前文件不存在时主进程只返回 false，界面表现为「点了没反应」；
-     现在把「没有记录」和「打开失败」区分开，并顺带提示上次更新是否中断。 */
-  const [installStatus, setInstallStatus] = useState<UpdateInstallStatus | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    window.electronAPI.getUpdateInstallStatus()
-      .then((status) => { if (!cancelled) setInstallStatus(status) })
-      .catch(() => { /* 读不到就不提示，不影响其他功能 */ })
-    return () => { cancelled = true }
-  }, [])
-  const handleOpenUpdateLog = useCallback(() => {
-    void window.electronAPI.openUpdateLog()
-      .then((result) => {
-        if (result.ok) return
-        showCopyToast(result.reason === 'not-found'
-          ? '暂无更新安装记录：本次没有走到安装步骤'
-          : '打开更新日志失败')
-      })
-      .catch(() => showCopyToast('打开更新日志失败'))
   }, [showCopyToast])
 
   const [sidebarWidthDraft, setSidebarWidthDraft] = useState<number | null>(null)
@@ -1685,8 +1663,6 @@ function App() {
           onExportDiagnostics={handleExportDiagnostics}
           onOpenDataDirectory={() => window.electronAPI.openDataDirectory()}
           onOpenBackupsDirectory={() => window.electronAPI.openBackupsDirectory()}
-          onOpenUpdateLog={handleOpenUpdateLog}
-          installStatus={installStatus ?? undefined}
           dataHealth={dataHealth ?? undefined}
           onRestoreCorruptBackup={handleRestoreCorruptBackup}
           onOpenCorruptBackupsDirectory={() => window.electronAPI.openCorruptBackupsDirectory()}
@@ -1762,7 +1738,6 @@ function App() {
           error={updateError}
           onConfirm={confirmInstall}
           onDismiss={dismissUpdate}
-          onOpenLog={handleOpenUpdateLog}
         />
       )}
     </div>

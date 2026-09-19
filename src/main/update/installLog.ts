@@ -17,8 +17,7 @@ const LOG_FILE_NAME = 'tidy-desktop-install.log'
 const MAX_LOG_BYTES = 256 * 1024
 const TRIM_TO_BYTES = 64 * 1024
 
-/** 一次安装会话的起点标记，读取上次结果时以此为界 */
-export const SESSION_MARK = 'session start'
+/** 一次安装会话的终点标记：助手进程在安装器退出时写入 */
 export const DONE_MARK = 'installer exited'
 
 export function getInstallLogPath(): string {
@@ -86,58 +85,4 @@ export function installLog(step: string, detail?: unknown): void {
   } catch {
     /* 日志失败不能影响更新流程 */
   }
-}
-
-export function readInstallLog(): string {
-  try {
-    const filePath = getInstallLogPath()
-    if (!fs.existsSync(filePath)) return ''
-    return fs.readFileSync(filePath, 'utf-8')
-  } catch {
-    return ''
-  }
-}
-
-export type InstallLogStatus =
-  | { state: 'none' }
-  | { state: 'completed'; exitCode: number | null }
-  | { state: 'aborted'; reason: string }
-
-/**
- * 判断「最近一次」更新安装的结果。
- *
- * 用途：应用重启后，如果上次安装没走到终点，设置页要能提示用户，
- * 而不是让这次更新悄无声息地消失。
- */
-export function getLastInstallStatus(): InstallLogStatus {
-  const raw = readInstallLog()
-  if (!raw) return { state: 'none' }
-
-  const lines = raw.split('\n').filter(Boolean)
-  let start = -1
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i].includes(SESSION_MARK)) {
-      start = i
-      break
-    }
-  }
-  if (start === -1) return { state: 'none' }
-
-  const session = lines.slice(start)
-  const finishLine = session.find((line) => line.includes(DONE_MARK))
-  if (finishLine) {
-    const match = finishLine.match(/exit code[:=]?\s*(-?\d+)/i)
-    return { state: 'completed', exitCode: match ? Number(match[1]) : null }
-  }
-
-  const failedLine = session.find((line) =>
-    line.includes('installer missing') ||
-    line.includes('spawn failed') ||
-    line.includes('wait timeout')
-  )
-  if (failedLine) {
-    return { state: 'aborted', reason: failedLine.replace(/^\[[^\]]+\]\s*(\[pid \d+\]\s*)?/, '').trim() }
-  }
-
-  return { state: 'aborted', reason: '安装会话已开始但未记录到结果（进程可能被中断）' }
 }

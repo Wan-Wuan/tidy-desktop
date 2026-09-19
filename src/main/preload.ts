@@ -52,9 +52,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openBackupsDirectory: () => ipcRenderer.invoke('open-backups-directory'),
   copyTextToClipboard: (text: string) => ipcRenderer.invoke('copy-text-to-clipboard', text),
   clearIconCache: () => ipcRenderer.invoke('clear-icon-cache'),
-  openUpdateLog: () => ipcRenderer.invoke('open-update-log'),
-  getUpdateInstallStatus: () => ipcRenderer.invoke('get-update-install-status'),
-  resetUpdateInstallLog: () => ipcRenderer.invoke('reset-update-install-log'),
   moveSearchWindowToCursorDisplay: () => ipcRenderer.invoke('move-search-window-to-cursor-display'),
   onBlur: (callback: () => void) => {
     const handler = () => callback()

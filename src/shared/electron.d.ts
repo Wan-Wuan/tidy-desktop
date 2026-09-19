@@ -17,18 +17,6 @@ export interface UpdateProgress {
 }
 
 /** 打开更新安装日志的结果。区分「没有日志」与「打开失败」，界面才能给出有用的提示。 */
-export interface UpdateLogOpenResult {
-  ok: boolean
-  reason?: 'not-found' | 'open-failed'
-  logPath: string
-}
-
-/** 最近一次更新安装的结果，用于应用重启后提示上次更新是否中断 */
-export type UpdateInstallStatus =
-  | { state: 'none' }
-  | { state: 'completed'; exitCode: number | null }
-  | { state: 'aborted'; reason: string }
-
 /** 一份损坏数据的留档（`<原文件>.corrupt-<时间戳>`） */
 export interface CorruptBackupInfo {
   fileName: string
@@ -99,9 +87,6 @@ declare global {
       openBackupsDirectory: () => Promise<boolean>
       copyTextToClipboard: (text: string) => Promise<boolean>
       clearIconCache: () => Promise<{ success: boolean; count: number }>
-      openUpdateLog: () => Promise<UpdateLogOpenResult>
-      getUpdateInstallStatus: () => Promise<UpdateInstallStatus>
-      resetUpdateInstallLog: () => Promise<boolean>
       showSearchWindow: () => Promise<boolean>
       hideSearchWindow: () => Promise<void>
       resizeSearchWindow: (height: number) => Promise<void>

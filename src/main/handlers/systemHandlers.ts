@@ -6,7 +6,6 @@ import { guardNativeDialog } from '../dialogGuard'
 import { APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, CONFIG_DIR, ICONS_DIR, getDefaultConfig, readJsonFile, writeJsonFilesAtomically } from '../config'
 import type { AppsData, CategoriesData, Config, ShortcutImportItem } from '../../shared/types'
 import { sanitizeAppsData, sanitizeCategoriesData, sanitizeConfig } from '../validation'
-import { ensureInstallLogHeader, getInstallLogPath, getLastInstallStatus } from '../update/installLog'
 import { assertPath, assertSender } from '../ipcGuard'
 
 let mainWindowRef: { current: BrowserWindow | null } = { current: null }
@@ -536,30 +535,6 @@ export function registerSystemHandlers() {
       }
     }
     return { success: true, count }
-  })
-
-  ipcMain.handle('open-update-log', async () => {
-    const logPath = getInstallLogPath()
-    if (!fs.existsSync(logPath)) {
-      // 以前这里只返回 false，界面上表现为「点了没反应」。
-      // 现在把原因带回去，让用户知道是「本次更新没走到安装步骤」而不是按钮坏了。
-      return { ok: false, reason: 'not-found', logPath }
-    }
-    const error = await shell.openPath(logPath)
-    return { ok: !error, reason: error ? 'open-failed' : undefined, logPath }
-  })
-
-  ipcMain.handle('get-update-install-status', () => {
-    return getLastInstallStatus()
-  })
-
-  ipcMain.handle('reset-update-install-log', () => {
-    try {
-      ensureInstallLogHeader({ resetAt: new Date().toISOString() })
-      return true
-    } catch {
-      return false
-    }
   })
 
   ipcMain.handle('start-drag-file', async (event, filePath: unknown) => {
