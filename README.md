@@ -126,8 +126,8 @@ ALLOW_UNSIGNED_RELEASE=1 npm run release -- minor
 
 # 3. 推送并创建 GitHub Release
 git push origin master
-git push origin v2.9.0
-gh release create v2.9.0 "release/*2.9.0*" --title "v2.9.0" --notes-file release/notes-v2.9.0.md
+git push origin v2.9.1
+gh release create v2.9.1 "release/*2.9.1*" --title "v2.9.1" --notes-file release/notes-v2.9.1.md
 ```
 
 版本号规则：`patch` 修 bug、`minor` 新功能、`major` 破坏性变更。同步 Gitee 可用 `npm run publish:gitee`。
