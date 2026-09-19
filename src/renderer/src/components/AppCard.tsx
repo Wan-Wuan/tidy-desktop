@@ -43,7 +43,8 @@ export const AppCard = React.memo(function AppCard({
 
   return (
     <div
-      key={app.id}
+      /* 这里不写 key：key 只在其父级的 children 数组里有意义（由 AppGrid 的 map 提供），
+         写在组件自己返回的根元素上会被 React 忽略，属于误导性的无效代码。 */
       data-app-id={app.id}
       data-dragover={isDragOver ? 'true' : undefined}
       data-selected={isSelected ? 'true' : undefined}

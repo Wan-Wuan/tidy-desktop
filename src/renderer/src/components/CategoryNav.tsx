@@ -21,6 +21,8 @@ interface CategoryNavProps {
   getDroppedPathsFromEvent: (dataTransfer: DataTransfer) => string[]
   appsRef: React.MutableRefObject<AppItem[]>
   setApps: (apps: AppItem[]) => void
+  /** 落盘封装：检查 saveApps 的 boolean 返回值，失败时提示（见 App.tsx 的 persistApps） */
+  persistApps: (apps: AppItem[], hint?: string) => Promise<boolean>
   parsePathsToApps: (filePaths: string[], categoryId: string) => Promise<ParsedDrop>
   extractIconsForApps: (apps: AppItem[]) => void | Promise<void>
   showDropResult: (result: ParsedDrop) => void
@@ -50,6 +52,7 @@ export function CategoryNav({
   getDroppedPathsFromEvent,
   appsRef,
   setApps,
+  persistApps,
   parsePathsToApps,
   extractIconsForApps,
   showDropResult,
@@ -122,7 +125,7 @@ export function CategoryNav({
                     const updatedApps = [...appsRef.current, ...newApps]
                     appsRef.current = updatedApps
                     setApps(updatedApps)
-                    await window.electronAPI.saveApps({ apps: updatedApps })
+                    await persistApps(updatedApps, '导入')
                     await extractIconsForApps(newApps)
                   }
                   showDropResult(result)

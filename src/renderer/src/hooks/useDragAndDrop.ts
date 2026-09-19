@@ -78,12 +78,11 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
   const leftDragTargetRef = useRef<string | null>(null)
   /** 拖拽看门狗：mouseup 与 mouseleave 双双丢失时兜底收尾，避免预览贴图永久残留 */
   const dragWatchdogRef = useRef<number | null>(null)
-  /* dragover 每秒触发几十次，若每次都 setState 会让整个网格反复重渲染并卡死。
-     用 ref 记住当前目标，只有真正切换到另一个分组时才更新 state。 */
-  const dragOverGroupRef = useRef<string | null>(null)
-  /* 与 dragOverGroupRef 同样的 ref 守卫，给 dragOverAppId 用：
-     mousemove 高频触发，同一目标卡片内移动不必反复 setState。 */
-  const dragOverAppRef = useRef<string | null>(null)
+  /* 落点判定的"目标 + 左右半边"守卫统一由 leftDragTargetRef 承担（键为
+     `type:id:before|after`），见 applyDropTargetAt。
+     以前这里还各有一个 dragOverGroupRef / dragOverAppRef 做同样的守卫，
+     但统一切到 leftDragTargetRef 后它们就没再被读过——只写不读的 ref 是
+     典型的迁移残骸，留着会让读者以为守卫还分散在三处，故删除。 */
   /* 刚拖拽完置位、下一次卡片 click 消费：左键松手后浏览器**一定**补发 click，
      不拦住的话"拖完排序"就会顺手把应用打开。 */
   const suppressNextCardClickRef = useRef(false)
@@ -108,8 +107,6 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
     }
     removeDragGhost()
     draggedAppIdRef.current = null
-    dragOverGroupRef.current = null
-    dragOverAppRef.current = null
     leftDragTargetRef.current = null
     setIsDragEngaged(false)
     setDraggedAppId(null)
@@ -120,6 +117,17 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
     setDragOverGroupSubId(null)
     setDropInsertAfter(null)
   }, [removeDragGhost])
+
+  /* 抑制紧随本次拖拽补发的那次 click。
+     ⚠️ 必须配一个自愈定时器，不能只置位：左键松手后浏览器**通常**会补发 click，
+     但补发目标是 mousedown / mouseup 的**共同祖先**——只有松手仍落在某张卡片或
+     分类上时，click 才会经过卡片、被 App 层的 handleCardClick 消费。若松手落在
+     网格空白处，click 不经过任何卡片，这个标志就没人消费、会一直悬着，把之后
+     第一次正常点击吃掉（表现为"点了没反应"，须点两次）。 */
+  const suppressNextCardClick = useCallback(() => {
+    suppressNextCardClickRef.current = true
+    window.setTimeout(() => { suppressNextCardClickRef.current = false }, 500)
+  }, [])
 
   /* HTML5 拖拽的全局兜底：指针彻底离开窗口（relatedTarget 为 null）时复位
      外部拖入计数；dragend 兜底防"源节点被移除导致收不到事件、拖拽态卡死"。 */
@@ -164,11 +172,8 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
     const switchToNativeDrag = (filePath: string) => {
       leftDragRef.current = null
       pendingFileDragRef.current = null
-      /* 抑制点击。注意：原生拖拽被系统接管后通常**不会**补发 click，
-         所以这个标志可能没人来消费——留个 500ms 自愈定时器把它清掉，
-         否则它会一直悬着，把之后第一次正常点击吃掉（表现为"点了没反应"）。 */
-      suppressNextCardClickRef.current = true
-      window.setTimeout(() => { suppressNextCardClickRef.current = false }, 500)
+      // 抑制点击（含自愈定时器，理由见 suppressNextCardClick 的说明）
+      suppressNextCardClick()
       document.body.style.cursor = ''
       clearDragState()
       window.electronAPI.startDragFile(filePath)
@@ -228,7 +233,6 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
         setDragOverGroupSubId(null)
       } else if (target.type === 'subcategory-drop') {
         setDragOverGroupSubId(target.id)
-        dragOverGroupRef.current = target.id
         setDragOverAppId(null)
         setDragOverCategory(null)
         setDragOverSubId(null)
@@ -337,8 +341,10 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
       }
       /* 拖拽已经发生，这次按理不会打开应用。
          但左键松手后浏览器仍会补发一次 click，而卡片上挂着 onClick →
-         不拦住的话"拖完排序"就会顺手把应用打开。这里置位，由 handleCardClick 消费。 */
-      suppressNextCardClickRef.current = true
+         不拦住的话"拖完排序"就会顺手把应用打开。这里置位，由 handleCardClick 消费。
+         ⚠️ 松手落在空白处时 click 不经过卡片、没人消费，所以必须走带自愈定时器的版本
+         （之前这里只裸置位，导致"拖到空白处后下一次点击卡片没反应"）。 */
+      suppressNextCardClick()
       const el = document.elementFromPoint(e.clientX, e.clientY)
       const target = findDropTarget(el)
       /* 用**松手位置**现算插到目标前还是后，与拖拽过程中画的指示线同一套判断，
@@ -346,7 +352,7 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
          指针可能又移动了一小段，读旧值就会差一位。 */
       const insertAfter = target?.type === 'app' ? isPastCardMidpoint(el, e.clientX) : false
       // 先收尾再执行移动：下面的操作会 setApps 换分组、移动源卡片 DOM，
-      // 事后再清容易漏（之前就漏了 dragOverAppRef / groupInsertPlanRef）
+      // 事后再清容易漏（历史上就漏过落点守卫与插入意图 ref）
       clearDragState()
       const actionsRef = leftDragActionsRef.current
       if (target && actionsRef) {
@@ -389,10 +395,11 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
       }
       removeDragGhost()
     }
-    /* 这四个都来自 useDragGhost / clearDragState，标识稳定（内部是 useCallback + ref），
-       加进依赖不会让监听反复解绑重绑。监听里需要"最新实现"的部分（重排、归类）
-       统一走 leftDragActionsRef 转发，见上面的说明。 */
-  }, [clearDragState, createDragGhost, moveDragGhost, removeDragGhost])
+    /* 这几个都来自 useDragGhost / clearDragState / suppressNextCardClick，
+       标识稳定（内部是 useCallback + ref），加进依赖不会让监听反复解绑重绑。
+       监听里需要"最新实现"的部分（重排、归类）统一走 leftDragActionsRef 转发，
+       见上面的说明。 */
+  }, [clearDragState, createDragGhost, moveDragGhost, removeDragGhost, suppressNextCardClick])
 
   /* 卡片的 mousedown：登记一次"待拖拽"。
      只有左键参与拖拽；所有卡片类型都进同一套引擎——文件（图片/文档）同样要能

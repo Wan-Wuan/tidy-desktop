@@ -328,8 +328,8 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [showSettings, showAddApp, showEditApp, showSmartOrganize, appContextMenu, categoryContextMenu, categoryEditDialog, categoryDeleteDialog, selectedAppIds, setSelectedAppIds])
 
-  /* dragend 兜底：万一源节点被异常移除，React 的 onDragEnd 就收不到事件，
-     拖拽状态会永久卡住（表现为排序整个失灵）。在 document 上再兜一层。 */
+  /* 分类右键菜单的关闭兜底：点击任意处 / 右键 / Esc / 窗口失焦都关掉。
+     （拖拽的 dragend 兜底已随拖拽引擎迁到 useDragAndDrop，不在这里。） */
   useEffect(() => {
     if (!categoryContextMenu) return
     const closeMenu = () => setCategoryContextMenu(null)
@@ -1546,6 +1546,7 @@ function App() {
         getDroppedPathsFromEvent={getDroppedPathsFromEvent}
         appsRef={appsRef}
         setApps={setApps}
+        persistApps={persistApps}
         parsePathsToApps={parsePathsToApps}
         extractIconsForApps={extractIconsForApps}
         showDropResult={showDropResult}
