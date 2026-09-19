@@ -1,6 +1,8 @@
 node_modules/
 dist/
 release/
+# 备用打包输出目录（绕开 release/ 下被占用的文件时用），不要提交
+release-out*/
 data/
 *.log
 .DS_Store
