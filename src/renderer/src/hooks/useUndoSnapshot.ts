@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import type { AppItem, Category, Subcategory } from '../../../shared/types'
+import { persistApps, persistCategories } from '../utils/persist'
 import type { MaintenanceSummary } from './useMaintenance'
 
 export type UndoSnapshot = {
@@ -71,14 +72,21 @@ export function useUndoSnapshot(options: {
     setCategories(snapshot.categories)
     setSubcategories(snapshot.subcategories)
     setActiveCategory(snapshot.activeCategory)
-    await Promise.all([
-      window.electronAPI.saveApps({ apps: snapshot.apps }),
-      window.electronAPI.saveCategories({ categories: snapshot.categories, subcategories: snapshot.subcategories })
+    /* 检查落盘结果再决定提示文案。
+       以前这里 Promise.all 忽略返回值、无条件弹「已撤销」——一旦写盘失败，
+       界面恢复了、磁盘没有，用户会以为撤销成功，重启后才发现回退，属于
+       误导性反馈（比不提示更糟）。 */
+    const [appsOk, categoriesOk] = await Promise.all([
+      persistApps(snapshot.apps, '撤销'),
+      persistCategories(snapshot.categories, snapshot.subcategories, '撤销')
     ])
+    const persisted = appsOk && categoriesOk
     setUndoSnapshot(null)
     maintenanceApiRef.current?.showMaintenanceSummary?.({
-      title: `已撤销：${snapshot.label}`,
-      items: ['应用、分类和子分类已恢复到操作前状态。']
+      title: persisted ? `已撤销：${snapshot.label}` : `撤销未完全落盘：${snapshot.label}`,
+      items: persisted
+        ? ['应用、分类和子分类已恢复到操作前状态。']
+        : ['界面已恢复，但写入磁盘失败，重启后可能回退。建议确认磁盘状态后重新操作一次。']
     })
     await maintenanceApiRef.current?.handleRunHealthCheck?.()
   }, [

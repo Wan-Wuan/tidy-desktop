@@ -4,6 +4,7 @@ import { getPinyin, getFirstLetter } from '../utils/pinyin'
 import { hasDisplayableIcon, needsIconUpdate } from '../utils/iconUtils'
 import { deduplicateAppsByPath, filterStillEmptyCategories, findEmptyCategories } from '../utils/maintenance'
 import { filterNewShortcutItems } from '../utils/shortcutImport'
+import { persistApps, persistCategories } from '../utils/persist'
 import type { ShortcutImportItem } from '../../../shared/types'
 import type { HealthReport, IconRefreshProgress } from '../components/modals/types'
 
@@ -118,11 +119,11 @@ export function useMaintenance(options: {
       await Promise.all(batch.map(refreshOne))
       appsRef.current = [...refreshed]
       setApps([...refreshed])
-      await window.electronAPI.saveApps({ apps: refreshed })
+      await persistApps(refreshed, '图标刷新')
     }
     appsRef.current = refreshed
     setApps(refreshed)
-    await window.electronAPI.saveApps({ apps: refreshed })
+    await persistApps(refreshed, '图标刷新')
     setIconRefreshProgress(null)
     showMaintenanceSummary({
       title: '图标刷新完成',
@@ -155,7 +156,7 @@ export function useMaintenance(options: {
     if (changedCount > 0) captureUndoSnapshot('自动分类')
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '自动分类')
     showMaintenanceSummary({
       title: '自动分类完成',
       items: [changedCount > 0 ? `${changedCount} 个项目已重新归类。` : '没有项目需要调整分类。']
@@ -180,7 +181,7 @@ export function useMaintenance(options: {
     const updatedApps = appsRef.current.filter(app => !invalidIds.has(app.id))
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '清理失效项')
     showMaintenanceSummary({
       title: '失效项已清理',
       items: [`已移除 ${invalidIds.size} 个失效项目。`]
@@ -193,7 +194,7 @@ export function useMaintenance(options: {
     const updatedApps = appsRef.current.map(app => ({ ...app, hidden: false }))
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '恢复隐藏项')
     showMaintenanceSummary({
       title: '隐藏项已恢复',
       items: [hiddenCount > 0 ? `已恢复 ${hiddenCount} 个隐藏项目。` : '没有需要恢复的隐藏项目。']
@@ -285,7 +286,7 @@ export function useMaintenance(options: {
         categoriesRef.current = updatedCategories
         setCategories(updatedCategories)
         setSubcategories(updatedSubcategories)
-        await window.electronAPI.saveCategories({ categories: updatedCategories, subcategories: updatedSubcategories })
+        await persistCategories(updatedCategories, updatedSubcategories, '删除空分类')
         if (activeCategoryRef.current && emptyIds.has(activeCategoryRef.current)) {
           const nextCategoryId = updatedCategories[0]?.id || null
           activeCategoryRef.current = nextCategoryId
@@ -296,7 +297,7 @@ export function useMaintenance(options: {
     const changed = removedInvalidCount > 0 || removedDuplicateCount > 0 || removedEmptyCategoryCount > 0
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '一键修复')
     setHealthReport(await buildHealthReport())
     showMaintenanceSummary({
       title: changed ? '一键修复完成' : '一键修复已检查',
@@ -372,7 +373,7 @@ export function useMaintenance(options: {
     if (createdCount > 0) {
       setCategories(nextCategories)
       categoriesRef.current = nextCategories
-      await window.electronAPI.saveCategories({ categories: nextCategories, subcategories })
+      await persistCategories(nextCategories, subcategories, '快捷方式自动分类')
     }
 
     const newApps = importableItems.map(item => ({
@@ -391,7 +392,7 @@ export function useMaintenance(options: {
     const updatedApps = [...appsRef.current, ...newApps]
     appsRef.current = updatedApps
     setApps(updatedApps)
-    await window.electronAPI.saveApps({ apps: updatedApps })
+    await persistApps(updatedApps, '导入快捷方式')
     if (!activeCategoryRef.current && nextCategories.length > 0) {
       setActiveCategory(nextCategories[0].id)
       activeCategoryRef.current = nextCategories[0].id

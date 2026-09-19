@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { AppItem } from '../../../shared/types'
 import { needsIconUpdate } from '../utils/iconUtils'
+import { persistApps } from '../utils/persist'
 
 /**
  * 判断某个应用是否需要（重新）抽取图标。
@@ -49,21 +50,26 @@ export function useIconBackfill(options: {
     }
     if (allIcons.length === 0) return
 
-    setApps(prev => {
-      let changed = false
-      const updated = prev.map(app => {
-        if (!appNeedsIconUpdate(app)) return app
-        const found = allIcons.find(result => result.id === app.id)
-        if (!found) return app
-        changed = true
-        return { ...app, icon: found.icon }
-      })
-      if (changed) {
-        window.electronAPI.saveApps({ apps: updated })
-      }
-      return changed ? updated : prev
+    /* ⚠️ 副作用（落盘）必须放在 setState 之外。
+       以前这里是 `setApps(prev => { …; saveApps(…) })`——把 IPC 请求写进了 state updater。
+       updater 按约定必须是纯函数：React 在 StrictMode / 并发渲染下会重复调用它，
+       一次补图标就会发多次 saveApps。而且那样无法 await、也拿不到返回值做失败检测。
+       改成读 appsRef.current（它由 useAppData 的 effect 与各 handler 双写维护，
+       与 updater 里的 prev 语义一致），副作用回到正常控制流。 */
+    const prev = appsRef.current
+    let changed = false
+    const updated = prev.map(app => {
+      if (!appNeedsIconUpdate(app)) return app
+      const found = allIcons.find(result => result.id === app.id)
+      if (!found) return app
+      changed = true
+      return { ...app, icon: found.icon }
     })
-  }, [setApps])
+    if (!changed) return
+    appsRef.current = updated
+    setApps(updated)
+    await persistApps(updated, '图标')
+  }, [appsRef, setApps])
 
   /* 延迟 3.5s 再补图标：载入/拖入后界面先稳定下来，避免几十个图标请求在启动瞬间
      和读取数据、渲染网格抢资源。定时器句柄收进本 hook，卸载时一并清掉。 */
@@ -100,7 +106,7 @@ export function useIconBackfill(options: {
       })
       appsRef.current = updatedApps
       setApps(updatedApps)
-      await window.electronAPI.saveApps({ apps: updatedApps })
+      await persistApps(updatedApps, '图标')
     }
   }, [appsRef, setApps])
 

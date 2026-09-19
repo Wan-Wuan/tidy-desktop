@@ -6,6 +6,7 @@ import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { sortAppsForDisplay as sortAppsForDisplayPure } from './utils/sortApps'
 import { computeReorder } from './utils/reorder'
 import { isDocFile } from './utils/fileKind'
+import { persistApps, persistCategories, setPersistNotifier } from './utils/persist'
 import { buildShortcutTargetMap, getDroppedPathIdentities, getDroppedPaths, normalizeDroppedPath } from './utils/dropPaths'
 import {
   removeCategoryFromApps,
@@ -233,32 +234,12 @@ function App() {
   }, [])
   const [activeSubcategoryId, setActiveSubcategoryId] = useState<string | null>(null)
 
-  /* 应用/分类数据的持久化封装：saveApps / saveCategories 返回 boolean 成功标志，
-     而它们**可能返回 false 而不是抛异常**（主进程里数据文件损坏时会直接 return false，
-     见 fileHandlers.ts 的 isDataFileCorrupted 守卫）。原来的调用点全部忽略返回值，
-     于是「UI 已乐观更新、数据却悄悄没落盘」没有任何提示，用户下次启动才惊觉丢失。
-     这里统一检查返回值，失败时弹轻提示；同时把异常（IPC 通道故障等）也兜住，
-     避免未捕获的 Promise rejection。 */
-  const persistApps = useCallback(async (apps: AppItem[], hint = '应用数据') => {
-    try {
-      const ok = await window.electronAPI.saveApps({ apps })
-      if (!ok) showCopyToast(`保存${hint}失败，本次改动可能未持久化`)
-      return ok
-    } catch {
-      showCopyToast(`保存${hint}失败，本次改动可能未持久化`)
-      return false
-    }
-  }, [showCopyToast])
-
-  const persistCategories = useCallback(async (categories: Category[], subcategories: Subcategory[], hint = '分类') => {
-    try {
-      const ok = await window.electronAPI.saveCategories({ categories, subcategories })
-      if (!ok) showCopyToast(`保存${hint}失败，本次改动可能未持久化`)
-      return ok
-    } catch {
-      showCopyToast(`保存${hint}失败，本次改动可能未持久化`)
-      return false
-    }
+  /* 把界面上的轻提示注入持久化模块，让 useIconBackfill / useMaintenance /
+     useUndoSnapshot 那些 hook 落盘失败时也能告知用户（细节见 utils/persist.ts）。
+     卸载时归还，避免 notifier 指向已卸载的组件。 */
+  useEffect(() => {
+    setPersistNotifier(showCopyToast)
+    return () => setPersistNotifier(null)
   }, [showCopyToast])
 
   /* 更新安装日志的打开结果。
