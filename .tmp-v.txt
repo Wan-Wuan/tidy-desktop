@@ -1,0 +1,51 @@
+﻿
+[1m[46m RUN [49m[22m [36mv4.1.0 [39m[90mD:/2401348017wwa/Code/tidy_desktop[39m
+
+node.exe : [90mstderr[2m | src/main/jsonTransaction.recovery.test.ts[2m > [
+22m[2mrecoverInterruptedWrites[2m > [22m[2m涓绘枃浠剁己澶辨椂鐢?.bak 杩樺師锛堟渶鍏稿瀷鐨勫穿婧冪偣锛
+氬崱鍦ㄤ袱娆?rename 涔嬮棿锛?[22m[39m[recovery] 宸叉仮澶?1 涓枃浠讹紝娓呯悊 1 涓畫鐣?[ [32m'apps.js
+on'[39m ]
+所在位置 行:454 字符: 1
++ & "C:\Users\Wan-wuan\.workbuddy\binaries\node\versions\22.22.2-3\node ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([90mstderr[2m...ps.json'[39m ] 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+[90mstderr[2m | src/main/jsonTransaction.recovery.test.ts[2m > [22m[2mreco
+verInterruptedWrites[2m > [22m[2m涓绘枃浠舵甯告椂鍙竻鐞嗘畫鐣欙紝涓嶈鐩栧畠
+[22m[39m[recovery] 宸叉仮澶?0 涓枃浠讹紝娓呯悊 2 涓畫鐣?[]
+
+ [32m鉁?[39m src/main/validation.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m鉁?[39m src/renderer/src/utils/dropPaths.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m鉁?[39m src/renderer/src/utils/colorScale.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m鉁?[39m src/renderer/src/utils/sortApps.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m鉁?[39m src/renderer/src/utils/reorder.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m鉁?[39m src/renderer/src/utils/shortcutImport.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m鉁?[39m src/renderer/src/utils/searchScore.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+[90mstderr[2m | src/main/jsonTransaction.recovery.test.ts[2m > [22m[2mreco
+verInterruptedWrites[2m > [22m[2m鍘熸湰涓嶅瓨鍦ㄤ富鏂囦欢鏃剁敤 .tmp 杩樺師锛堟柊寤烘枃浠剁殑鍦烘櫙锛?[22m
+[39m[recovery] 宸叉仮澶?1 涓枃浠讹紝娓呯悊 0 涓畫鐣?[ [32m'categories.json'[39m ]
+
+ [32m鉁?[39m src/renderer/src/utils/maintenance.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m鉁?[39m src/main/update/integrity.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 59[2mms[22m[39m
+[90mstderr[2m | src/main/jsonTransaction.recovery.test.ts[2m > [22m[2mreco
+verInterruptedWrites[2m > [22m[2m鍏煎 config.ts 閲屼笉甯︿簨鍔?ID 鐨?.tmp 鍛藉悕
+[22m[39m[recovery] 宸叉仮澶?1 涓枃浠讹紝娓呯悊 0 涓畫鐣?[ [32m'config.json'[39m ]
+
+ [32m鉁?[39m src/renderer/src/utils/categoryDeletion.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m鉁?[39m src/main/update/compareVersions.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m鉁?[39m src/main/jsonTransaction.recovery.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 115[2mms[22m[39m
+ [32m鉁?[39m src/main/update/assistant.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m鉁?[39m src/main/jsonTransaction.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 143[2mms[22m[39m
+ [32m鉁?[39m src/main/backup.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 137[2mms[22m[39m
+ [32m鉁?[39m src/renderer/src/utils/menuA11y.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [32m鉁?[39m src/renderer/src/components/AppCard.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 79[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m17 passed[39m[22m[90m (17)[39m
+[2m      Tests [22m [1m[32m91 passed[39m[22m[90m (91)[39m
+[2m   Start at [22m 09:57:19
+[2m   Duration [22m 9.18s[2m (transform 1.83s, setup 0ms, import 13.46s, tests 675ms, environment 1.90s)[22m
+
+VITEST_EXIT=0

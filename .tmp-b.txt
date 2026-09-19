@@ -1,0 +1,32 @@
+﻿[36mvite v8.1.4 [32mbuilding client environment for production...[36m[39m
+[2K
+node.exe : [33m[vite:css][postcss] @import must precede all other statements (
+besides @charset or empty @layer)
+所在位置 行:448 字符: 1
++ & "C:\Users\Wan-wuan\.workbuddy\binaries\node\versions\22.22.2-3\node ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([33m[vite:css]...r empty @layer) 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+16 |  }
+17 |  
+18 |  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:w
+ght@500;600;700;800&family=Inter:wght@300;40...
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+19 |  
+20 |  @tailwind base;[39m
+transforming...鉁?4605 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/renderer/index.html                        1.09 kB 鈹?gzip:   0.57 kB
+dist/renderer/search.html                       1.37 kB 鈹?gzip:   0.72 kB
+dist/renderer/assets/search-BRtYEDVH.css       42.04 kB 鈹?gzip:   8.16 kB
+dist/renderer/assets/main-BiRhTdpO.css         72.29 kB 鈹?gzip:  13.71 kB
+dist/renderer/assets/search-Bi7OIbmR.js        12.67 kB 鈹?gzip:   4.57 kB
+dist/renderer/assets/jsx-runtime-DECxjGVb.js  145.11 kB 鈹?gzip:  47.94 kB
+dist/renderer/assets/main-BSezwbPD.js         483.47 kB 鈹?gzip: 195.22 kB
+
+[32m鉁?built in 2.99s[39m
+VITE_EXIT=0

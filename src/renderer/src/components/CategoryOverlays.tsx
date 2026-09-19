@@ -1,5 +1,6 @@
 import React from 'react'
 import type { Category, Subcategory } from '../../../shared/types'
+import { handleMenuArrowNav } from '../utils/menuA11y'
 
 export type CategoryContextMenuTarget =
   | { type: 'all' }
@@ -70,38 +71,46 @@ export function CategoryContextMenuOverlay({
   onRenameSubcategory: (subcategory: Subcategory) => void
   onDeleteSubcategory: (subcategory: Subcategory) => void
 }) {
-  const itemClass = 'w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-brand-600 hover:text-white'
-  const dangerClass = 'w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-500 hover:text-white'
+  // focus-ring 是补上的：这个菜单以前没有它，键盘 Tab 过来完全看不出焦点在哪
+  const itemClass = 'focus-ring w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-brand-600 hover:text-white'
+  const dangerClass = 'focus-ring w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-500 hover:text-white'
   const category = menu.type === 'category' ? categories.find(item => item.id === menu.id) : null
   const subcategory = menu.type === 'subcategory' ? subcategories.find(item => item.id === menu.id) : null
   if ((menu.type === 'category' && !category) || (menu.type === 'subcategory' && !subcategory)) return null
 
   return (
     <div
+      role="menu"
+      aria-label={
+        category ? `分类操作：${category.name}`
+          : subcategory ? `子分类操作：${subcategory.name}`
+            : '分类导航操作'
+      }
       className="fixed z-[70] w-44 rounded-xl border border-slate-200/80 bg-white/95 p-1.5 shadow-xl shadow-slate-900/15 backdrop-blur-md"
       style={{ left: menu.x, top: menu.y }}
+      onKeyDown={handleMenuArrowNav}
       onClick={event => event.stopPropagation()}
       onContextMenu={event => {
         event.preventDefault()
         event.stopPropagation()
       }}
     >
-      {menu.type === 'all' && <button onClick={onCreateCategory} className={itemClass}>新建分类</button>}
+      {menu.type === 'all' && <button onClick={onCreateCategory} role="menuitem" className={itemClass}>新建分类</button>}
       {category && (
         <>
-          <button onClick={() => onSelectCategory(category)} className={itemClass}>切换到此分类</button>
-          <button onClick={() => onRenameCategory(category)} className={itemClass}>重命名分类</button>
-          <button onClick={() => onAddSubcategory(category)} className={itemClass}>添加子分类</button>
+          <button onClick={() => onSelectCategory(category)} role="menuitem" className={itemClass}>切换到此分类</button>
+          <button onClick={() => onRenameCategory(category)} role="menuitem" className={itemClass}>重命名分类</button>
+          <button onClick={() => onAddSubcategory(category)} role="menuitem" className={itemClass}>添加子分类</button>
           <div className="my-1 h-px bg-slate-100" />
-          <button onClick={() => onDeleteCategory(category)} className={dangerClass}>删除分类</button>
+          <button onClick={() => onDeleteCategory(category)} role="menuitem" className={dangerClass}>删除分类</button>
         </>
       )}
       {subcategory && (
         <>
-          <button onClick={() => onLocateSubcategory(subcategory)} className={itemClass}>定位子分类</button>
-          <button onClick={() => onRenameSubcategory(subcategory)} className={itemClass}>重命名子分类</button>
+          <button onClick={() => onLocateSubcategory(subcategory)} role="menuitem" className={itemClass}>定位子分类</button>
+          <button onClick={() => onRenameSubcategory(subcategory)} role="menuitem" className={itemClass}>重命名子分类</button>
           <div className="my-1 h-px bg-slate-100" />
-          <button onClick={() => onDeleteSubcategory(subcategory)} className={dangerClass}>删除子分类</button>
+          <button onClick={() => onDeleteSubcategory(subcategory)} role="menuitem" className={dangerClass}>删除子分类</button>
         </>
       )}
     </div>
