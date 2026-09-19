@@ -4,7 +4,8 @@ import type { CorruptBackupInfo, DataHealth, UpdateInstallStatus } from '../../s
 import { parseSteamUrl, ALL_FILE_EXTS_SET, getFileExtension } from '../../shared/utils'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { sortAppsForDisplay as sortAppsForDisplayPure } from './utils/sortApps'
-import { computeReorder, isPointerPastMidpoint } from './utils/reorder'
+import { computeReorder } from './utils/reorder'
+import { findDropTarget, isPastCardMidpoint, isPointerOutsideWindow } from './utils/dropTarget'
 import { buildShortcutTargetMap, getDroppedPathIdentities, getDroppedPaths, normalizeDroppedPath } from './utils/dropPaths'
 import {
   removeCategoryFromApps,
@@ -379,28 +380,10 @@ function App() {
     /* 左键自定义拖拽：普通应用拖到应用/分类/子分类上完成排序或归类。
        图片/文档的拖拽走系统原生拖拽（见下面那个 effect），不经过这里。
 
-       为什么不用 HTML5 draggable：它的 dragover 受浏览器节流，幽灵卡片跟手度明显
+       为什么不用 HTML5 draggable：它的         dragover 受浏览器节流，幽灵卡片跟手度明显
        不如这里用 elementFromPoint 每帧定位。所以内部拖拽统一走这一套，draggable 已移除。 */
-    const findDropTarget = (el: Element | null): { type: 'app' | 'category' | 'subcategory' | 'subcategory-drop'; id: string } | null => {
-      if (!el) return null
-      let node: Element | null = el
-      for (let i = 0; i < 5 && node; i++) {
-        if (node.hasAttribute?.('data-app-id')) return { type: 'app', id: node.getAttribute('data-app-id')! }
-        if (node.hasAttribute?.('data-category-id')) return { type: 'category', id: node.getAttribute('data-category-id')! }
-        if (node.hasAttribute?.('data-subcategory-id')) return { type: 'subcategory', id: node.getAttribute('data-subcategory-id')! }
-        // 网格里的子分类分组区（拖拽也能往里归类）
-        if (node.hasAttribute?.('data-subcategory-drop')) return { type: 'subcategory-drop', id: node.getAttribute('data-subcategory-drop')! }
-        node = node.parentElement
-      }
-      return null
-    }
 
-    /** 指针是否已经离开窗口可视区域（clientX/Y 越界即视为离开） */
-    const isPointerOutsideWindow = (e: MouseEvent) =>
-      e.clientX <= 0 || e.clientY <= 0 ||
-      e.clientX >= window.innerWidth || e.clientY >= window.innerHeight
-
-    /* 把当前的文件拖拽切换成系统原生拖拽，用于「拖出窗口」时发送/上传到微信、浏览器等外部应用。
+    /* switchToNativeDrag 用于「拖出窗口」时发送/上传到微信、浏览器等外部应用。
        ⚠️ 顺序不能变：必须先把内部拖拽状态收干净再启动原生拖拽。
        原生拖拽会接管鼠标，之后我们的 mouseup 收不到，残留的幽灵贴图和落点高亮就再也清不掉了。 */
     const switchToNativeDrag = (filePath: string) => {
@@ -423,14 +406,6 @@ function App() {
     let dropTargetRaf = 0
     let dropTargetX = 0
     let dropTargetY = 0
-
-    /** 落点是否在这张应用卡片（data-app-id）的右半边 */
-    const isPastCardMidpoint = (el: Element | null, x: number) => {
-      const card = el?.closest('[data-app-id]')
-      if (!card) return false
-      const rect = card.getBoundingClientRect()
-      return isPointerPastMidpoint(rect.left, rect.width, x)
-    }
 
     const applyDropTargetAt = (x: number, y: number) => {
       const el = document.elementFromPoint(x, y)
