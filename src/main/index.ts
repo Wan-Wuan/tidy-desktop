@@ -10,7 +10,8 @@ import { registerIconHandlers } from './handlers/iconHandlers'
 import { registerSystemHandlers, setWindowRefs } from './handlers/systemHandlers'
 import { cleanupInstalledUpdateCache, registerUpdateHandlers } from './update'
 import { parseUpdateAssistantArgs, runUpdateAssistant } from './update/assistant'
-import { isNativeDialogOpen, guardNativeDialog } from './dialogGuard'
+import { guardNativeDialog } from './dialogGuard'
+import { attachBlurAutoHide } from './blurAutoHide'
 import { isAllowedInternalUrl, isSafeExternalUrl } from './urlPolicy'
 
 const isDev = !app.isPackaged
@@ -261,24 +262,13 @@ function createWindow() {
     notifyTrayOnce()
   })
 
-  win.on('blur', () => {
-    const blurredWin = win
-    let cancelled = false
-    const cancelHandler = () => { cancelled = true }
-    blurredWin.once('focus', cancelHandler)
-    setTimeout(() => {
-      // 防止窗口在延时期间被销毁
-      if (blurredWin.isDestroyed()) return
-      blurredWin.removeListener('focus', cancelHandler)
-      if (cancelled || blurredWin.isFocused()) return
-      const latestConfig = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
-      if (latestConfig.mainAutoHideOnBlur !== true) return
-      // 原生对话框（打开/保存文件等）会夺走焦点，此时不能隐藏主窗口
-      if (isNativeDialogOpen()) return
-      // 本应用其它窗口（如快速搜索框）仍处于焦点时不隐藏
-      if (BrowserWindow.getFocusedWindow() !== null) return
-      blurredWin.hide()
-    }, 200)
+  /* 失焦自动隐藏：判定顺序与「原生对话框在场就不隐藏」的规则见 blurAutoHide.ts。
+     应用自己的界面（设置等模态框、提示框、toast）不拦——藏起来就一起藏，重开时状态还在。
+     配置在这里现读——设置面板改完立刻生效，不需要重启或额外同步。 */
+  attachBlurAutoHide(win, {
+    isEnabled: () => readJsonFile<Config>(CONFIG_FILE, getDefaultConfig()).mainAutoHideOnBlur === true,
+    // 本应用其它窗口（如快速搜索框）仍处于焦点时不隐藏
+    shouldKeepVisible: () => BrowserWindow.getFocusedWindow() !== null
   })
 
   win.on('closed', () => {
@@ -413,25 +403,11 @@ function createSearchWindow(showOnReady = true) {
     searchWindowShouldShow = false
   })
 
-  win.on('blur', () => {
-    const blurredWin = win
-    let cancelled = false
-    const cancelHandler = () => { cancelled = true }
-    blurredWin.once('focus', cancelHandler)
-    setTimeout(() => {
-      // Guard against the window being destroyed during the timeout
-      if (blurredWin.isDestroyed()) return
-      blurredWin.removeListener('focus', cancelHandler)
-      if (!cancelled && !blurredWin.isFocused()) {
-        // 失焦自动隐藏：在主进程读取配置并直接隐藏，避免渲染层时序问题
-        const latestConfig = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
-        if (latestConfig.searchAutoHideOnBlur === true) {
-          blurredWin.hide()
-          return
-        }
-        blurredWin.webContents.send('blur-event')
-      }
-    }, 200)
+  /* 快速搜索窗口的失焦隐藏：语义与主窗口略有不同——
+     没开自动隐藏时不是「什么都不做」，而是把失焦事件转给渲染层（它自己决定要不要收起）。 */
+  attachBlurAutoHide(win, {
+    isEnabled: () => readJsonFile<Config>(CONFIG_FILE, getDefaultConfig()).searchAutoHideOnBlur === true,
+    onAutoHideDisabled: (target) => target.webContents.send('blur-event')
   })
 
   win.on('closed', () => {
