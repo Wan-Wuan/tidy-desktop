@@ -10,6 +10,20 @@ import type { HealthReport, IconRefreshProgress } from '../components/modals/typ
 
 export type MaintenanceSummary = { title: string; items: string[] }
 
+/** 提示卡自动关闭时长。倒计时条的动画时长在 ToastStack 里内联取同一个值，避免两处走偏。 */
+export const MAINTENANCE_SUMMARY_DURATION_MS = 5000
+
+/**
+ * 正在展示的提示卡：内容之外带上两个展示态字段。
+ *   · autoDismiss —— 只有会自动关闭的卡片才画倒计时条（「正在扫描快捷方式」是不自动关的）
+ *   · token —— 倒计时条是 CSS 动画，同一个 DOM 节点上重跑不会重置；
+ *              新卡片用新 key 强制重挂载，条才会从头开始走
+ */
+export type ActiveMaintenanceSummary = MaintenanceSummary & {
+  autoDismiss: boolean
+  token: number
+}
+
 function appNeedsIconUpdate(app: AppItem): boolean {
   return app.type !== 'folder' && needsIconUpdate(app.icon)
 }
@@ -39,10 +53,11 @@ export function useMaintenance(options: {
     captureUndoSnapshot, loadData, scheduleIconBackfill
   } = options
 
-  const [maintenanceSummary, setMaintenanceSummary] = useState<MaintenanceSummary | null>(null)
+  const [maintenanceSummary, setMaintenanceSummary] = useState<ActiveMaintenanceSummary | null>(null)
   const [iconRefreshProgress, setIconRefreshProgress] = useState<IconRefreshProgress | null>(null)
   const [healthReport, setHealthReport] = useState<HealthReport | null>(null)
   const maintenanceSummaryTimerRef = useRef<number | null>(null)
+  const maintenanceSummaryTokenRef = useRef(0)
   const shortcutImportInFlightRef = useRef(false)
 
   const showMaintenanceSummary = useCallback((summary: MaintenanceSummary, autoDismiss = true) => {
@@ -50,12 +65,13 @@ export function useMaintenance(options: {
       window.clearTimeout(maintenanceSummaryTimerRef.current)
       maintenanceSummaryTimerRef.current = null
     }
-    setMaintenanceSummary(summary)
+    maintenanceSummaryTokenRef.current += 1
+    setMaintenanceSummary({ ...summary, autoDismiss, token: maintenanceSummaryTokenRef.current })
     if (autoDismiss) {
       maintenanceSummaryTimerRef.current = window.setTimeout(() => {
         maintenanceSummaryTimerRef.current = null
         setMaintenanceSummary(null)
-      }, 10_000)
+      }, MAINTENANCE_SUMMARY_DURATION_MS)
     }
   }, [])
 

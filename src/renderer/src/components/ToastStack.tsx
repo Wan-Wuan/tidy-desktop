@@ -1,14 +1,15 @@
 import React from 'react'
 import { UndoToast } from './CategoryOverlays'
 import type { UndoSnapshot } from '../hooks/useUndoSnapshot'
-import type { MaintenanceSummary } from '../hooks/useMaintenance'
+import type { ActiveMaintenanceSummary } from '../hooks/useMaintenance'
+import { MAINTENANCE_SUMMARY_DURATION_MS } from '../hooks/useMaintenance'
 
 interface ToastStackProps {
   undoSnapshot: UndoSnapshot | null
   restoreUndoSnapshot: () => void | Promise<void>
   setUndoSnapshot: (snapshot: UndoSnapshot | null) => void
   copyToast: string | null
-  maintenanceSummary: MaintenanceSummary | null
+  maintenanceSummary: ActiveMaintenanceSummary | null
   showSmartOrganize: boolean
   clearMaintenanceSummary: () => void
 }
@@ -45,10 +46,13 @@ export function ToastStack({
       )}
 
       {maintenanceSummary && !showSmartOrganize && (
+        /* key 用 token：新提示替换旧提示时强制重挂载，倒计时条才会从头开始走
+           （同一个 DOM 节点上重跑 CSS 动画不会重置） */
         <div
+          key={maintenanceSummary.token}
           role="status"
           aria-live="polite"
-          className="glass fixed right-5 top-24 z-[90] w-[min(360px,calc(100vw-40px))] rounded-xl border border-brand-200/70 px-4 py-3 shadow-xl shadow-slate-900/10"
+          className="glass fixed right-5 top-24 z-[90] w-[min(360px,calc(100vw-40px))] overflow-hidden rounded-xl border border-brand-200/70 px-4 py-3 shadow-xl shadow-slate-900/10"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -69,6 +73,17 @@ export function ToastStack({
               ×
             </button>
           </div>
+
+          {/* 倒计时条：只表示「还有多久自动关闭」，不参与交互。
+              ⚠️ 它靠 .glass > .absolute（index.css）才拿到 absolute —— .glass > * 会把
+              直接子元素的 position 钉成 relative，光写 Tailwind 的 absolute 会被盖掉。 */}
+          {maintenanceSummary.autoDismiss && (
+            <div
+              aria-hidden="true"
+              className="toast-countdown absolute inset-x-0 bottom-0 h-0.5 origin-left bg-brand-500/70"
+              style={{ animationDuration: `${MAINTENANCE_SUMMARY_DURATION_MS}ms` }}
+            />
+          )}
         </div>
       )}
     </>

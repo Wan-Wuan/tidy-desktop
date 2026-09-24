@@ -704,6 +704,24 @@ body {
   z-index: 2;
 }
 
+/* ⚠️ 显式定位必须能盖过 .glass 的默认定位。
+   上面两条都把 position 钉成 relative：`.glass` 是给 ::before 渐变描边做包含块，
+   `.glass > *` 是把内容抬到描边之上。而它们与 Tailwind 的 .fixed / .absolute
+   同为 0,1,0，utilities 又注入在文件最前面（第 5 行）——靠后的自定义规则每次都赢，
+   于是**带 glass 的浮层会整条退回文档流**，变成 .app-shell 网格里的普通子项：
+   撤销条、多选条挤到网格左下角并被压窄，复制提示直接被 .app-shell 的
+   overflow:hidden 裁到窗口外。下面两条用 0,2,0 把「显式声明了定位」的两种情况还回去。
+   新增带 glass 的浮层时，记得不要只依赖 .fixed / .absolute 本身。 */
+.glass.fixed,
+.glass > .fixed {
+  position: fixed;
+}
+
+.glass.absolute,
+.glass > .absolute {
+  position: absolute;
+}
+
 /* Glass card — transparent to show container blur */
 /* 基础玻璃滤镜抽成变量：拖拽期间要把 hover 的滤镜变化钉回这个基准值，
    避免两处硬编码不同步 */
@@ -1017,6 +1035,24 @@ body {
 @keyframes modal-in {
   from { opacity: 0; transform: scale(0.92) translateY(8px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* 右上角维护提示的倒计时条：满格 → 收空，表示「还有多久自动关闭」。
+   时长由 ToastStack 内联的 animation-duration 提供（取自 useMaintenance 的
+   MAINTENANCE_SUMMARY_DURATION_MS），保证条走完和卡片消失是同一时刻。
+   这里刻意不用 animation 简写：简写会把 animation-duration 重置成 0s，
+   虽然内联样式最终仍会赢，但读起来容易误判，分开写更清楚。
+   ⚠️ 收空态写在 to、默认态（scaleX(1)）写在 from 之外——万一动画被禁用，
+   元素停在满格而不是隐形。这条也刻意没进下面的 reduced-motion 禁用清单：
+   它传达的是「还剩多久」的信息，静止的满格条会误导。 */
+.toast-countdown {
+  animation-name: toast-countdown;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes toast-countdown {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
 }
 
 /* Reduced motion */
