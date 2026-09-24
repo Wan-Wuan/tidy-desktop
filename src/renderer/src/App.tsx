@@ -22,6 +22,7 @@ import { useIconBackfill, appNeedsIconUpdate } from './hooks/useIconBackfill'
 import { useUndoSnapshot, type MaintenanceApi } from './hooks/useUndoSnapshot'
 import { useAppSelection } from './hooks/useAppSelection'
 import { useCategoryDialogs, type CategoryCrudApi } from './hooks/useCategoryDialogs'
+import { AppNoticeDialog } from './components/AppNoticeDialog'
 import { UpdateDialog } from './components/UpdateButton'
 import { SidebarResizeHandle } from './components/SidebarResizeHandle'
 import { WindowResizeHandles } from './components/WindowResizeHandles'
@@ -1740,6 +1741,9 @@ function App() {
           onDismiss={dismissUpdate}
         />
       )}
+
+      {/* 应用内提示框：接管了 window.alert，放在最后渲染以保证压在所有浮层之上 */}
+      <AppNoticeDialog />
     </div>
   )
 }
