@@ -75,9 +75,11 @@
 
 ### 下载安装
 
-从 [GitHub Releases](https://github.com/Wan-Wuan/tidy-desktop/releases) 下载最新版本：
+从 **[Gitee Releases](https://gitee.com/wanwuan/tidy_desktop/releases)**（国内推荐，也是应用内更新检测的主源）
+或 [GitHub Releases](https://github.com/Wan-Wuan/tidy-desktop/releases) 下载最新版本：
+
 - `tidy-desktop-Setup-x.x.x.exe`：NSIS 安装包，支持自定义安装目录
-- `tidy-desktop-v.x.x.x-win-x64.zip`：便携版，解压即用
+- `tidy-desktop-Setup-x.x.x.exe.sha256`：安装包 SHA256 校验文件，应用内更新会用它校验下载完整性
 
 ### 开发环境
 
@@ -130,7 +132,12 @@ git push origin v2.9.2
 gh release create v2.9.2 "release/*2.9.2*" --title "v2.9.2" --notes-file release/notes-v2.9.2.md
 ```
 
-版本号规则：`patch` 修 bug、`minor` 新功能、`major` 破坏性变更。同步 Gitee 可用 `npm run publish:gitee`。
+版本号规则：`patch` 修 bug、`minor` 新功能、`major` 破坏性变更。
+
+**Gitee 镜像**：安装包用 `npm run publish:gitee` 上传（需 `GITEE_TOKEN`，勾 `projects` 权限）；
+Release 说明与仓库描述用 `GITEE_TOKEN=<令牌> node scripts/sync-gitee-metadata.mjs` 从 GitHub 同步。
+顺序上要先推代码与 tag，再发 Release —— `publish:gitee` 用 `master` 作 `target_commitish`，
+master 落后时自动创建的 tag 会指向错误的提交。
 
 ## 项目结构
 
