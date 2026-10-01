@@ -509,7 +509,7 @@ typecheck、测试、打包、生成 SHA256 校验文件、提交 `release: vX.Y
 - 上传 GitHub Release 需要 `GITHUB_TOKEN`（或 `GH_TOKEN`），权限勾 **Contents: write**；
 - 上传 Gitee 镜像需要 `GITEE_TOKEN`，权限勾 **projects**。
 
-**完整步骤**（以本次 v3.0.0 为例，master 分支）：
+**完整步骤**（以 `v3.0.0` 为例，master 分支）：
 
 ```bash
 # 1. 提交本次改动
@@ -518,7 +518,7 @@ git commit -m "Feat: ..."
 git push origin master
 
 # 2. 升版本 + 验证 + 打包
-#    v3.0.0 是大版本，package.json 当前为 2.9.2，走 major
+#    v3.0.0 是大版本（上一个 tag 是 v2.9.2），走 major
 ALLOW_UNSIGNED_RELEASE=1 npm run release -- major
 #    有签名证书时：CSC_LINK=<证书路径或URL> npm run release -- major
 
@@ -531,8 +531,14 @@ GITHUB_TOKEN=<令牌> npm run publish:github
 # 4. 同步到 Gitee 镜像
 GITEE_TOKEN=<令牌> npm run publish:gitee
 GITEE_TOKEN=<令牌> node scripts/sync-gitee-metadata.mjs
+
+# 5. 手动补传便携版（两个发布脚本都不传它，见下表）
+gh release upload v3.0.0 release/tidy-desktop-Portable-3.0.0.exe
 ```
 
+> `sync-gitee-metadata.mjs` 会用 `gh` 读取 GitHub 侧的 Release 说明与仓库描述，
+> 所以需要 `gh` 已安装并登录（或已设置 `GH_TOKEN`）。它只同步文字，不动安装包。
+>
 > 版本号由发布脚本自动 bump，**不要手工改 `package.json` 的 `version`**——
 > 手改之后 `npm run release -- major` 会再往上跳一档。
 
@@ -543,10 +549,16 @@ GITEE_TOKEN=<令牌> node scripts/sync-gitee-metadata.mjs
 | 产物 | 由谁生成 | 由谁上传 |
 | --- | --- | --- |
 | `tidy-desktop-Setup-<ver>.exe` + `.sha256` | `npm run release -- <bump>`（electron-builder） | `publish:github` / `publish:gitee` |
-| `tidy-desktop-Portable-<ver>.exe` | 同上（`electron-builder.yml` 的 `portable` target） | ⚠️ **两个发布脚本目前都不上传**，需手动附到 Release |
+| `tidy-desktop-Portable-<ver>.exe` | 同上（`electron-builder.yml` 的 `portable` target） | ⚠️ **两个发布脚本目前都不上传**，需手动补传（见上面第 5 步） |
 
 两个发布脚本刻意只传「安装包 + 校验文件」——更新器只认这两个文件，不读 `latest.yml`、
 也不用 blockmap 增量包。Gitee 侧对超过 100MB 的附件会跳过并给出警告。
+
+> 补传便携版：GitHub 侧用 `gh release upload <tag> <文件>`；Gitee 侧调
+> `POST /repos/{owner}/{repo}/releases/{id}/attach_files`（`publish-gitee-release.mjs`
+> 里的上传逻辑可以直接复用）。Gitee 单附件上限 100MB，便携版 95MB 左右，贴边但能过。
+> 更新器挑选安装包时**优先认名字里的 `-Setup-`**（`src/main/update/assets.ts`），
+> 所以多挂一个便携版不会把更新链路带偏。
 
 **Gitee 镜像**：顺序上要先推代码与 tag，再发 Release —— `publish:gitee` 用 `master`
 作 `target_commitish`，master 落后时自动创建的 tag 会指向错误的提交。
