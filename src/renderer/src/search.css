@@ -13,9 +13,14 @@
   --brand-800: 55 48 163;
   --brand-900: 49 46 129;
   --white: 255 255 255;
+  /* 字体族由渲染层按用户配置写在 documentElement 上（搜索窗是独立文档，需自己应用一次） */
+  --ui-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
 }
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+/* 远程字体（Google Fonts）不在这里 @import。原先这行写在 `:root{}` 之后，
+   而 `@import` 必须位于样式表最前面，所以浏览器直接把它丢弃了——搜索窗实际一直在用
+   系统字体，与主窗不一致。现改由 utils/remoteFonts.ts 在首帧之后动态注入 <link>，
+   两个窗口走同一条路径。 */
 
 @tailwind base;
 @tailwind components;
@@ -29,7 +34,7 @@
 
 html, body {
   background: transparent !important;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-family: var(--ui-font);
   overflow: hidden;
   height: 100%;
   margin: 0;
@@ -357,6 +362,82 @@ html, body {
   font-size: 10px;
   font-weight: 500;
   flex-shrink: 0;
+}
+
+/* 分组标题：结果按来源（命令/应用/文件）分区时显示，仅在多于一组时出现 */
+.search-group-header {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--glass-faint);
+  padding: 6px 6px 2px;
+  flex-shrink: 0;
+}
+
+/* 文件类结果：图标底座用中性色，区别于应用（默认）与文件夹（橙） */
+.search-result-icon.file {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 右侧标签簇：来源标签常驻，定位按钮悬停/选中时浮现 */
+.search-result-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.search-result-source {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgb(var(--glass-accent));
+  background: var(--glass-chip-bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.search-result-locate {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgb(var(--glass-text-strong));
+  background: var(--glass-row-active);
+  border: 1px solid var(--glass-row-active-border);
+  padding: 3px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.search-result-item:hover .search-result-locate,
+.search-result-item.active .search-result-locate {
+  opacity: 1;
+}
+
+.search-result-locate:hover {
+  background: var(--glass-row-hover);
+}
+
+/* 文件结果完整路径：次要色、可截断、悬停看全（title 已带全路径） */
+.search-result-path-full {
+  color: var(--glass-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-result-locate {
+    transition: none;
+  }
 }
 
 .search-no-results {

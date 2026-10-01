@@ -8,6 +8,15 @@ export function getBackupDir(dataDir: string): string {
   return path.join(dataDir, 'backups')
 }
 
+/**
+ * 解析实际使用的备份目录。
+ * 用户在设置里指定了就用它（支持放到别的盘 / 网盘同步目录），否则回退到 `<data>/backups`。
+ */
+export function resolveBackupDir(dataDir: string, custom?: string | null): string {
+  const trimmed = (custom || '').trim()
+  return trimmed || getBackupDir(dataDir)
+}
+
 /** 清理超出保留数量的旧备份（按文件名前缀分组、按修改时间保留最新 N 份） */
 export function pruneBackups(backupDir: string, keep = KEEP_PER_FILE): void {
   const byBase = new Map<string, Array<{ file: string; mtime: number }>>()

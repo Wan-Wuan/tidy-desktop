@@ -20,6 +20,7 @@ interface HeaderOverviewProps {
   handleAddFolder: () => void | Promise<void>
   setShowSmartOrganize: (value: boolean) => void
   setShowSettings: (value: boolean) => void
+  setShowUsageInsights: (value: boolean) => void
   updateState: string
   updateVersion: string | undefined
   updateProgress: UpdateProgress | undefined
@@ -43,6 +44,7 @@ export function HeaderOverview({
   handleAddFolder,
   setShowSmartOrganize,
   setShowSettings,
+  setShowUsageInsights,
   updateState,
   updateVersion,
   updateProgress,
@@ -131,6 +133,13 @@ export function HeaderOverview({
                 <span className="rounded-full bg-white/80 px-2 py-0.5 border border-slate-200/80">{overviewStats.visible}/{overviewStats.total} 可见</span>
                 <span className="rounded-full bg-white/80 px-2 py-0.5 border border-slate-200/80">{displaySubcategories.length} 个子分类</span>
                 <span className="rounded-full bg-white/80 px-2 py-0.5 border border-slate-200/80">{overviewStats.folders} 个文件夹</span>
+                <button
+                  onClick={() => setShowUsageInsights(true)}
+                  title="查看常用 / 长期未用的项目"
+                  className="focus-ring cursor-pointer rounded-full bg-white/80 px-2 py-0.5 border border-slate-200/80 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-colors"
+                >
+                  使用情况
+                </button>
                 {overviewStats.missingIcons > 0 && (
                   <button
                     onClick={handleRefreshAllIcons}
@@ -155,13 +164,18 @@ export function HeaderOverview({
 
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
           {smartLaunchApps.length > 0 && (
+            /* ⚠️ 每个 chip 都有 max-w-[132px]，但默认 min-width:auto 让它们
+               **只增不减**——1024~1200px 区间这排整体溢出头部，被 .app-shell 的
+               overflow:hidden 从右侧切掉（实测 1024px 时溢出 71px，最后一个
+               chip 只剩半个图标）。给 chip 加 min-w-0 让 flex-shrink 生效，
+               文字由内层 span.truncate 收成省略号。 */
             <div className="hidden min-w-0 items-center gap-2 lg:flex">
               <span className="shrink-0 text-[11px] font-semibold text-slate-500">智能启动</span>
               {smartLaunchApps.map(app => (
                 <button
                   key={app.id}
                   onClick={() => handleOpenApp(app)}
-                  className="group focus-ring cursor-pointer inline-flex max-w-[132px] items-center gap-1.5 rounded-lg border border-brand-100/80 bg-white/80 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white"
+                  className="group focus-ring cursor-pointer inline-flex min-w-0 max-w-[132px] items-center gap-1.5 rounded-lg border border-brand-100/80 bg-white/80 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white"
                   title={app.name}
                 >
                   <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded bg-brand-50 group-hover:bg-white/15">

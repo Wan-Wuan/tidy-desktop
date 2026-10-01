@@ -6,6 +6,7 @@ import path from 'path'
 import fs from 'fs'
 import { ICONS_DIR } from '../config'
 import { assertPath, assertSender } from '../ipcGuard'
+import { resolveIncomingPath } from '../pathResolver'
 
 interface ShortcutInfo {
   targetPath: string
@@ -179,9 +180,10 @@ async function getIconPng(sourcePath: string, iconIndex = 0): Promise<Buffer | n
 
 export function registerIconHandlers() {
   ipcMain.handle('extract-icon', async (event, filePath: unknown) => {
-    // 这个入口会按调用方给的路径读文件，必须校验来源与路径本身
+    // 这个入口会按调用方给的路径读文件，必须校验来源与路径本身。
+    // 先解析再校验：便携相对路径 / `%VAR%` 形式的路径也要能提到图标。
     if (!assertSender(event)) return null
-    const safePath = assertPath(filePath)
+    const safePath = assertPath(resolveIncomingPath(filePath))
     if (!safePath) return null
     try {
       // sha256 前 32 位十六进制，避免旧 base64url 截断 64 字符在超长路径上的碰撞
@@ -220,7 +222,8 @@ export function registerIconHandlers() {
     }
   })
 
-  ipcMain.handle('extract-steam-icon', async (_, steamUrl: string) => {
+  ipcMain.handle('extract-steam-icon', async (event, steamUrl: string) => {
+    if (!assertSender(event)) return null
     try {
       const match = steamUrl.match(/steam:\/\/(?:launch|rungameid)\/(\d+)/)
       if (!match) return null
@@ -297,7 +300,8 @@ export function registerIconHandlers() {
     }
   })
 
-  ipcMain.handle('get-steam-game-name', async (_, steamUrl: string) => {
+  ipcMain.handle('get-steam-game-name', async (event, steamUrl: string) => {
+    if (!assertSender(event)) return null
     try {
       const match = steamUrl.match(/steam:\/\/(?:launch|rungameid)\/(\d+)/)
       if (!match) return null

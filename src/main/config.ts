@@ -3,13 +3,48 @@ import path from 'path'
 import fs from 'fs'
 
 import { recoverInterruptedWrites, writeJsonFilesAtomically } from './jsonTransaction'
+import {
+  DEFAULT_HOTKEY,
+  DEFAULT_SEARCH_HOTKEY,
+  planHotkeyDefaultMigration,
+  planSearchHotkeyDefaultMigration
+} from '../shared/defaults'
+import type { Config } from '../shared/types'
 
 export { writeJsonFilesAtomically, recoverInterruptedWrites }
 
-export const CONFIG_DIR = path.join(app.getPath('userData'), 'data')
+/**
+ * 便携版（portable target）的落点：electron-builder 注入的环境变量指向
+ * **便携 exe 所在的真实目录**。
+ *
+ * ⚠️ 不能改用 `process.execPath` 的目录：便携版运行时会把自己解压到临时目录再从那里启动，
+ * `execPath` 指向的是临时目录，程序一退出就被清掉——数据写在那儿等于每次启动都从零开始。
+ *
+ * 开发环境（未打包）下这个变量不存在，为 null。
+ */
+export const PORTABLE_DIR = (process.env.PORTABLE_EXECUTABLE_DIR || '').trim() || null
+
+/** 当前是否运行在便携版里 */
+export const IS_PORTABLE = PORTABLE_DIR !== null
+
+/**
+ * 数据根目录（`CONFIG_DIR` 是它下面的 `data` 子目录）。
+ *
+ *  · 安装版：`%APPDATA%\<appName>`（Electron 的 userData），机器级位置；
+ *  · **便携版：便携 exe 所在目录**——"免安装"必须同时是"配置跟着走"，
+ *    否则用户把 exe 拷到 U 盘，配置还留在原来那台机器上，等于没便携。
+ */
+function resolveDataRoot(): string {
+  if (PORTABLE_DIR) return PORTABLE_DIR
+  return app.getPath('userData')
+}
+
+export const DATA_ROOT = resolveDataRoot()
+export const CONFIG_DIR = path.join(DATA_ROOT, 'data')
 export const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json')
 export const APPS_FILE = path.join(CONFIG_DIR, 'apps.json')
 export const CATEGORIES_FILE = path.join(CONFIG_DIR, 'categories.json')
+export const COLLECTIONS_FILE = path.join(CONFIG_DIR, 'collections.json')
 export const ICONS_DIR = path.join(CONFIG_DIR, 'icons')
 
 /**
@@ -58,6 +93,71 @@ export function ensureDataDir() {
   // 启动路径上只做必需的同步工作（建目录 + 恢复中断写入）；图标缓存清理改为异步，
   // 由 scheduleIconCacheCleanup 排到事件循环之后执行，不再阻塞 ready。
   scheduleIconCacheCleanup()
+}
+
+/**
+ * 一次性把「旧默认主热键」迁移到新默认值。
+ *
+ * 背景：`Alt+Space` 是 Windows 保留组合，`globalShortcut.register` 拿不到，
+ * 老用户升级上来会继续顶着这个坏默认值，表现为「按了没反应」。
+ *
+ * 判定刻意保守——**只匹配旧默认值这一个字面量**：
+ *  · 用户手动改成过别的组合 → 不动（那可能是他特意选的）；
+ *  · 配置文件不存在（新装）→ 读到的就是新默认值，不触发迁移。
+ *
+ * 无论是否真的改了值，都会打上 `hotkeyDefaultMigrated` 标记：
+ * 否则用户以后手动把热键设回 `Alt+Space` 时，下次启动又会被自动改掉。
+ *
+ * @returns 实际发生了替换时返回新旧值，否则返回 null
+ */
+export function migrateLegacyHotkeyDefault(): { from: string; to: string } | null {
+  // 配置损坏时绝不写入：此刻读到的是解析失败后的默认值，写回去等于用默认值覆盖用户配置
+  if (isDataFileCorrupted(CONFIG_FILE)) return null
+
+  const config = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
+  const plan = planHotkeyDefaultMigration(config)
+  if (!plan) return null
+
+  const current = (config.hotkey || '').trim()
+  const next: Config = {
+    ...config,
+    hotkey: plan.nextHotkey ?? config.hotkey,
+    // 无论是否改了值都打上标记：否则用户以后手动设回 Alt+Space 会被反复改掉
+    hotkeyDefaultMigrated: true
+  }
+  if (!writeJsonFile(CONFIG_FILE, next)) return null
+  return plan.migrated && plan.nextHotkey ? { from: current, to: plan.nextHotkey } : null
+}
+
+/**
+ * 一次性把「旧默认搜索热键」迁移到新默认值。
+ *
+ * 与主热键那次迁移的动机不同，值得单独说明：`Ctrl+K` **注册得上**，
+ * 所以问题不是"按了没反应"，而是"它把全系统的 Ctrl+K 抢走了"——
+ * 用户在编辑器里按 Ctrl+K 失效，几乎不可能想到是启动器干的。
+ * 详见 `shared/defaults.ts` 的 `DEFAULT_SEARCH_HOTKEY`。
+ *
+ * 判定同样保守：只匹配旧默认值这一个字面量，用户手动改成别的组合一律不动。
+ * 无论是否真的改了值都打上 `searchHotkeyDefaultMigrated`，
+ * 否则用户以后手动把搜索键设回 `Ctrl+K` 时，下次启动又会被自动改掉。
+ *
+ * @returns 实际发生了替换时返回新旧值，否则返回 null
+ */
+export function migrateLegacySearchHotkeyDefault(): { from: string; to: string } | null {
+  if (isDataFileCorrupted(CONFIG_FILE)) return null
+
+  const config = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
+  const plan = planSearchHotkeyDefaultMigration(config)
+  if (!plan) return null
+
+  const current = (config.searchHotkey || '').trim()
+  const next: Config = {
+    ...config,
+    searchHotkey: plan.nextSearchHotkey ?? config.searchHotkey,
+    searchHotkeyDefaultMigrated: true
+  }
+  if (!writeJsonFile(CONFIG_FILE, next)) return null
+  return plan.migrated && plan.nextSearchHotkey ? { from: current, to: plan.nextSearchHotkey } : null
 }
 
 /**
@@ -183,8 +283,12 @@ export function writeJsonFile(filePath: string, data: unknown): boolean {
 
 export function getDefaultConfig() {
   return {
-    hotkey: 'Alt+Space',
-    searchHotkey: 'Ctrl+K',
+    // 默认值统一来自 shared/defaults.ts，别在这里写字面量——
+    // 主进程的注册兜底、设置页的「恢复默认」按钮读的都是同一份，写死就会对不上。
+    hotkey: DEFAULT_HOTKEY,
+    searchHotkey: DEFAULT_SEARCH_HOTKEY,
+    hotkeyDefaultMigrated: false,
+    searchHotkeyDefaultMigrated: false,
     windowSize: { width: 1050, height: 800 },
     windowPosition: null,
     searchEngines: {
@@ -229,6 +333,15 @@ export function getDefaultConfig() {
     },
     defaultEngine: 'b',
     onboardingCompleted: false,
+    /* 添加网址项目时是否联网抓取标题与 favicon。默认开，但必须能关：
+       抓取会暴露用户添加过哪些网址，这是唯一一处主进程主动访问外部地址的行为。 */
+    urlMetaEnabled: true,
+    pauseHotkey: '',
+    everythingHttpPort: 0,
+    /* 便携版默认把「便携根目录」设为 exe 所在目录：
+       数据已经落在那里了，项目路径再存成相对形式，整个 U 盘才真的能拔了就走。
+       安装版保持 null（没有天然的"整包搬移"语义，交给用户自己指定）。 */
+    portableRoot: PORTABLE_DIR,
     autoCategoryRules: [],
     quickActions: [
       { key: '>shutdown', name: '关机', command: 'shutdown' as const, enabled: true },

@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { AppItem, AutoCategoryRule, Category, Subcategory, Config, UiCommand } from '../../shared/types'
-import type { CorruptBackupInfo, DataHealth } from '../../shared/electron'
-import { parseSteamUrl, ALL_FILE_EXTS_SET, getFileExtension } from '../../shared/utils'
+import { AppItem, AutoCategoryRule, Category, CategoryLinkFolder, Subcategory, Config, UiCommand } from '../../shared/types'
+import type { CorruptBackupInfo, DataHealth, HotkeyIssue } from '../../shared/electron'
+import { parseSteamUrl } from '../../shared/utils'
+import { DEFAULT_HOTKEY, DEFAULT_SEARCH_HOTKEY } from '../../shared/defaults'
 import { getPinyin, getFirstLetter } from './utils/pinyin'
 import { sortAppsForDisplay as sortAppsForDisplayPure } from './utils/sortApps'
-import { computeReorder } from './utils/reorder'
-import { isDocFile } from './utils/fileKind'
 import { persistApps, persistCategories, persistConfig, setPersistNotifier } from './utils/persist'
-import { buildShortcutTargetMap, getDroppedPathIdentities, getDroppedPaths, normalizeDroppedPath } from './utils/dropPaths'
+import { resolveMainKeyAction } from './utils/keyboard'
 import {
   removeCategoryFromApps,
   removeSubcategoryFromApps
 } from './utils/categoryDeletion'
+import { useAppCrud } from './hooks/useAppCrud'
+import { useLaunchGroups } from './hooks/useLaunchGroups'
+import { useCollections } from './hooks/useCollections'
+import { useFolderSync } from './hooks/useFolderSync'
 import { useUpdate } from './hooks/useUpdate'
 import { applyAccentScale, generateAccentScale } from './utils/colorScale'
 import { useDragGhost } from './hooks/useDragGhost'
@@ -32,6 +35,14 @@ import {
   CategoryEditDialogOverlay
 } from './components/CategoryOverlays'
 import { AppContextMenuOverlay } from './components/AppContextMenuOverlay'
+import { LaunchGroupPanel } from './components/LaunchGroupPanel'
+import { FolderSyncBanner } from './components/FolderSyncBanner'
+import type { CollectionGroup } from './components/AppGrid'
+import { parseSyncedAppId } from './utils/syncedId'
+import { launchAppAsAdmin } from './utils/launchApp'
+import { safePickFolder } from './utils/nativeDialog'
+import { SIDEBAR_DRAG_THRESHOLD, useSidebarResize } from './hooks/useSidebarResize'
+import { toggleTodoItem, clearCompletedTodos, formatTodosAsMarkdown } from './utils/todo'
 // 第 7 步：把顶部概览 / 分类导航 / 卡片网格 / 多选条 / 提示栈拆成纯展示组件，
 // App 只负责把状态与回调透传过去，行为与原来内联 JSX 完全一致。
 import { HeaderOverview } from './components/HeaderOverview'
@@ -39,18 +50,20 @@ import { CategoryNav } from './components/CategoryNav'
 import { AppGrid } from './components/AppGrid'
 import { SelectionBar } from './components/SelectionBar'
 import { ToastStack } from './components/ToastStack'
+import { CategoryIcon } from './components/CategoryIcon'
 import { useDragAndDrop } from './hooks/useDragAndDrop'
-import type { AppContextMenuState, MoveTarget } from './components/AppContextMenuOverlay'
+import type { AppContextMenuState } from './components/AppContextMenuOverlay'
 import {
   AddAppModal,
+  CategoryManagerModal,
   EditAppModal,
+  NoteViewerModal,
   OnboardingModal,
   SettingsModal,
   SmartOrganizeModal,
+  UsageInsightsModal,
 } from './components/modals'
 
-
-type ParsedDrop = { apps: AppItem[]; duplicateCount: number; unsupportedCount: number }
 
 function App() {
   // 集中持有应用数据五组状态 + 对应 ref 镜像（含跨 await 前刷新镜像的逻辑）。
@@ -77,6 +90,8 @@ function App() {
     source: updateSource,
     error: updateError,
     currentVersion,
+    portable: updatePortable,
+    releaseUrl: updateReleaseUrl,
     checkForUpdate: manualCheckForUpdate,
     startDownload,
     confirmInstall,
@@ -87,8 +102,16 @@ function App() {
   const [showEditApp, setShowEditApp] = useState(false)
   const [editingApp, setEditingApp] = useState<AppItem | null>(null)
   const [showSmartOrganize, setShowSmartOrganize] = useState(false)
+  const [showUsageInsights, setShowUsageInsights] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [launchPaused, setLaunchPaused] = useState<boolean>(config?.launchPaused === true)
+  /** 收到"定位项目"请求后，记下待滚动高亮的卡片，等分类切换渲染完成再处理 */
+  const pendingLocateAppIdRef = useRef<string | null>(null)
+  /** 每次定位请求自增，作为滚动高亮 effect 的触发源——否则目标卡片恰好在当前分类时，
+      activeCategory / apps 都不变，effect 不会重跑，用户看到窗口打开却没有高亮 */
+  const [locateNonce, setLocateNonce] = useState(0)
   const dropZoneRef = useRef<HTMLDivElement>(null)
+  const shellRef = useRef<HTMLDivElement>(null)
   const categoryBarRef = useRef<HTMLDivElement>(null)
   const subcategoryBarRef = useRef<HTMLDivElement>(null)
 
@@ -102,6 +125,7 @@ function App() {
     reorder: (sourceId: string, targetId: string, insertAfter?: boolean) => Promise<void>
     toCategory: (appId: string, categoryId: string) => Promise<void>
     toSubcategory: (appId: string, subcategoryId: string | null) => Promise<void>
+    toCollection: (appId: string, collectionId: string) => Promise<void>
   } | null>(null)
 
   // 拖拽引擎：左键自绘拖拽 + 外部文件拖入守卫。整套手势/落点/收尾逻辑从本文件
@@ -114,6 +138,7 @@ function App() {
     dragOverAppId,
     dragOverSubId,
     dragOverGroupSubId,
+    dragOverCollectionId,
     dropInsertAfter,
     draggedSubId,
     setDraggedSubId,
@@ -148,7 +173,7 @@ function App() {
   })
 
   // 多选状态（选中集合 / 框选锚点 / 一键清空），细节见 useAppSelection。
-  const { selectedAppIds, setSelectedAppIds, selectedAppIdSet, lastClickedIndexRef, clearAppSelection } = useAppSelection()
+  const { selectedAppIds, setSelectedAppIds, selectedAppIdSet, lastClickedIndexRef, clearAppSelection, toggleSelectAll } = useAppSelection()
 
   // 维护操作集（图标刷新/自动分类/健康检查/导入/备份等）
   const {
@@ -160,6 +185,7 @@ function App() {
     handleRefreshAllIcons,
     handleAutoCategorize,
     handleCleanupInvalidApps,
+    handleRelocateInvalidApps,
     handleRestoreHiddenApps,
     handleExportBackup,
     handleImportBackup,
@@ -190,7 +216,7 @@ function App() {
       setTimeout(() => {
         showMaintenanceSummary({
           title: `已更新到 v${currentVersion}`,
-          items: ['数据已自动保留备份，如遇问题可在设置中导出诊断信息。']
+          items: ['数据已自动备份。如遇问题，可在「设置 → 关于」中导出诊断信息。']
         })
       }, 400)
     }
@@ -202,6 +228,59 @@ function App() {
     const accent = config?.ui?.accentColor?.trim()
     applyAccentScale(accent ? generateAccentScale(accent) : null, document.documentElement)
   }, [config?.ui?.accentColor])
+
+  /* 外观个性化（P2）：自定义背景图。
+     config 里存的是**本地图片的绝对路径**，渲染层不能直接加载，需要经主进程换成 file:// URL。
+     文件被移走 / 换名后 getLocalImageUrl 返回 null，背景自动失效回退到主题背景。
+     ⚠️ effect 里只用拆出来的原始值（kind / value），不要把整个 background 对象塞进来：
+     否则依赖数组要么漏项、要么每次 config 重载都换引用导致重复请求。 */
+  const background = config?.ui?.background
+  const backgroundKind = background?.kind
+  const backgroundValue = background?.value
+  const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (backgroundKind !== 'image' || !backgroundValue) {
+      setBackgroundUrl(null)
+      return
+    }
+    let cancelled = false
+    window.electronAPI
+      .getLocalImageUrl(backgroundValue)
+      .then(url => { if (!cancelled) setBackgroundUrl(url) })
+      .catch(() => { if (!cancelled) setBackgroundUrl(null) })
+    return () => { cancelled = true }
+  }, [backgroundKind, backgroundValue])
+
+  /* 外观个性化（P2）：字体族 / 字号缩放 / 背景参数，统一写进 documentElement 的 CSS 变量，
+     让挂在 .app-shell 之外的浮层（模态框、toast）也能一起生效。
+     ⚠️ 字号缩放走 html 的 font-size：Tailwind 的 text-* 都是 rem，跟着一起缩放；
+     而图标（Phosphor 传的是 px）与网格列数 / 卡片尺寸（都是 px 计算）不受影响——
+     这正是"不影响图标与网格尺寸计算"要的效果。 */
+  useEffect(() => {
+    const root = document.documentElement
+    const family = config?.ui?.fontFamily?.trim()
+    root.style.setProperty(
+      '--ui-font',
+      family
+        ? `'${family}', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif`
+        : "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif"
+    )
+
+    const scale = config?.ui?.uiScale
+    root.style.fontSize = scale && scale !== 1 ? `${(16 * scale).toFixed(2)}px` : ''
+
+    const bg = config?.ui?.background
+    const enabled = !!bg && bg.kind !== 'none'
+    /* 模糊 / 暗化只对图片有意义：纯色是用户自己挑的，再压暗只会让颜色失真。 */
+    const isImage = enabled && bg?.kind === 'image'
+    root.style.setProperty('--app-bg-image', isImage && backgroundUrl ? `url("${backgroundUrl}")` : 'none')
+    root.style.setProperty('--app-bg-blur', isImage ? `${Math.max(0, bg?.blur ?? 0)}px` : '0px')
+    root.style.setProperty('--app-bg-dim', isImage ? String(Math.min(0.9, Math.max(0, bg?.dim ?? 0))) : '0')
+    root.style.setProperty(
+      '--app-bg-color',
+      enabled && bg?.kind === 'color' && bg.value ? bg.value : 'transparent'
+    )
+  }, [config?.ui?.fontFamily, config?.ui?.uiScale, config?.ui?.background, backgroundUrl])
 
   // 记住上次浏览的分类，跳过首次挂载（loadData 已按持久化值恢复）
   useEffect(() => {
@@ -246,6 +325,126 @@ function App() {
     return () => setPersistNotifier(null)
   }, [showCopyToast])
 
+  /* 应用数据的全部变更操作（增删改 / 归类 / 排序 / 批量 / 拖入解析）。
+     内部统一走 commitApps 收口「写 ref + 写 state + 落盘」三件事，避免漏写 ref
+     导致 await 之后读到旧数组；细节与动机见 useAppCrud。 */
+  const {
+    commitApps,
+    mutateApps,
+    recordAppLaunch,
+    handleOpenApp,
+    handleOpenAppWithSystem,
+    handleSendFile,
+    handleAddApp,
+    handleUpdateApp,
+    handleAddFolder,
+    handleDeleteApp,
+    handleMoveAppToCategory,
+    handleMoveAppToSubcategory,
+    handleContextMenuMove,
+    handleContextMenuHide,
+    handleReorderApp,
+    batchMoveToCategory,
+    batchMoveToSubcategory,
+    batchHideApps,
+    batchRestoreApps,
+    batchDeleteApps,
+    hideAppsByIds,
+    parsePathsToApps,
+    showDropResult,
+    getDroppedPathsFromEvent
+  } = useAppCrud({
+    appsRef,
+    setApps,
+    categoriesRef,
+    activeCategoryRef,
+    config,
+    selectedAppIds,
+    setShowAddApp,
+    setShowEditApp,
+    setEditingApp,
+    clearAppSelection,
+    showToast: showCopyToast,
+    showSummary: showMaintenanceSummary,
+    captureUndoSnapshot
+  })
+
+  /* 组合启动（多项目运行）。成员解析走 appsRef，结果汇总走维护提示条。
+     需要「启动前确认」时把 pendingGroup 抛给 LaunchGroupPanel。 */
+  const {
+    pendingGroup,
+    launching: groupLaunching,
+    resolveGroupMembers,
+    requestLaunchGroup,
+    confirmLaunchGroup,
+    cancelLaunchGroup
+  } = useLaunchGroups({
+    appsRef,
+    recordLaunch: recordAppLaunch,
+    showSummary: showMaintenanceSummary
+  })
+
+  /**
+   * 正在阅读的文本项目 **id**（文本项目没有"启动"这个动作，点开是阅读面板）。
+   *
+   * 刻意存 id 而不是对象：待办面板里勾一条就立刻落盘，如果存的是打开那一刻的
+   * 对象快照，勾完界面还是旧的那份（勾不动、进度不变）。派生自 `apps` 就自动跟上，
+   * 项目被删掉时面板也会自己关掉。
+   */
+  const [viewingNoteId, setViewingNoteId] = useState<string | null>(null)
+  const viewingNote = useMemo(
+    () => (viewingNoteId ? apps.find(app => app.id === viewingNoteId) ?? null : null),
+    [viewingNoteId, apps]
+  )
+
+  /* 分类数据的落盘入口。与 useAppCrud 的 commitApps 同构——一次写 ref + state + 落盘，
+     漏写 ref 会在 await 之后读到旧数组。 */
+  const commitCategories = useCallback(async (next: Category[], hint: string) => {
+    categoriesRef.current = next
+    setCategories(next)
+    return persistCategories(next, subcategories, hint)
+  }, [categoriesRef, setCategories, subcategories])
+
+  /* 收纳格：只影响"在哪里显示"，不碰 apps.json，所以与 useAppCrud 完全解耦 */
+  const {
+    collections,
+    collectionsRef,
+    createCollection,
+    renameCollection,
+    deleteCollection,
+    toggleCollapsed: toggleCollectionCollapsed,
+    addAppsToCollection,
+    removeAppsFromCollections,
+    pruneMissingMembers
+  } = useCollections()
+
+  /** 改某个分类的 linkFolder 并落盘；next 为 null 表示解除关联 */
+  const updateLinkFolder = useCallback(async (categoryId: string, next: CategoryLinkFolder | null) => {
+    await commitCategories(
+      categoriesRef.current.map(category => (category.id === categoryId
+        ? { ...category, linkFolder: next }
+        : category)),
+      next ? '关联文件夹' : '解除关联'
+    )
+  }, [categoriesRef, commitCategories])
+
+  /* 关联文件夹同步：扫描在主进程，这里只读缓存 + 订阅通知 + 维护用户意图 */
+  const {
+    syncingIds: syncingCategoryIds,
+    errorsByCategory,
+    syncedApps,
+    syncCategory,
+    hideEntry: hideSyncedEntry,
+    bindFolder,
+    unbindFolder
+  } = useFolderSync({
+    categories,
+    categoriesRef,
+    activeCategory,
+    showSummary: showMaintenanceSummary,
+    updateLinkFolder
+  })
+
   const [sidebarWidthDraft, setSidebarWidthDraft] = useState<number | null>(null)
   // 分类右键菜单 + 编辑/删除弹窗的全部状态与接线（细节见 useCategoryDialogs）。
   // 底层 CRUD handler 在本函数更靠后才定义，经 crudApiRef 转发，避免闭包踩 TDZ。
@@ -257,6 +456,9 @@ function App() {
     setCategoryEditDialog,
     categoryDeleteDialog,
     setCategoryDeleteDialog,
+    categoryManagerOpen,
+    openCategoryManager,
+    closeCategoryManager,
     openCategoryContextMenu,
     createCategoryFromMenu,
     renameCategoryFromMenu,
@@ -274,22 +476,6 @@ function App() {
   })
   const [appContextMenu, setAppContextMenu] = useState<AppContextMenuState | null>(null)
   const skipActiveCategoryPersistRef = useRef(true)
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (selectedAppIds.length > 0) {
-        setSelectedAppIds([])
-        return
-      }
-      const overlayOpen = showSettings || showAddApp || showEditApp || showSmartOrganize
-        || !!appContextMenu || !!categoryContextMenu || !!categoryEditDialog || !!categoryDeleteDialog
-      if (overlayOpen) return
-      window.electronAPI.hideMainWindow()
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showSettings, showAddApp, showEditApp, showSmartOrganize, appContextMenu, categoryContextMenu, categoryEditDialog, categoryDeleteDialog, selectedAppIds, setSelectedAppIds])
 
   /* 分类右键菜单的关闭兜底：点击任意处 / 右键 / Esc / 窗口失焦都关掉。
      （拖拽的 dragend 兜底已随拖拽引擎迁到 useDragAndDrop，不在这里。） */
@@ -402,7 +588,7 @@ function App() {
 
   const handleRestoreCorruptBackup = useCallback(async (backup: CorruptBackupInfo) => {
     const confirmed = await window.electronAPI.confirm(
-      `确定用备份「${backup.fileName}」覆盖当前数据文件吗？\n\n留档本身会保留，可以重复恢复。`
+      `确定用备份「${backup.fileName}」覆盖当前数据文件吗？\n\n备份文件本身会保留，可以重复恢复。`
     )
     if (!confirmed) return
     const ok = await window.electronAPI.restoreCorruptBackup({
@@ -410,31 +596,121 @@ function App() {
       targetFile: backup.targetFile
     })
     if (!ok) {
-      showCopyToast('恢复失败：备份内容无法解析')
+      showCopyToast('恢复失败：备份内容无法解析。')
       return
     }
     await refreshDataHealth()
     await loadData()
-    showCopyToast('已从备份恢复，请核对数据是否正确')
+    showCopyToast('已从备份恢复，请核对数据是否完整。')
   }, [refreshDataHealth, loadData, showCopyToast])
 
-  const getFileNameFromPath = (filePath: string): string => {
-    const parts = filePath.replace(/\\/g, '/').split('/')
-    const fileName = parts[parts.length - 1] || ''
-    return fileName.replace(/\.exe$/i, '').replace(/\.lnk$/i, '')
-  }
+  /* 展示用的项目集合 = 手工项目（apps.json）+ 关联文件夹同步出来的项目（内存态）。
+     同步项**不落 apps.json**，所以只在这一层合并；所有写操作仍然只走 appsRef。 */
+  const displayApps = useMemo(() => (syncedApps.length > 0 ? [...apps, ...syncedApps] : apps), [apps, syncedApps])
 
   const filteredApps = useMemo(() => {
     if (activeCategory) {
-      return apps.filter(app => app.categoryId === activeCategory)
+      return displayApps.filter(app => app.categoryId === activeCategory)
     }
-    return apps
-  }, [apps, activeCategory])
+    return displayApps
+  }, [displayApps, activeCategory])
+
+  /* 当前视图要显示的收纳格：
+     · 未选中分类（"全部"视图）→ 显示没有绑定分类的收纳格
+     · 选中某分类 → 显示绑定到该分类的收纳格
+     收纳格只影响显示位置，成员项目本身的 categoryId 不变。 */
+  const collectionGroups = useMemo<CollectionGroup[]>(() => {
+    if (collections.length === 0) return []
+    const byId = new Map(displayApps.map(app => [app.id, app]))
+    return collections
+      .filter(collection => (activeCategory ? collection.categoryId === activeCategory : collection.categoryId === null))
+      .sort((a, b) => a.order - b.order)
+      .map(collection => ({
+        collection,
+        apps: collection.memberIds
+          .map(id => byId.get(id))
+          .filter((app): app is AppItem => Boolean(app))
+      }))
+  }, [collections, displayApps, activeCategory])
+
+  /* 已收进当前视图收纳格的项目 id：这些卡片只在收纳格里画一份，
+     不再在下面的子分类分组里重复出现（同一张卡片画两次，改一个另一个不跟着变）。 */
+  const groupedAppIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const group of collectionGroups) {
+      for (const app of group.apps) ids.add(app.id)
+    }
+    return ids
+  }, [collectionGroups])
+
+  /* 右键菜单里「移出收纳格」要知道这张卡现在在哪个格子里。
+     只在**当前视图**的收纳格里找：菜单本来就是从当前视图的卡片上弹出来的。 */
+  const contextMenuCollection = useMemo(() => {
+    if (!appContextMenu) return null
+    const group = collectionGroups.find(item => item.apps.some(app => app.id === appContextMenu.app.id))
+    return group?.collection ?? null
+  }, [appContextMenu, collectionGroups])
+
+  /* 全选的目标：当前可见（未隐藏）的项目。隐藏项本来就不显示在网格里，
+     把它们也圈进「全选」会让用户莫名其妙地选中看不见的东西。
+     同步项同样排除——它们不在 apps.json 里，选中了也删不掉、改不了。 */
+  const visibleAppIds = useMemo(
+    () => filteredApps.filter(app => !app.hidden && !app.isSynced).map(app => app.id),
+    [filteredApps]
+  )
+
+  /* 任何弹窗 / 菜单打开时，主界面的键盘操作整体让位。 */
+  const overlayOpen = showSettings || showAddApp || showEditApp || showSmartOrganize || showUsageInsights
+    || !!appContextMenu || !!categoryContextMenu || !!categoryEditDialog || !!categoryDeleteDialog
+    || !!viewingNote || !!pendingGroup
+
+  /* 主界面的键盘操作。
+     三类快捷键的边界正是「热键互相干扰」的根源（完整说明见 utils/keyboard.ts）。
+     判定顺序全部收在 resolveMainKeyAction 里——**顺序就是逻辑**，
+     尤其 Esc 必须排在 isEditableTarget 之前，别再挪回这里手写。 */
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const action = resolveMainKeyAction(e, {
+        overlayOpen,
+        hasSelection: selectedAppIds.length > 0,
+        visibleCount: visibleAppIds.length
+      })
+      switch (action?.type) {
+        case 'clear-selection':
+          setSelectedAppIds([])
+          return
+        /* Ctrl/Cmd+A：全选当前可见项目，与工具条上的「全选」同一语义。
+           必须 preventDefault——否则浏览器会把界面上的文字整片选蓝。 */
+        case 'select-all':
+          e.preventDefault()
+          setSelectedAppIds(visibleAppIds)
+          return
+        /* Delete：删除选中项。走与工具条按钮完全相同的入口——
+           确认框与撤销快照都在 batchDeleteApps 里，这里不重复实现。 */
+        case 'delete-selection':
+          e.preventDefault()
+          void batchDeleteApps()
+          return
+        case 'hide-window':
+          window.electronAPI.hideMainWindow()
+          return
+        default:
+          return
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [overlayOpen, selectedAppIds, visibleAppIds, setSelectedAppIds, batchDeleteApps])
 
   const activeCategoryLabel = useMemo(() => {
     if (!activeCategory) return '全部项目'
     return categories.find(category => category.id === activeCategory)?.name || '当前分类'
   }, [activeCategory, categories])
+
+  const activeCategoryObject = useMemo(
+    () => (activeCategory ? categories.find(category => category.id === activeCategory) ?? null : null),
+    [activeCategory, categories]
+  )
 
   const overviewStats = useMemo(() => ({
     total: filteredApps.length,
@@ -465,322 +741,20 @@ function App() {
       .map(item => item.app)
   }, [filteredApps])
 
-  const recordAppLaunch = async (appId: string) => {
-    const updatedApps = appsRef.current.map(item => item.id === appId
-      ? { ...item, launchCount: (item.launchCount || 0) + 1, lastOpenedAt: Date.now() }
-      : item
-    )
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await persistApps(updatedApps, '启动记录')
-  }
-
-  const handleOpenApp = async (app: AppItem) => {
-    let success: boolean
-    if (app.id === '__folder_path__') {
-      success = await window.electronAPI.openFolder(app.path)
-    } else if (app.type === 'steam') {
-      success = await window.electronAPI.openSteam(app.path)
-    } else if (app.type === 'folder') {
-      success = await window.electronAPI.openFolder(app.path)
-    } else {
-      success = await window.electronAPI.openApp(app.path)
-    }
-    // 打开失败（路径失效等）不计入启动统计，避免污染智能启动和搜索排序
-    if (success) await recordAppLaunch(app.id)
-  }
-
-  const handleSendFile = async (app: AppItem) => {
-    const success = isDocFile(app)
-      ? await window.electronAPI.copyFileToClipboard(app.path)
-      : await window.electronAPI.copyImageToClipboard(app.path)
-    showCopyToast(success ? `已复制「${app.name}」，可粘贴发送` : '复制失败，请重试')
-  }
-
-
-  const handleAddApp = async (name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam' = 'app', aliases: string[] = []) => {
-    if (categories.length === 0) {
-      alert('请先创建一个分类，然后再添加应用。')
-      return
-    }
-
-    const currentApps = appsRef.current
-    const duplicate = currentApps.find(app => app.name === name)
-    if (duplicate) {
-      alert(`已存在同名应用"${name}"，请使用其他名称。`)
-      return
-    }
-
-    const duplicatePath = currentApps.find(app => normalizeDroppedPath(app.path) === normalizeDroppedPath(path))
-    if (duplicatePath) {
-      alert(`路径"${path}"已作为"${duplicatePath.name}"存在，无需重复添加。`)
-      return
-    }
-
-    const newApp: AppItem = {
-      id: crypto.randomUUID(),
-      name,
-      path,
-      icon: '',
-      categoryId,
-      subcategoryId: null,
-      pinyin: getPinyin(name),
-      firstLetter: getFirstLetter(name),
-      type,
-      aliases
-    }
-
-    const updatedApps = [...currentApps, newApp]
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await persistApps(updatedApps, '添加应用')
-    setShowAddApp(false)
-
-    // Extract icon: for Steam, try Steam cache first; for others, extract from file
-    let iconPath: string | null = null
-    try {
-      if (type === 'steam') {
-        iconPath = await window.electronAPI.extractSteamIcon(path)
-      }
-      if (!iconPath) {
-        iconPath = await window.electronAPI.extractIcon(path)
-      }
-    } catch { /* icon extraction failed, app still usable */ }
-    if (iconPath) {
-      const withIcon = updatedApps.map(a => a.id === newApp.id ? { ...a, icon: iconPath } : a)
-      appsRef.current = withIcon
-      setApps(withIcon)
-      await persistApps(withIcon, '应用图标')
-    }
-  }
-
-  const handleUpdateApp = async (id: string, name: string, path: string, categoryId: string, type: 'app' | 'folder' | 'steam', aliases: string[] = []) => {
-    const currentApps = appsRef.current
-    const existing = currentApps.find(a => a.id === id)
-    if (!existing) return
-
-    const duplicate = currentApps.find(a => a.name === name && a.id !== id)
-    if (duplicate) {
-      alert(`已存在同名应用"${name}"，请使用其他名称。`)
-      return
-    }
-
-    const updatedApp: AppItem = {
-      ...existing,
-      name,
-      path,
-      categoryId,
-      type,
-      pinyin: getPinyin(name),
-      firstLetter: getFirstLetter(name),
-      aliases,
-      // Clear old icon if path/type changed
-      icon: (existing.path !== path || existing.type !== type) ? '' : existing.icon
-    }
-
-    const updatedApps = currentApps.map(a => a.id === id ? updatedApp : a)
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await persistApps(updatedApps, '修改应用')
-    setShowEditApp(false)
-    setEditingApp(null)
-
-    // Re-extract icon if path or type changed
-    if (existing.path !== path || existing.type !== type) {
-      let iconPath: string | null = null
-      try {
-        if (type === 'steam') {
-          iconPath = await window.electronAPI.extractSteamIcon(path)
-        }
-        if (!iconPath) {
-          iconPath = await window.electronAPI.extractIcon(path)
-        }
-      } catch { /* icon extraction failed, app still usable */ }
-      if (iconPath) {
-        const withIcon = updatedApps.map(a => a.id === id ? { ...a, icon: iconPath } : a)
-        appsRef.current = withIcon
-        setApps(withIcon)
-        await persistApps(withIcon, '应用图标')
-      }
-    }
-  }
-
-  const handleAddFolder = async () => {
-    if (categories.length === 0) {
-      alert('请先创建一个分类，然后再添加应用。')
-      return
-    }
-
-    const folderPath = await window.electronAPI.selectFolder()
-    if (!folderPath) return
-
-    const parts = folderPath.replace(/\\/g, '/').split('/')
-    const folderName = parts[parts.length - 1] || '文件夹'
-
-    const currentApps = appsRef.current
-    const duplicate = currentApps.find(app => app.name === folderName)
-    if (duplicate) {
-      alert(`已存在同名文件夹"${folderName}"，请使用其他名称。`)
-      return
-    }
-
-    const duplicatePath = currentApps.find(app => normalizeDroppedPath(app.path) === normalizeDroppedPath(folderPath))
-    if (duplicatePath) {
-      alert(`该文件夹已作为"${duplicatePath.name}"存在，无需重复添加。`)
-      return
-    }
-
-    const newApp: AppItem = {
-      id: crypto.randomUUID(),
-      name: folderName,
-      path: folderPath,
-      icon: '',
-      categoryId: activeCategoryRef.current || '',
-      subcategoryId: null,
-      pinyin: getPinyin(folderName),
-      firstLetter: getFirstLetter(folderName),
-      type: 'folder'
-    }
-
-    const updatedApps = [...currentApps, newApp]
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await persistApps(updatedApps, '添加文件夹')
-
-    let iconPath: string | null = null
-    try {
-      iconPath = await window.electronAPI.extractIcon(folderPath)
-    } catch { /* icon extraction failed, folder still usable */ }
-    if (iconPath) {
-      const withIcon = updatedApps.map(a => a.id === newApp.id ? { ...a, icon: iconPath } : a)
-      appsRef.current = withIcon
-      setApps(withIcon)
-      await persistApps(withIcon, '文件夹图标')
-    }
-  }
-
-  const handleDeleteApp = async (id: string) => {
-    const currentApps = appsRef.current
-    const app = currentApps.find(a => a.id === id)
-    if (app) {
-      const confirmed = await window.electronAPI.confirm(`确定要删除"${app.name}"吗？`)
-      if (!confirmed) return
-    }
-    const updatedApps = currentApps.filter(app => app.id !== id)
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await persistApps(updatedApps, '删除应用')
-  }
-
-  const handleMoveAppToCategory = async (appId: string, categoryId: string) => {
-    const currentApps = appsRef.current
-    const updatedApps = currentApps.map(app =>
-      app.id === appId ? { ...app, categoryId, subcategoryId: null } : app
-    )
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await persistApps(updatedApps, '归类')
-  }
-
-  const parsePathsToApps = async (filePaths: string[], categoryId: string): Promise<ParsedDrop> => {
-    const currentApps = appsRef.current
-    const newApps: AppItem[] = []
-    let duplicateCount = 0
-    let unsupportedCount = 0
-
-    // 统一从 shared/utils 取白名单，不要在这里再维护一份副本
-    const allFileExts = ALL_FILE_EXTS_SET
-
-    if (filePaths.length === 0) return { apps: newApps, duplicateCount, unsupportedCount }
-    const shortcutPaths = [...currentApps.map(app => app.path), ...filePaths]
-      .filter(filePath => filePath.toLowerCase().endsWith('.lnk'))
-    const [pathInfos, resolvedShortcutTargets] = await Promise.all([
-      window.electronAPI.classifyPaths(filePaths),
-      window.electronAPI.resolveShortcutTargets(shortcutPaths)
-    ])
-    const pathInfoByPath = new Map(pathInfos.map(info => [info.path, info]))
-    const shortcutTargets = buildShortcutTargetMap(resolvedShortcutTargets)
-    const knownPaths = new Set(currentApps.map(app => normalizeDroppedPath(app.path)))
-    for (const app of currentApps) {
-      for (const identity of getDroppedPathIdentities(app.path, shortcutTargets)) knownPaths.add(identity)
-    }
-
-    for (const filePath of filePaths) {
-      const identities = getDroppedPathIdentities(filePath, shortcutTargets)
-      if (identities.some(identity => knownPaths.has(identity))) {
-        duplicateCount++
-        continue
-      }
-      const pathKey = identities[0]
-      const info = pathInfoByPath.get(filePath)
-      const ext = info?.extension || getFileExtension(filePath)
-      const isKnownFile = allFileExts.has(ext)
-      const isDirectory = !!info?.isDirectory
-
-      if (info?.isFile && isKnownFile) {
-        const name = getFileNameFromPath(filePath)
-        if (!knownPaths.has(pathKey)) {
-          newApps.push({
-            id: crypto.randomUUID(),
-            name,
-            path: filePath,
-            icon: '',
-            categoryId,
-            subcategoryId: null,
-            pinyin: getPinyin(name),
-            firstLetter: getFirstLetter(name),
-            type: 'app'
-          })
-          for (const identity of identities) knownPaths.add(identity)
-        }
-      } else if (isDirectory) {
-        const parts = filePath.replace(/\\/g, '/').split('/')
-        const folderName = parts[parts.length - 1] || '文件夹'
-        if (!knownPaths.has(pathKey)) {
-          newApps.push({
-            id: crypto.randomUUID(),
-            name: folderName,
-            path: filePath,
-            icon: '',
-            categoryId,
-            subcategoryId: null,
-            pinyin: getPinyin(folderName),
-            firstLetter: getFirstLetter(folderName),
-            type: 'folder'
-          })
-          for (const identity of identities) knownPaths.add(identity)
-        }
-      } else {
-        unsupportedCount++
-      }
-    }
-
-    return { apps: newApps, duplicateCount, unsupportedCount }
-  }
-
-  const showDropResult = ({ apps, duplicateCount, unsupportedCount }: ParsedDrop) => {
-    const items = [
-      ...(apps.length > 0 ? [`新增 ${apps.length} 个项目。`] : []),
-      ...(duplicateCount > 0 ? [`跳过 ${duplicateCount} 个重复项目。`] : []),
-      ...(unsupportedCount > 0 ? [`忽略 ${unsupportedCount} 个不支持的项目。`] : [])
-    ]
-    if (items.length === 0) return
-    showMaintenanceSummary({
-      title: apps.length > 0 ? '拖入完成' : duplicateCount > 0 ? '未添加重复项目' : '没有可导入的项目',
-      items
-    })
-  }
-
-  const getDroppedPathsFromEvent = (dataTransfer: DataTransfer): string[] => getDroppedPaths(
-    Array.from(dataTransfer.files).map(file => ({ path: window.electronAPI.getPathForFile(file) })),
-    dataTransfer.getData('text/uri-list'),
-    dataTransfer.getData('text/plain')
-  )
-
   const handleUpdateConfig = async (newConfig: Config) => {
+    const hotkeysChanged = !!config && (
+      config.hotkey !== newConfig.hotkey || config.searchHotkey !== newConfig.searchHotkey
+    )
     const success = await window.electronAPI.saveConfig(newConfig)
     if (!success) {
-      alert('配置保存失败。若刚修改了快捷键，它可能已被其他程序占用；原配置已恢复。')
+      /* 主进程对多种失败都只回 false，这里按已知条件给出更准确的解释。
+         以前一律说成「快捷键被占用」——数据文件损坏、磁盘写失败时会把用户引向错误方向。 */
+      const reason = hotkeysChanged
+        ? '新的全局快捷键可能已被其它程序占用，已恢复原快捷键。'
+        : (dataHealth?.corruptedNow.length ?? 0) > 0
+          ? '数据文件已损坏。为避免覆盖现有数据，本次保存已被拒绝，请先在数据健康面板中恢复备份。'
+          : '写入磁盘失败，请检查数据目录权限或磁盘空间。'
+      alert(`配置保存失败：${reason}`)
       return false
     }
     setConfig(newConfig)
@@ -825,7 +799,7 @@ function App() {
       window.electronAPI.saveCategories({ categories: previousCategories, subcategories: previousSubcategories }),
       window.electronAPI.saveApps({ apps: previousApps })
     ])
-    alert('删除操作保存失败，原数据已恢复，请重试。')
+    alert('删除保存失败，已恢复原数据，请重试。')
     return false
   }
 
@@ -850,9 +824,16 @@ function App() {
 
   }
 
-  const handleUpdateCategory = async (id: string, name: string, icon: string) => {
+  const handleUpdateCategory = async (
+    id: string,
+    name: string,
+    icon: string,
+    appearance?: { fontSize?: number; itemHeight?: number; iconSize?: number }
+  ) => {
+    /* 外观字段（P2-3）显式覆盖：传了 undefined 就写 undefined，
+       JSON 序列化时会被丢掉 = 回到"用默认"，这样"清空输入框"才能真的恢复默认。 */
     const updatedCategories = categories.map(cat => 
-      cat.id === id ? { ...cat, name, icon } : cat
+      cat.id === id ? { ...cat, name, icon, ...(appearance ?? {}) } : cat
     )
     categoriesRef.current = updatedCategories
     setCategories(updatedCategories)
@@ -883,12 +864,15 @@ function App() {
     await persistCategories(categories, updated, '修改子分类')
   }
 
-  const handleMoveAppToSubcategory = async (appId: string, subcategoryId: string | null) => {
-    const currentApps = appsRef.current
-    const updatedApps = currentApps.map(a => a.id === appId ? { ...a, subcategoryId } : a)
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await persistApps(updatedApps, '归类')
+  /* 改挂父分类。只动 parentId，**不动它下面的项目**——项目归属看的是 subcategoryId，
+     子分类换到哪个分类下，项目就跟着出现在那个分类里，这正是用户期望的。
+     （删掉再重建则相反：项目的 subcategoryId 会被清空，归属丢失。） */
+  const handleMoveSubcategory = async (id: string, parentId: string) => {
+    const target = subcategories.find(s => s.id === id)
+    if (!target || target.parentId === parentId) return
+    const updated = subcategories.map(s => s.id === id ? { ...s, parentId } : s)
+    setSubcategories(updated)
+    await persistCategories(categories, updated, '移动子分类')
   }
 
   const handleReorderSubcategory = async (sourceId: string, targetId: string, insertAfter: boolean) => {
@@ -923,7 +907,7 @@ function App() {
 
   const handleContextMenuOpenAsAdmin = (app: AppItem) => {
     if (app.type !== 'app') return
-    void window.electronAPI.openAppAsAdmin(app.path)
+    void launchAppAsAdmin(app)
   }
 
   const handleContextMenuCopyPath = async (app: AppItem) => {
@@ -934,28 +918,81 @@ function App() {
     })
   }
 
-  const handleContextMenuMove = async (app: AppItem, target: MoveTarget) => {
-    if (target.type === 'subcategory') {
-      await handleMoveAppToSubcategory(app.id, target.id)
+  /**
+   * 复制链接（网址）/ 正文（文本）/ 清单（文本·待办）——
+   * 三者在右键菜单里是同一个入口，只是取的值不同。
+   */
+  const handleContextMenuCopyContent = async (app: AppItem) => {
+    const isNote = app.type === 'note'
+    const value = isNote
+      /* 待办导出成 Markdown 任务列表（`- [x]` / `- [ ]`）：粘到任何编辑器都看得懂，
+         也还能被再解析回来。复制成纯文本会丢完成状态，复制成 JSON 又没人看得懂。 */
+      ? (app.noteKind === 'todo'
+        ? formatTodosAsMarkdown(app.todoItems ?? [])
+        : (app.noteContent || ''))
+      : app.path
+    if (!value.trim()) {
+      showMaintenanceSummary({ title: '无可复制的内容', items: ['该项目暂无内容。'] })
       return
     }
-    if (target.type === 'none') {
-      const updatedApps = appsRef.current.map(a =>
-        a.id === app.id ? { ...a, categoryId: null, subcategoryId: null } : a
-      )
-      appsRef.current = updatedApps
-      setApps(updatedApps)
-      await persistApps(updatedApps, '归类')
-      return
-    }
-    await handleMoveAppToCategory(app.id, target.id)
+    const success = await window.electronAPI.copyTextToClipboard(value)
+    showMaintenanceSummary({
+      title: success ? (isNote ? '内容已复制' : '链接已复制') : '复制失败',
+      items: [success ? value : '无法写入剪贴板，请重试。']
+    })
   }
 
-  const handleContextMenuHide = async (app: AppItem) => {
-    const updatedApps = appsRef.current.map(a => a.id === app.id ? { ...a, hidden: true } : a)
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await persistApps(updatedApps, '隐藏')
+  /**
+   * 待办：勾选 / 取消勾选。
+   *
+   * 点一下就落盘——勾选是待办里最高频的动作，要是每次都得进编辑弹窗再保存，
+   * 那就不叫待办了。改条目文字、增删条目仍然走编辑弹窗，职责分开。
+   */
+  const handleToggleTodo = useCallback((app: AppItem, itemId: string) => {
+    void mutateApps(
+      list => list.map(item => (
+        item.id === app.id ? { ...item, todoItems: toggleTodoItem(item.todoItems ?? [], itemId) } : item
+      )),
+      '待办清单'
+    )
+  }, [mutateApps])
+
+  /** 待办：一键清掉所有已完成条目，未完成的保持原顺序 */
+  const handleClearCompletedTodos = useCallback((app: AppItem) => {
+    void mutateApps(
+      list => list.map(item => (
+        item.id === app.id ? { ...item, todoItems: clearCompletedTodos(item.todoItems ?? []) } : item
+      )),
+      '待办清单'
+    )
+  }, [mutateApps])
+
+  const handleContextMenuOpenWithBrowser = async (app: AppItem, browserId: string) => {
+    const browser = (config?.browsers || []).find(item => item.id === browserId)
+    if (!browser) return
+    const success = await window.electronAPI.openUrlWithBrowser({ url: app.path, browserPath: browser.path })
+    if (!success) {
+      showMaintenanceSummary({
+        title: '打开失败',
+        items: [`无法用「${browser.name}」打开，请检查该浏览器在设置中的路径是否有效。`]
+      })
+    }
+  }
+
+  /* 卡片点击的最终分派。
+     组合与文本需要界面状态（确认面板 / 阅读面板），交给各自的入口；
+     其余类型落到 useAppCrud 的 handleOpenApp——它按 type 分派
+     openApp / openFolder / openSteam / openUrl。 */
+  const openCardTarget = (app: AppItem) => {
+    if (app.type === 'group') {
+      requestLaunchGroup(app)
+      return
+    }
+    if (app.type === 'note') {
+      setViewingNoteId(app.id)
+      return
+    }
+    void handleOpenApp(app)
   }
 
   const handleCardClick = (e: React.MouseEvent, app: AppItem) => {
@@ -988,44 +1025,7 @@ function App() {
       return
     }
     if (index !== -1) lastClickedIndexRef.current = index
-    void handleOpenApp(app)
-  }
-
-  const batchMoveToCategory = async (categoryId: string) => {
-    if (!categoryId || selectedAppIds.length === 0) return
-    const ids = new Set(selectedAppIds)
-    const updatedApps = appsRef.current.map(a => ids.has(a.id) ? { ...a, categoryId, subcategoryId: null } : a)
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await persistApps(updatedApps, '归类')
-    clearAppSelection()
-  }
-
-  const batchHideApps = async () => {
-    if (selectedAppIds.length === 0) return
-    const ids = new Set(selectedAppIds)
-    const updatedApps = appsRef.current.map(a => ids.has(a.id) ? { ...a, hidden: true } : a)
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await persistApps(updatedApps, '隐藏')
-    clearAppSelection()
-  }
-
-  const batchDeleteApps = async () => {
-    if (selectedAppIds.length === 0) return
-    const confirmed = await window.electronAPI.confirm(`确定删除选中的 ${selectedAppIds.length} 个项目吗？（仅从列表移除，不删除文件）`)
-    if (!confirmed) return
-    captureUndoSnapshot('批量删除')
-    const ids = new Set(selectedAppIds)
-    const updatedApps = appsRef.current.filter(a => !ids.has(a.id))
-    appsRef.current = updatedApps
-    setApps(updatedApps)
-    await persistApps(updatedApps, '批量删除')
-    showMaintenanceSummary({
-      title: '批量删除完成',
-      items: [`已移除 ${ids.size} 个项目。`]
-    })
-    clearAppSelection()
+    openCardTarget(app)
   }
 
   const handleCardContextMenu = (e: React.MouseEvent, app: AppItem) => {
@@ -1053,7 +1053,7 @@ function App() {
   const handleCardKeyDown = (e: React.KeyboardEvent, app: AppItem) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
-      void handleOpenApp(app)
+      openCardTarget(app)
     } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault()
       moveCardFocus(app.id, e.key)
@@ -1064,19 +1064,133 @@ function App() {
     }
   }
 
+  /* ── 收纳格 ── */
+
+  const handleCreateCollection = async () => {
+    const created = await createCollection(`收纳格 ${collections.length + 1}`, activeCategory)
+    // 新建后立刻进入行内重命名，用户不用再点一次铅笔
+    showCopyToast(`已创建「${created.name}」，点击标题即可重命名`)
+  }
+
+  const handleRenameCollection = (id: string, name: string) => {
+    void renameCollection(id, name)
+  }
+
+  const handleToggleCollectionCollapsed = (id: string) => {
+    void toggleCollectionCollapsed(id)
+  }
+
+  const handleDeleteCollection = async (id: string) => {
+    const target = collectionsRef.current.find(item => item.id === id)
+    const confirmed = await window.electronAPI.confirm(
+      `确定删除收纳格「${target?.name ?? ''}」吗？\n格内项目不会被删除，只会回到原分类。`
+    )
+    if (!confirmed) return
+    await deleteCollection(id)
+  }
+
+  /* 把卡片从收纳格里摘出来，回到它本来所属的分类网格里。
+     收纳格只影响"在哪里显示"，所以这一步**不动 apps.json**，项目本身毫无变化。 */
+  const handleRemoveFromCollection = async (app: AppItem) => {
+    await removeAppsFromCollections([app.id])
+    showCopyToast(`已将「${app.name}」移出收纳格`)
+  }
+
+  /* ── 关联文件夹 ── */
+
+  /** 同步条目是只读的：能做的只有"在这个文件夹里不显示" */
+  const handleHideSyncedEntry = async (app: AppItem) => {
+    const parsed = parseSyncedAppId(app.id)
+    if (!parsed) return
+    await hideSyncedEntry(parsed.categoryId, parsed.path)
+    showMaintenanceSummary({
+      title: '已在关联文件夹中隐藏',
+      items: [`「${app.name}」不会再出现在这个关联文件夹中，磁盘上的文件未受影响。`]
+    })
+  }
+
+  const handleDeleteSyncedEntry = async (app: AppItem) => {
+    const confirmed = await window.electronAPI.confirm(
+      `「${app.name}」来自关联文件夹，不能从磁盘删除。\n改为在关联文件夹中隐藏它吗？`
+    )
+    if (!confirmed) return
+    await handleHideSyncedEntry(app)
+  }
+
+  const handleBindFolder = async (category: Category) => {
+    /* 走 safePickFolder 而不是裸 selectFolder：主进程异常 / 旧版 preload 时
+       await 会抛未捕获 rejection，表现为"点了没反应"，而单测 mock 永远 resolve。 */
+    const folderPath = await safePickFolder()
+    if (!folderPath) return
+
+    /* 选完目录就直接绑定，**不再弹任何确认框**：默认只显示这一层。
+       以前这里拿 confirm 问"是否同时同步子文件夹内容"，那是非题里塞了三个选项——
+       "取消"同时背着"不含子文件夹"和"算了不弄了"两个意思。
+       改成三选一之后问题没消失，只是换了个地方：用户还是得先做一道选择题。
+       既然绝大多数人只想要本层，就别问了；想连子文件夹一起显示，
+       去「管理分类」里勾一下（改完立刻重扫，不用重新选目录）。 */
+    const snapshot = await bindFolder(category.id, folderPath, false)
+    const entryCount = snapshot?.entries.length ?? 0
+    showMaintenanceSummary({
+      title: '已关联文件夹',
+      items: [
+        /* 只说"关联到哪了"。刻意不写"仅当前层"——绑定时根本没让用户做选择，
+           提示里再提一句范围，等于把一件用户没参与的决策摆到眼前。
+           想改范围的人自己会去「管理分类」里找那个复选框。 */
+        `「${category.name}」已关联到「${folderPath}」，内容将随该文件夹自动更新。`,
+        /* 绑定完必须给个明确结果：目录是空的、或者读不出来，都比"一片空白"更需要说清楚。 */
+        snapshot?.error
+          ? '未能读取该文件夹，原因见上方横幅；处理后可点击「重试」。'
+          : entryCount === 0
+            ? '已同步 0 个条目：该文件夹当前为空。'
+            : `已同步 ${entryCount} 个条目。`
+      ]
+    })
+  }
+
+  /* 「含子文件夹」的开关放在「管理分类」里，而不是绑定时问一次。
+     改完立刻重扫，不需要重新选目录。 */
+  const handleSetIncludeSubdirs = async (category: Category, includeSubdirs: boolean) => {
+    const link = category.linkFolder
+    if (!link) return
+    await updateLinkFolder(category.id, { ...link, includeSubdirs })
+    await Promise.resolve()
+    await syncCategory(category.id, true)
+  }
+
+  const handleUnbindFolder = async (category: Category) => {
+    const confirmed = await window.electronAPI.confirm(
+      `解除「${category.name}」的文件夹关联？\n同步出来的条目会消失，磁盘上的文件不受影响。`
+    )
+    if (!confirmed) return
+    await unbindFolder(category.id)
+  }
+
+  /* 应用被删除后清掉收纳格里的残留 id，否则会留下永远点不动的空位 */
+  useEffect(() => {
+    void pruneMissingMembers(apps.map(app => app.id))
+  }, [apps, pruneMissingMembers])
+
   /* AppCard 是 memo 组件，网格里可能有几百个实例。上面这些回调若每次渲染都是新引用，
      memo 就会被完全击穿——拖拽时 dragover 高频 setState，会让每张卡片全量重渲染
      （这正是卡顿的根因）。这里统一换成标识稳定的版本，内部调用的仍是最新实现。 */
   const cardOnOpen = useStableCallback(handleCardClick)
   const cardOnEdit = useStableCallback((app: AppItem) => {
+    if (app.isSynced) return
     setEditingApp(app)
     setShowEditApp(true)
   })
-  const cardOnDelete = useStableCallback((app: AppItem) => { void handleDeleteApp(app.id) })
+  const cardOnDelete = useStableCallback((app: AppItem) => {
+    // 同步条目删不掉磁盘上的文件，退化成"在这个文件夹里隐藏"
+    if (app.isSynced) { void handleDeleteSyncedEntry(app); return }
+    void handleDeleteApp(app.id)
+  })
   const cardOnSendFile = useStableCallback(handleSendFile)
   const cardOnMouseDown = useStableCallback(handleCardMouseDown)
   const cardOnContextMenu = useStableCallback(handleCardContextMenu)
   const cardOnKeyDown = useStableCallback(handleCardKeyDown)
+  /* 空状态的「关联文件夹…」按钮。AppGrid 是 memo，回调引用必须稳定。 */
+  const bindFolderStable = useStableCallback(handleBindFolder)
 
   const handleSaveAutoCategoryRules = async (rules: AutoCategoryRule[]) => {
     if (!config) return false
@@ -1103,16 +1217,21 @@ function App() {
        清理逻辑全部失效、拖拽状态永久错乱（排序会整个坏掉）。
        要表达"已被拖走"，改用 CSS 把源卡片画成虚线空框（见 index.css）。 */
     const groups: { sub: Subcategory | null; apps: AppItem[] }[] = []
-    const noSub = sortAppsForDisplay(filteredApps.filter(a => !a.subcategoryId))
+    /* 已收进收纳格的项目不再出现在子分类分组里——同一张卡片画两次，
+       改一个另一个不跟着变，用户会以为数据坏了。
+       ⚠️ 这里过滤掉的是"已经在收纳格里的"，不是"正在被拖的"——
+       绝不能把正在拖拽的源卡片移出 DOM（dragend 会丢，拖拽状态永久错乱）。 */
+    const gridApps = filteredApps.filter(a => !groupedAppIds.has(a.id))
+    const noSub = sortAppsForDisplay(gridApps.filter(a => !a.subcategoryId))
     if (noSub.length > 0) groups.push({ sub: null, apps: noSub })
     for (const s of displaySubcategories) {
-      const sApps = sortAppsForDisplay(filteredApps.filter(a => a.subcategoryId === s.id))
+      const sApps = sortAppsForDisplay(gridApps.filter(a => a.subcategoryId === s.id))
       // 拖动应用时把"还没有任何应用"的子分类也渲染出来：
       // 否则网格里根本没有这一块，用户没法把应用归到空子分类上。
       if (sApps.length > 0 || isDraggingApp) groups.push({ sub: s, apps: sApps })
     }
     return groups
-  }, [filteredApps, displaySubcategories, sortAppsForDisplay, isDraggingApp])
+  }, [filteredApps, groupedAppIds, displaySubcategories, sortAppsForDisplay, isDraggingApp])
 
   useEffect(() => {
     setActiveSubcategoryId(null)
@@ -1206,7 +1325,8 @@ function App() {
               : 'bg-white/50 text-slate-700 hover:bg-brand-500 hover:text-white hover:border-brand-500 border border-brand-100/40'
       }`}
     >
-      {sub.icon} {sub.name}
+      <CategoryIcon icon={sub.icon} size={14} className="shrink-0" />
+      <span>{sub.name}</span>
     </button>
   )
 
@@ -1245,7 +1365,7 @@ function App() {
 
     if (steamMatch) {
       if (categoriesRef.current.length === 0) {
-        alert('请先创建一个分类，然后再添加应用。')
+        alert('请先创建一个分类，再添加项目。')
         return
       }
 
@@ -1267,18 +1387,15 @@ function App() {
         firstLetter: getFirstLetter(gameName),
         type: 'steam'
       }
-      const updatedApps = [...appsRef.current, newApp]
-      appsRef.current = updatedApps
-      setApps(updatedApps)
-      await persistApps(updatedApps, 'Steam 游戏')
+      await commitApps([...appsRef.current, newApp], 'Steam 游戏')
 
       // Extract Steam icon (from local cache or Steam CDN)
       const iconPath = await window.electronAPI.extractSteamIcon(steamMatch.steamUrl)
       if (iconPath) {
-        const withIcon = updatedApps.map(a => a.id === newApp.id ? { ...a, icon: iconPath } : a)
-        appsRef.current = withIcon
-        setApps(withIcon)
-        await persistApps(withIcon, 'Steam 图标')
+        await commitApps(
+          appsRef.current.map(a => (a.id === newApp.id ? { ...a, icon: iconPath } : a)),
+          'Steam 图标'
+        )
       }
       return
     }
@@ -1287,7 +1404,7 @@ function App() {
     if (filePaths.length === 0) return
 
     if (categoriesRef.current.length === 0) {
-      alert('请先创建一个分类，然后再添加应用。')
+      alert('请先创建一个分类，再添加项目。')
       return
     }
 
@@ -1296,38 +1413,10 @@ function App() {
     const newApps = result.apps
 
     if (newApps.length > 0) {
-      const updatedApps = [...appsRef.current, ...newApps]
-      appsRef.current = updatedApps
-      setApps(updatedApps)
-      await persistApps(updatedApps, '导入')
+      await commitApps([...appsRef.current, ...newApps], '导入')
       await extractIconsForApps(newApps)
     }
     showDropResult(result)
-  }
-
-  const handleReorderApp = async (sourceId: string, targetId: string, insertAfter = false) => {
-    const currentApps = appsRef.current
-    const sourceIndex = currentApps.findIndex(a => a.id === sourceId)
-    const targetIndex = currentApps.findIndex(a => a.id === targetId)
-    if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return
-
-    // 落点决定归属：拖到哪个子分类的应用旁边，就归入那个子分类。
-    // 以前只挪数组位置不改 subcategoryId，导致应用排到了新位置却仍显示在原分组里，
-    // 看上去像"拖过去又被弹回来"。
-    const nextSubcategoryId = currentApps[targetIndex].subcategoryId ?? null
-    const groupChanged = (currentApps[sourceIndex].subcategoryId ?? null) !== nextSubcategoryId
-
-    // 非手动排序：顺序由排序规则决定，拖拽只用来改归属
-    if ((config?.ui?.sortMode || 'manual') !== 'manual') {
-      if (groupChanged) await handleMoveAppToSubcategory(sourceId, nextSubcategoryId)
-      return
-    }
-
-    const updated = computeReorder(currentApps, sourceId, targetId, insertAfter, nextSubcategoryId)
-    if (updated === null) return
-    appsRef.current = updated
-    setApps(updated)
-    await persistApps(updated, '排序')
   }
 
   /* 每次渲染后把最新的实现放进 ref，供只挂一次的右键拖拽监听取用。
@@ -1336,14 +1425,17 @@ function App() {
     leftDragActionsRef.current = {
       reorder: handleReorderApp,
       toCategory: handleMoveAppToCategory,
-      toSubcategory: handleMoveAppToSubcategory
+      toSubcategory: handleMoveAppToSubcategory,
+      toCollection: async (appId: string, collectionId: string) => {
+        await addAppsToCollection(collectionId, [appId])
+      }
     }
   })
 
   const handleExportDiagnostics = async () => {
     const result = await window.electronAPI.exportDiagnostics()
     if (result.success) {
-      alert(`诊断日志已导出：\n${result.filePath}`)
+      alert(`诊断日志已导出到：\n${result.filePath}`)
     } else if (result.error) {
       alert(`导出诊断日志失败：${result.error}`)
     }
@@ -1405,6 +1497,118 @@ function App() {
     })
   }, [runUiCommand])
 
+  /* 暂停状态变化（托盘菜单 / 设置页按钮 / 暂停热键）→ 同步本地展示。
+     配置里也可能带着 launchPaused，loadData 后一并刷新。 */
+  useEffect(() => {
+    const off = window.electronAPI.onLaunchPausedChanged((paused) => setLaunchPaused(paused))
+    return off
+  }, [])
+  useEffect(() => {
+    if (config) setLaunchPaused(config.launchPaused === true)
+  }, [config])
+
+  /* 搜索窗请求"在主界面中显示"某个项目：切到所属分类、清空子分类，并记下卡片 id。
+     真正的滚动与高亮在下面的 effect 里等分类切换渲染完成后做。 */
+  useEffect(() => {
+    const off = window.electronAPI.onLocateApp(({ appId, categoryId }) => {
+      if (categoryId) {
+        setActiveCategory(categoryId)
+        activeCategoryRef.current = categoryId
+      }
+      setActiveSubcategoryId(null)
+      pendingLocateAppIdRef.current = appId
+      setLocateNonce((n) => n + 1)
+    })
+    return off
+  }, [])
+
+  /* 分类切换 / 数据刷新后，若有待定位的卡片，滚动到它并临时高亮。
+     高亮用 CSS 类 .locate-highlight（见 index.css），1.8s 后自动移除。 */
+  useEffect(() => {
+    const appId = pendingLocateAppIdRef.current
+    if (!appId) return
+    pendingLocateAppIdRef.current = null
+    const raf = requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`[data-app-id="${appId}"]`)
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('locate-highlight')
+      window.setTimeout(() => el.classList.remove('locate-highlight'), 1800)
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [activeCategory, apps, locateNonce])
+
+  /* 全局快捷键注册失败时，主进程会推一条 hotkey-issue 过来——最常见的是启动时
+     用户设的组合已经被别的程序占了。以前这种情况只有主进程的 console.error，
+     界面上毫无反馈，用户只能自己猜"为什么按了没反应"。
+     用自增 id 去重：补查通道和事件通道可能各送一次同一件事。 */
+  const handledHotkeyIssueIdRef = useRef(0)
+  /* 最近一次热键提示。除了弹 toast，还要把「实际生效的组合」传给设置页——
+     用户在那里改键时得看到真相，否则「设置里写着 A、实际是 B」会让他反复改也找不到原因。 */
+  const [hotkeyIssue, setHotkeyIssue] = useState<HotkeyIssue | null>(null)
+  const notifyHotkeyIssue = useStableCallback((issue: HotkeyIssue) => {
+    if (issue.id <= handledHotkeyIssueIdRef.current) return
+    handledHotkeyIssueIdRef.current = issue.id
+    setHotkeyIssue(issue)
+
+    /* 旧默认热键迁移：与「注册失败」是两回事，措辞必须分开，
+       否则用户会以为自己的快捷键被别的程序占用了。
+       两个热键的迁移原因不同，所以两条文案也分开写。 */
+    if (issue.migratedFrom || issue.searchMigratedFrom) {
+      const items: string[] = []
+      if (issue.migratedFrom) {
+        items.push(`${issue.migratedFrom} 是 Windows 系统保留组合，无法注册。`)
+        items.push(`默认全局快捷键已改为 ${issue.effectiveHotkey ?? DEFAULT_HOTKEY}，可在设置中修改。`)
+      }
+      if (issue.searchMigratedFrom) {
+        items.push(
+          `原搜索快捷键 ${issue.searchMigratedFrom} 会被本程序独占，导致其它软件无法使用该组合。`
+        )
+        items.push(
+          `搜索快捷键已改为 ${issue.effectiveSearchHotkey ?? DEFAULT_SEARCH_HOTKEY}，可在设置中修改。`
+        )
+      }
+      showMaintenanceSummary({ title: '默认全局快捷键已更新', items })
+      return
+    }
+
+    const occupied = issue.keys.join('、')
+    if (issue.recovered && issue.effectiveHotkey) {
+      showMaintenanceSummary({
+        title: '已自动改用备用组合',
+        items: [
+          `${occupied} 注册失败，可能已被其它程序占用。`,
+          `已临时改用 ${issue.effectiveHotkey}；可在设置中更换为未被占用的组合。`
+        ]
+      })
+      return
+    }
+
+    showMaintenanceSummary({
+      title: '全局快捷键未生效',
+      items: [
+        `注册失败的组合：${occupied}。`,
+        '请在设置中更换为未被占用的组合。'
+      ]
+    })
+  })
+
+  useEffect(() => {
+    let disposed = false
+    const handle = (issue: HotkeyIssue | null) => {
+      if (!disposed && issue) notifyHotkeyIssue(issue)
+    }
+    // 挂载后补查一次：注册失败可能发生在页面加载完成之前，那时事件可能没送到
+    void window.electronAPI.getHotkeyStatus()
+      .then(handle)
+      .catch(() => { /* 查不到不影响使用，静默 */ })
+    const off = window.electronAPI.onHotkeyIssue(handle)
+    return () => {
+      disposed = true
+      off()
+    }
+  }, [notifyHotkeyIssue])
+
   const toolbarIconOnly = config?.ui?.toolbarIconOnly !== false
   const activeLayout = config?.ui?.layout || 'horizon-workspace'
   const sidebarWidth = sidebarWidthDraft ?? config?.ui?.sidebarWidth ?? 240
@@ -1429,6 +1633,44 @@ function App() {
     return success
   }
 
+  /* 侧边栏宽度拖拽。两个入口共用这一套（见 useSidebarResize 的说明）：
+     右边缘的手柄按下即生效；侧边栏任意位置则要横向移动超过阈值。 */
+  const { begin: beginSidebarResize, consumeSuppressedClick } = useSidebarResize({
+    value: sidebarWidth,
+    onChange: setSidebarWidthDraft,
+    onCommit: width => void commitSidebarWidth(width)
+  })
+
+  /* 把"整个侧边栏"变成拖拽热区。
+     判定用几何而不是 closest('.category-nav')：两种布局下侧边栏的组成并不一样——
+     command-rail 只有 .category-nav（row 2/5），studio-split 是 .category-nav（row 2）
+     接 .subcategory-nav（row 3/5）。但两者都是**第一列**，宽度就是 --sidebar-width，
+     上下界是 header 与 footer 之间。按这个框判定，布局差异被完全抹平。
+
+     之前热区只有右边缘 14px、且 grid-row 停在 2/4（侧边栏实际到第 4 行结束），
+     侧边栏最高那一段根本没有热区——这就是"位置变了"的来源。 */
+  const handleShellPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    /* 横向工作区没有侧边栏，sidebarWidth 对它是一份死配置 */
+    if (activeLayout === 'horizon-workspace') return
+    /* 子分类按钮带 HTML5 draggable（拖拽排序），在它上面按下是想排序，不是改宽度 */
+    if ((event.target as HTMLElement).closest('[draggable="true"]')) return
+    const shell = shellRef.current
+    if (!shell) return
+
+    const shellRect = shell.getBoundingClientRect()
+    const header = shell.querySelector('.app-header')
+    const footer = shell.querySelector('.app-footer')
+    const top = header ? header.getBoundingClientRect().bottom : shellRect.top
+    const bottom = footer ? footer.getBoundingClientRect().top : shellRect.bottom
+
+    const { clientX, clientY } = event
+    if (clientX > shellRect.left + sidebarWidth) return
+    if (clientY < top || clientY > bottom) return
+
+    beginSidebarResize(event, { threshold: SIDEBAR_DRAG_THRESHOLD })
+  }
+
   /* 把维护模块、底层 CRUD 的最新实现写进 ref，供 useUndoSnapshot / useCategoryDialogs
      在用户触发时读取。它们在本函数更靠后才就绪，不能用闭包直接捕获（会踩 TDZ），
      因此走 ref 转发——和 leftDragActionsRef 同一套路。每轮渲染都刷新，保证拿到最新闭包。 */
@@ -1445,18 +1687,37 @@ function App() {
 
   return (
     <div
+      ref={shellRef}
       className={`app-shell layout-${activeLayout} flex flex-col h-screen relative theme-${config?.ui?.theme || 'aurora'}`}
       /* 拖拽进行中给 CSS 一个总开关：冻结卡片 hover 的过渡与模糊变化。
          hover 过渡期间每帧都要重绘该卡片（含 backdrop-filter 重新算模糊），
          鼠标快速划过一排卡片时会有十几条这样的动画同时在跑，是掉帧主力之一。 */
       data-drag-active={isDragEngaged || draggedSubId !== null ? 'true' : undefined}
+      data-bg-kind={background && background.kind !== 'none' ? background.kind : undefined}
       style={shellStyle}
+      onPointerDown={handleShellPointerDown}
+      /* 在侧边栏里拖完宽度后，浏览器还会补一次 click——那次 click 的语义是
+         "切换分类"，不吞掉就会出现"拖完宽度顺带换了分类"。捕获阶段拦，避免
+         分类按钮的 onClick 先跑。 */
+      onClickCapture={event => {
+        if (!consumeSuppressedClick()) return
+        event.preventDefault()
+        event.stopPropagation()
+      }}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       onDrop={handleDrop}
     >
+      {/* 自定义背景（P2）：背景层 + 暗化遮罩层。
+          两者都是绝对定位子项，脱离 .app-shell 那套显式网格，不必补 grid-row。 */}
+      {background && background.kind !== 'none' && (
+        <>
+          <div className="app-bg-layer" aria-hidden="true" />
+          <div className="app-bg-dim" aria-hidden="true" />
+        </>
+      )}
       {/* Aurora background orbs */}
       <div className="aurora-bg">
         <div className="aurora-orb aurora-orb--indigo" />
@@ -1470,6 +1731,7 @@ function App() {
         value={sidebarWidth}
         onChange={setSidebarWidthDraft}
         onCommit={(width) => void commitSidebarWidth(width)}
+        begin={beginSidebarResize}
       />
 
       <HeaderOverview
@@ -1478,6 +1740,7 @@ function App() {
         handleAddFolder={handleAddFolder}
         setShowSmartOrganize={setShowSmartOrganize}
         setShowSettings={setShowSettings}
+        setShowUsageInsights={setShowUsageInsights}
         updateState={updateState}
         updateVersion={updateVersion}
         updateProgress={updateProgress}
@@ -1519,7 +1782,22 @@ function App() {
         subcategoryBarRef={subcategoryBarRef}
         handleSubcategoryWheel={handleSubcategoryWheel}
         displaySubcategories={displaySubcategories}
+        syncingCategoryIds={syncingCategoryIds}
+        onCreateCollection={handleCreateCollection}
+        onManageCategories={openCategoryManager}
       />
+
+      {activeCategoryObject?.linkFolder && (
+        <FolderSyncBanner
+          folderPath={activeCategoryObject.linkFolder.path}
+          error={errorsByCategory[activeCategoryObject.id] ?? null}
+          syncing={syncingCategoryIds.includes(activeCategoryObject.id)}
+          entryCount={syncedApps.filter(app => app.categoryId === activeCategoryObject.id).length}
+          onResync={() => void syncCategory(activeCategoryObject.id, true)}
+          onRebind={() => void handleBindFolder(activeCategoryObject)}
+          onUnbind={() => void handleUnbindFolder(activeCategoryObject)}
+        />
+      )}
 
       <AppGrid
         dropZoneRef={dropZoneRef}
@@ -1527,6 +1805,11 @@ function App() {
         activeCategory={activeCategory}
         dragOverGroupSubId={dragOverGroupSubId}
         groupedApps={groupedApps}
+        collectionGroups={collectionGroups}
+        dragOverCollectionId={dragOverCollectionId}
+        onToggleCollectionCollapse={handleToggleCollectionCollapsed}
+        onRenameCollection={handleRenameCollection}
+        onDeleteCollection={handleDeleteCollection}
         config={config}
         draggedAppId={draggedAppId}
         dragOverAppId={dragOverAppId}
@@ -1540,15 +1823,24 @@ function App() {
         cardOnContextMenu={cardOnContextMenu}
         cardOnKeyDown={cardOnKeyDown}
         filteredApps={filteredApps}
+        /* 分类条目高度（P2-3）：取当前分类的 itemHeight；"全部"视图没有分类，走自适应 */
+        activeItemHeight={categories.find(c => c.id === activeCategory)?.itemHeight}
+        activeCategoryObject={activeCategoryObject}
+        onBindFolder={bindFolderStable}
       />
 
 
       <SelectionBar
         selectedAppIds={selectedAppIds}
-        batchMoveToCategory={batchMoveToCategory}
         categories={categories}
+        subcategories={displaySubcategories}
+        visibleAppIds={visibleAppIds}
+        batchMoveToCategory={batchMoveToCategory}
+        batchMoveToSubcategory={batchMoveToSubcategory}
         batchHideApps={batchHideApps}
+        batchRestoreApps={batchRestoreApps}
         batchDeleteApps={batchDeleteApps}
+        toggleSelectAll={toggleSelectAll}
         clearAppSelection={clearAppSelection}
       />
 
@@ -1568,6 +1860,7 @@ function App() {
           categories={categories}
           subcategories={subcategories}
           onCreateCategory={createCategoryFromMenu}
+          onManageCategories={openCategoryManager}
           onSelectCategory={category => {
             setActiveCategory(category.id)
             activeCategoryRef.current = category.id
@@ -1582,7 +1875,14 @@ function App() {
             setCategoryContextMenu(null)
           }}
           onRenameSubcategory={renameSubcategoryFromMenu}
+          onMoveSubcategory={(subcategory, parentId) => {
+            void handleMoveSubcategory(subcategory.id, parentId)
+            setCategoryContextMenu(null)
+          }}
           onDeleteSubcategory={deleteSubcategoryFromMenu}
+          onBindFolder={category => void handleBindFolder(category)}
+          onResyncFolder={category => void syncCategory(category.id, true)}
+          onUnbindFolder={category => void handleUnbindFolder(category)}
         />
       )}
 
@@ -1591,15 +1891,41 @@ function App() {
           menu={appContextMenu}
           categories={categories}
           subcategories={subcategories}
-          onOpen={app => void handleOpenApp(app)}
+          browsers={config?.browsers || []}
+          onOpen={app => openCardTarget(app)}
           onOpenAsAdmin={handleContextMenuOpenAsAdmin}
+          onOpenWithSystem={app => void handleOpenAppWithSystem(app)}
           onLocate={app => { void window.electronAPI.showItemInFolder(app.path) }}
           onCopyPath={app => void handleContextMenuCopyPath(app)}
+          onCopyLink={app => void handleContextMenuCopyContent(app)}
+          onOpenWithBrowser={(app, browserId) => void handleContextMenuOpenWithBrowser(app, browserId)}
           onMoveTo={(app, target) => void handleContextMenuMove(app, target)}
           onHide={app => void handleContextMenuHide(app)}
+          onHideInFolder={app => void handleHideSyncedEntry(app)}
           onEdit={app => { setEditingApp(app); setShowEditApp(true) }}
           onDelete={app => void handleDeleteApp(app.id)}
           onClose={() => setAppContextMenu(null)}
+          collectionName={contextMenuCollection?.name ?? null}
+          onRemoveFromCollection={app => void handleRemoveFromCollection(app)}
+        />
+      )}
+
+      {/* 管理分类：图标 / 名称 / 外观 / 关联文件夹。
+          这个组件此前只写好了、没有任何渲染点——分类字号与条目高度（P2-3）、
+          以及「关联文件夹」都做在里面，等于整块功能不可达。入口见侧边栏的
+          「管理分类」按钮与分类右键菜单。 */}
+      {categoryManagerOpen && (
+        <CategoryManagerModal
+          categories={categories}
+          onClose={closeCategoryManager}
+          onAdd={(name, icon) => void handleAddCategory(name, icon)}
+          /* keepApps = true：分类下的项目保留并回到「全部」视图，与弹窗里的确认文案一致 */
+          onDelete={id => void handleDeleteCategory(id, true)}
+          onUpdate={(id, name, icon, appearance) => void handleUpdateCategory(id, name, icon, appearance)}
+          onBindFolder={category => void handleBindFolder(category)}
+          onResyncFolder={category => void syncCategory(category.id, true)}
+          onUnbindFolder={category => void handleUnbindFolder(category)}
+          onSetIncludeSubdirs={(category, includeSubdirs) => void handleSetIncludeSubdirs(category, includeSubdirs)}
         />
       )}
 
@@ -1643,10 +1969,20 @@ function App() {
           onRefreshIcons={handleRefreshAllIcons}
           onAutoCategorize={handleAutoCategorize}
           onImportShortcuts={handleImportShortcuts}
+          onRelocateInvalid={handleRelocateInvalidApps}
           onCleanupInvalid={handleCleanupInvalidApps}
           onRestoreHidden={handleRestoreHiddenApps}
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
+        />
+      )}
+
+      {showUsageInsights && (
+        <UsageInsightsModal
+          apps={apps}
+          onClose={() => setShowUsageInsights(false)}
+          onHideApps={hideAppsByIds}
+          onOpenApp={handleOpenApp}
         />
       )}
 
@@ -1667,11 +2003,14 @@ function App() {
           dataHealth={dataHealth ?? undefined}
           onRestoreCorruptBackup={handleRestoreCorruptBackup}
           onOpenCorruptBackupsDirectory={() => window.electronAPI.openCorruptBackupsDirectory()}
+          effectiveHotkey={hotkeyIssue?.effectiveHotkey}
+          launchPaused={launchPaused}
         />
       )}
 
       {showOnboarding && (
         <OnboardingModal
+          searchHotkey={config?.searchHotkey || DEFAULT_SEARCH_HOTKEY}
           onClose={completeOnboarding}
           onImportShortcuts={async () => {
             await handleImportShortcuts()
@@ -1683,6 +2022,9 @@ function App() {
       {showAddApp && (
         <AddAppModal
           categories={categories}
+          apps={apps}
+          browsers={config?.browsers || []}
+          urlMetaEnabled={config?.urlMetaEnabled !== false}
           onClose={() => setShowAddApp(false)}
           onAdd={handleAddApp}
           defaultCategory={activeCategory || ''}
@@ -1693,8 +2035,38 @@ function App() {
         <EditAppModal
           app={editingApp}
           categories={categories}
+          apps={apps}
+          browsers={config?.browsers || []}
+          urlMetaEnabled={config?.urlMetaEnabled !== false}
           onClose={() => { setShowEditApp(false); setEditingApp(null) }}
           onUpdate={handleUpdateApp}
+        />
+      )}
+
+      {/* 文本项目的阅读面板：点开文本卡片时出现 */}
+      {viewingNote && (
+        <NoteViewerModal
+          app={viewingNote}
+          onClose={() => setViewingNoteId(null)}
+          onEdit={app => {
+            setViewingNoteId(null)
+            setEditingApp(app)
+            setShowEditApp(true)
+          }}
+          onCopy={app => void handleContextMenuCopyContent(app)}
+          onToggleTodo={handleToggleTodo}
+          onClearCompleted={handleClearCompletedTodos}
+        />
+      )}
+
+      {/* 组合启动的确认面板：只有勾了「启动前先确认」的组合才会走到这里 */}
+      {pendingGroup && (
+        <LaunchGroupPanel
+          group={pendingGroup}
+          members={resolveGroupMembers(pendingGroup)}
+          launching={groupLaunching}
+          onConfirm={memberIds => confirmLaunchGroup(pendingGroup, memberIds)}
+          onCancel={cancelLaunchGroup}
         />
       )}
 
@@ -1713,20 +2085,36 @@ function App() {
                 <div className="whitespace-pre-wrap">{updateReleaseNotes}</div>
               </div>
             )}
-            <p className="text-sm text-slate-500 mb-4">是否下载更新？</p>
+            <p className="text-sm text-slate-500 mb-4">
+              {updatePortable
+                ? '便携版不支持自动安装更新，请到发布页下载新版本，解压后替换当前文件即可（数据保存在 exe 同目录，不会被覆盖）。'
+                : '现在下载更新吗？'}
+            </p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={dismissUpdate}
                 className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                稍后再说
+                {updatePortable ? '知道了' : '稍后'}
               </button>
-              <button
-                onClick={startDownload}
-                className="px-4 py-2 text-sm bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
-              >
-                下载更新
-              </button>
+              {updatePortable ? (
+                <button
+                  onClick={() => {
+                    if (updateReleaseUrl) void window.electronAPI.openUrl(updateReleaseUrl)
+                    dismissUpdate()
+                  }}
+                  className="px-4 py-2 text-sm bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
+                >
+                  打开发布页
+                </button>
+              ) : (
+                <button
+                  onClick={startDownload}
+                  className="px-4 py-2 text-sm bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
+                >
+                  下载更新
+                </button>
+              )}
             </div>
           </div>
         </div>

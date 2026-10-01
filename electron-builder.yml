@@ -19,6 +19,12 @@ win:
     - target: nsis
       arch:
         - x64
+    # 免安装版：解压即用，数据落在 exe 同目录（见 main/config.ts 的 resolveDataRoot）
+    - target: portable
+      arch:
+        - x64
+portable:
+  artifactName: ${productName}-Portable-${version}.${ext}
 nsis:
   # 更新器为完整下载 + SHA256 校验，不使用 blockmap 增量下载；
   # 关闭差分包以解锁 maximum 压缩（差分模式会强制 normal 压缩）

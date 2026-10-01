@@ -5,12 +5,13 @@ import {
   countSubcategoryApps
 } from '../utils/categoryDeletion'
 import type { CategoryContextMenu, CategoryEditDialog, CategoryDeleteDialog, CategoryContextMenuTarget } from '../components/CategoryOverlays'
+import type { CategoryAppearance } from '../components/modals/CategoryManagerModal'
 
 /** 增删改分类/子分类的底层 handler 在 App.tsx 里比本 hook 后定义，直接用闭包会踩 TDZ。
  *  由 App 把最新实现写进这个 ref，弹窗提交时再读——和 leftDragActionsRef 同一套路。 */
 export type CategoryCrudApi = {
   handleAddCategory?: (name: string, icon: string) => Promise<void>
-  handleUpdateCategory?: (id: string, name: string, icon: string) => Promise<void>
+  handleUpdateCategory?: (id: string, name: string, icon: string, appearance?: CategoryAppearance) => Promise<void>
   handleAddSubcategory?: (name: string, icon: string, parentId: string | null) => Promise<void>
   handleUpdateSubcategory?: (id: string, name: string, icon: string) => Promise<void>
 }
@@ -41,6 +42,15 @@ export function useCategoryDialogs(options: {
   const [categoryContextMenu, setCategoryContextMenu] = useState<CategoryContextMenu | null>(null)
   const [categoryEditDialog, setCategoryEditDialog] = useState<CategoryEditDialog | null>(null)
   const [categoryDeleteDialog, setCategoryDeleteDialog] = useState<CategoryDeleteDialog | null>(null)
+  /* 「管理分类」弹窗。它一度只写好了组件、没有任何渲染点——分类字号 / 条目高度（P2-3）
+     和「关联文件夹」都做在里面，等于整块功能不可达。现在从这里接线。 */
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
+
+  const openCategoryManager = () => {
+    setCategoryContextMenu(null)
+    setCategoryManagerOpen(true)
+  }
+  const closeCategoryManager = () => setCategoryManagerOpen(false)
 
   const openCategoryContextMenu = (e: React.MouseEvent, menu: CategoryContextMenuTarget) => {
     e.preventDefault()
@@ -124,6 +134,9 @@ export function useCategoryDialogs(options: {
     setCategoryEditDialog,
     categoryDeleteDialog,
     setCategoryDeleteDialog,
+    categoryManagerOpen,
+    openCategoryManager,
+    closeCategoryManager,
     openCategoryContextMenu,
     createCategoryFromMenu,
     renameCategoryFromMenu,

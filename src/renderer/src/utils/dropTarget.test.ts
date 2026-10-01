@@ -51,6 +51,12 @@ describe('findDropTarget', () => {
     expect(findDropTarget(zone)).toEqual({ type: 'subcategory-drop', id: '__none__' })
   })
 
+  it('识别收纳格', () => {
+    const box = document.createElement('div')
+    box.setAttribute('data-collection-id', 'col-1')
+    expect(findDropTarget(box)).toEqual({ type: 'collection', id: 'col-1' })
+  })
+
   it('就近优先：内层卡片胜过外层容器', () => {
     const outer = document.createElement('div')
     outer.setAttribute('data-subcategory-drop', 'grp')
@@ -58,6 +64,17 @@ describe('findDropTarget', () => {
     card.setAttribute('data-app-id', 'app-3')
     outer.appendChild(card)
     expect(findDropTarget(card)).toEqual({ type: 'app', id: 'app-3' })
+  })
+
+  it('就近优先：收纳格里的卡片仍判为卡片', () => {
+    /* 收纳格整体是个放置区，但格内卡片必须先赢——
+       否则格内的精确落点（插到某张卡之前/之后）永远拿不到。 */
+    const box = document.createElement('div')
+    box.setAttribute('data-collection-id', 'col-1')
+    const card = document.createElement('div')
+    card.setAttribute('data-app-id', 'app-4')
+    box.appendChild(card)
+    expect(findDropTarget(card)).toEqual({ type: 'app', id: 'app-4' })
   })
 
   it('向上最多找 5 层，更远的祖先不再命中', () => {

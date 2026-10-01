@@ -3,7 +3,7 @@ import { readdirSync } from 'fs'
 import os from 'os'
 import path from 'path'
 import { describe, expect, it, afterEach } from 'vitest'
-import { getBackupDir, pruneBackups, runStartupBackup } from './backup'
+import { getBackupDir, pruneBackups, resolveBackupDir, runStartupBackup } from './backup'
 
 let tempDirs: string[] = []
 
@@ -22,6 +22,24 @@ afterEach(() => {
 function writeFile(filePath: string, content = '{}') {
   writeFileSync(filePath, content, 'utf-8')
 }
+
+describe('resolveBackupDir', () => {
+  it('falls back to <data>/backups when no custom dir is set', () => {
+    const dataDir = makeTempDir()
+    expect(resolveBackupDir(dataDir)).toBe(getBackupDir(dataDir))
+    expect(resolveBackupDir(dataDir, null)).toBe(getBackupDir(dataDir))
+    expect(resolveBackupDir(dataDir, '')).toBe(getBackupDir(dataDir))
+    // 只有空白的自定义值也视作"没设置"，避免把备份写到一个名叫 " " 的目录里
+    expect(resolveBackupDir(dataDir, '   ')).toBe(getBackupDir(dataDir))
+  })
+
+  it('uses the custom dir when provided (trimmed)', () => {
+    const dataDir = makeTempDir()
+    const custom = path.join(makeTempDir(), 'my-backups')
+    expect(resolveBackupDir(dataDir, custom)).toBe(custom)
+    expect(resolveBackupDir(dataDir, `  ${custom}  `)).toBe(custom)
+  })
+})
 
 describe('runStartupBackup', () => {
   it('copies each data file once per day', () => {

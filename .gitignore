@@ -5,6 +5,12 @@ release/
 release-out*/
 # design-qa 截图工具的隔离数据目录与产物
 .layout-qa/
+# 视觉审计工装（audit.html + src/renderer/src/__audit__/ + .audit/）：
+# 用 Vite dev server + mock electronAPI 渲染真实 App 做布局/配色回归，
+# 只服务本地排查，不进生产包（构建入口是 index.html，不会打进 dist/）
+.audit/
+audit.html
+src/renderer/src/__audit__/
 data/
 *.log
 .DS_Store

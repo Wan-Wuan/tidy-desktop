@@ -1,16 +1,21 @@
 import { ipcMain, BrowserWindow, dialog, screen, app, nativeImage, shell, clipboard } from 'electron'
+import { execFile } from 'child_process'
 import fs from 'fs'
 import path from 'path'
-import { getBackupDir } from '../backup'
+import { resolveBackupDir } from '../backup'
 import { guardNativeDialog } from '../dialogGuard'
-import { APPS_FILE, CATEGORIES_FILE, CONFIG_FILE, CONFIG_DIR, ICONS_DIR, getDefaultConfig, readJsonFile, writeJsonFilesAtomically } from '../config'
-import type { AppsData, CategoriesData, Config, ShortcutImportItem } from '../../shared/types'
-import { sanitizeAppsData, sanitizeCategoriesData, sanitizeConfig } from '../validation'
+import { APPS_FILE, CATEGORIES_FILE, COLLECTIONS_FILE, CONFIG_FILE, CONFIG_DIR, ICONS_DIR, getDefaultConfig, readJsonFile, writeJsonFilesAtomically } from '../config'
+import type { AppsData, CategoriesData, CollectionsData, Config, ShortcutImportItem } from '../../shared/types'
+import { isAumid, toAppsFolderTarget } from '../../shared/appTargets'
+import { classifyAppTarget } from '../appTargetCheck'
+import { sanitizeAppsData, sanitizeCategoriesData, sanitizeCollectionsData, sanitizeConfig } from '../validation'
+import { isImportableShortcut, mergeAppxResults } from '../shortcutFilter'
 import { assertPath, assertSender } from '../ipcGuard'
 
 let mainWindowRef: { current: BrowserWindow | null } = { current: null }
 let searchWindowRef: { current: BrowserWindow | null } = { current: null }
 let shortcutScanCache: { createdAt: number; items: ShortcutImportItem[] } | null = null
+let appxScanCache: { createdAt: number; items: ShortcutImportItem[] } | null = null
 type ResizeEdge = 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 let mainWindowResizeSession: {
   edge: ResizeEdge
@@ -21,7 +26,12 @@ let mainWindowResizeSession: {
 
 const SHORTCUT_SCAN_LIMIT = 500
 const SHORTCUT_RESULT_LIMIT = 300
+/** Appx（Store / UWP）结果单独限量，避免商店应用把 .lnk 的配额挤掉 */
+const APPX_RESULT_LIMIT = 120
+const SHORTCUT_MERGED_LIMIT = SHORTCUT_RESULT_LIMIT + APPX_RESULT_LIMIT
 const SHORTCUT_CACHE_MS = 60_000
+/** PowerShell 冷启动几百毫秒，给足余量；超时就当没扫到，不能让导入流程挂住 */
+const APPX_SCAN_TIMEOUT_MS = 8_000
 
 export function setWindowRefs(main: { current: BrowserWindow | null }, search: { current: BrowserWindow | null }) {
   mainWindowRef = main
@@ -49,7 +59,7 @@ function createShortcutImportItem(filePath: string, source: ShortcutImportItem['
     if (!targetPath || !fs.existsSync(targetPath)) return null
     const stat = fs.statSync(targetPath)
     const type = stat.isDirectory() ? 'folder' : 'app'
-    return {
+    const item: ShortcutImportItem = {
       name: path.basename(filePath, path.extname(filePath)),
       path: filePath,
       targetPath,
@@ -57,6 +67,10 @@ function createShortcutImportItem(filePath: string, source: ShortcutImportItem['
       type,
       source
     }
+    /* 卸载器 / 更新器 / 帮助文档类快捷方式同样"目标存在"，但导进列表毫无意义，
+       还会把用户的应用列表撑得一团乱。在扫描阶段就挡掉，后面的去重和
+       数量上限也就不会被这些噪音挤占。 */
+    return isImportableShortcut(item) ? item : null
   } catch {
     return null
   }
@@ -94,6 +108,94 @@ function collectShortcutFiles(root: string, limit = 600): string[] {
   }
   walk(root)
   return output
+}
+
+/**
+ * 异步跑一段 PowerShell 并拿回 stdout。
+ *
+ * 刻意不用 `execFileSync`：PowerShell 冷启动要几百毫秒，同步执行会把主进程
+ * （窗口消息循环）整个卡住，界面上表现为"点了没反应"。任何失败都收敛成空字符串，
+ * 调用方按「没扫到」处理——扫描失败不该让整个导入流程报错。
+ */
+function runPowerShell(script: string, timeoutMs: number): Promise<string> {
+  return new Promise(resolve => {
+    try {
+      execFile(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+        { windowsHide: true, timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 },
+        (error, stdout) => resolve(error ? '' : stdout)
+      )
+    } catch {
+      resolve('')
+    }
+  })
+}
+
+/**
+ * 扫描 Microsoft Store / UWP 应用。
+ *
+ * 这类应用在开始菜单里没有 .lnk（或只有一个指向 AppsFolder 的壳），
+ * 只能靠 `Get-StartApps` 拿到「显示名 + AUMID」。
+ *
+ * 只保留 AUMID 形态规范的条目：同一份输出里桌面应用的 AppID 是
+ * `{GUID}\path\to.exe` 形式，那些已经被 .lnk 扫描覆盖，重复收进来只会在
+ * 导入列表里制造重复项。
+ *
+ * 返回 `null` 表示扫描失败（与「扫到 0 条」区分开），调用方据此决定是否缓存。
+ */
+async function collectAppxEntries(): Promise<ShortcutImportItem[] | null> {
+  if (process.platform !== 'win32') return null
+  const raw = await runPowerShell(
+    'Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress -Depth 3',
+    APPX_SCAN_TIMEOUT_MS
+  )
+  if (!raw.trim()) return null
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return null
+  }
+
+  // ConvertTo-Json 在只有一条结果时输出对象而非数组，这里统一成数组
+  const rows = Array.isArray(parsed) ? parsed : [parsed]
+  const items: ShortcutImportItem[] = []
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue
+    const record = row as Record<string, unknown>
+    const name = typeof record.Name === 'string' ? record.Name.trim() : ''
+    const appId = typeof record.AppID === 'string' ? record.AppID.trim() : ''
+    if (!name || !isAumid(appId)) continue
+    const target = toAppsFolderTarget(appId)
+    items.push({
+      name,
+      path: target,
+      targetPath: target,
+      icon: '',
+      type: 'app',
+      source: 'appx'
+    })
+    if (items.length >= APPX_RESULT_LIMIT) break
+  }
+  return items
+}
+
+/**
+ * 带缓存的 Appx 扫描。
+ *
+ * 失败不写缓存：下次扫描还有机会补上（PowerShell 偶发超时不该让商店应用
+ * 在整个进程生命周期里都消失）；成功（哪怕是空列表）才缓存。
+ */
+async function getAppxEntries(): Promise<ShortcutImportItem[]> {
+  if (appxScanCache && Date.now() - appxScanCache.createdAt < SHORTCUT_CACHE_MS) {
+    return appxScanCache.items
+  }
+  const items = await collectAppxEntries()
+  if (!items) return []
+  appxScanCache = { createdAt: Date.now(), items }
+  return items
 }
 
 export function registerSystemHandlers() {
@@ -177,45 +279,34 @@ export function registerSystemHandlers() {
     }
   })
 
-  ipcMain.handle('hide-main-window', () => {
+  ipcMain.handle('hide-main-window', (event) => {
+    if (!assertSender(event)) return
     const w = mainWindowRef.current
     if (w && !w.isDestroyed()) {
       w.hide()
     }
   })
 
-  ipcMain.handle('show-search-window', () => {
-    const w = searchWindowRef.current
-    if (!w || w.isDestroyed()) return false
-    const point = screen.getCursorScreenPoint()
-    const display = screen.getDisplayNearestPoint(point)
-    const config = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
-    const width = Math.min(900, Math.max(380, Math.round(config.ui?.searchWidth || 600)))
-    const verticalRatio = Math.min(0.8, Math.max(0.1, config.ui?.searchVerticalRatio || 0.3))
-    w.setBounds({
-      x: Math.round(display.workArea.x + (display.workArea.width - width) / 2),
-      y: Math.round(display.workArea.y + display.workArea.height * verticalRatio),
-      width,
-      height: w.getBounds().height
-    })
-    w.webContents.send('reset-search')
-    w.show()
-    w.focus()
-    return true
-  })
-
-  ipcMain.handle('hide-search-window', () => {
+  /* ⚠️ 这里曾有 `show-search-window` / `move-search-window-to-cursor-display` 两个 handler，
+     与 `main/index.ts` 的同名函数重复实现（因为 systemHandlers 不能反向 import index，
+     当初就各写了一份）。两者**渲染层从未调用过**——搜索窗的显示与跟随光标都发生在主进程
+     （全局热键 / 托盘），渲染层不需要也不应该请求"显示我自己"。已连同 preload 与
+     `shared/electron.d.ts` 的桥接方法一起删除，主进程内部那两份实现保留。 */
+  ipcMain.handle('hide-search-window', (event) => {
+    if (!assertSender(event)) return
     const w = searchWindowRef.current
     if (w && !w.isDestroyed()) {
       w.hide()
     }
   })
 
-  ipcMain.handle('resize-search-window', (_, height: unknown) => {
+  ipcMain.handle('resize-search-window', (event, height: unknown) => {
+    if (!assertSender(event)) return
     const w = searchWindowRef.current
     if (w && !w.isDestroyed()) {
-      // Clamp height: min 60px, max 80% of primary display height
-      const { height: screenHeight } = screen.getPrimaryDisplay().workAreaSize
+      // 上限按**窗口所在的那块屏**算：多显示器时主副屏分辨率常常不同，
+      // 用 getPrimaryDisplay 会让副屏上的搜索窗被算错高度上限。
+      const { height: screenHeight } = screen.getDisplayMatching(w.getBounds()).workAreaSize
       const maxHeight = Math.round(screenHeight * 0.8)
       const requestedHeight = typeof height === 'number' && Number.isFinite(height) ? height : 60
       const finalHeight = Math.min(Math.max(60, requestedHeight), maxHeight)
@@ -229,24 +320,8 @@ export function registerSystemHandlers() {
     }
   })
 
-  ipcMain.handle('move-search-window-to-cursor-display', () => {
-    const w = searchWindowRef.current
-    if (!w || w.isDestroyed()) return false
-    const point = screen.getCursorScreenPoint()
-    const display = screen.getDisplayNearestPoint(point)
-    const config = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
-    const width = Math.min(900, Math.max(380, Math.round(config.ui?.searchWidth || 600)))
-    const verticalRatio = Math.min(0.8, Math.max(0.1, config.ui?.searchVerticalRatio || 0.3))
-    w.setBounds({
-      x: Math.round(display.workArea.x + (display.workArea.width - width) / 2),
-      y: Math.round(display.workArea.y + display.workArea.height * verticalRatio),
-      width,
-      height: w.getBounds().height
-    })
-    return true
-  })
-
-  ipcMain.handle('confirm', async (_, message: unknown) => {
+  ipcMain.handle('confirm', async (event, message: unknown) => {
+    if (!assertSender(event)) return false
     const w = mainWindowRef.current
     if (!w || w.isDestroyed()) return false
     const result = await guardNativeDialog(() => dialog.showMessageBox(w, {
@@ -257,6 +332,47 @@ export function registerSystemHandlers() {
       message: typeof message === 'string' ? message.slice(0, 1000) : ''
     }))
     return result.response === 1
+  })
+
+  /**
+   * 多选项对话框：把「一个是非题」和「在几个方案里挑一个」分开。
+   *
+   * 为什么不能拿 confirm 凑合：confirm 只有"确定 / 取消"两个按钮，
+   * 一旦用它问"要不要包含子文件夹"，"取消"就同时背上了两个意思——
+   * 既可能是"不要子文件夹"，也可能是"算了不弄了"。用户按哪个理解都对，
+   * 于是无论怎么实现都有人觉得反了。
+   *
+   * 返回被点按钮的下标；`null` 表示没问成（来源不合法 / 窗口没了 / 参数不合法），
+   * 调用方一律按"什么都不做"处理。
+   */
+  ipcMain.handle('show-choice', async (event, payload: unknown) => {
+    if (!assertSender(event)) return null
+    const w = mainWindowRef.current
+    if (!w || w.isDestroyed()) return null
+
+    const input = (payload ?? {}) as { message?: unknown; detail?: unknown; buttons?: unknown; defaultId?: unknown; cancelId?: unknown }
+    const message = typeof input.message === 'string' ? input.message.slice(0, 1000) : ''
+    const detail = typeof input.detail === 'string' ? input.detail.slice(0, 2000) : undefined
+    const buttons = Array.isArray(input.buttons)
+      ? input.buttons.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).slice(0, 4).map(item => item.slice(0, 40))
+      : []
+    if (!message || buttons.length < 2) return null
+
+    const pick = (value: unknown, fallback: number) =>
+      typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < buttons.length ? value : fallback
+
+    const result = await guardNativeDialog(() => dialog.showMessageBox(w, {
+      type: 'question',
+      message,
+      detail,
+      buttons,
+      defaultId: pick(input.defaultId, 0),
+      cancelId: pick(input.cancelId, buttons.length - 1),
+      /* noLink 关掉 Windows 的"命令链接"样式：那是给"下一步做什么"设计的，
+         选项一多就会撑成一列大卡片，而这里只是普通的三选一。 */
+      noLink: true
+    }))
+    return result.response
   })
 
   ipcMain.handle('set-auto-start', (event, enabled: unknown) => {
@@ -271,11 +387,13 @@ export function registerSystemHandlers() {
     return true
   })
 
-  ipcMain.handle('get-auto-start', () => {
+  ipcMain.handle('get-auto-start', (event) => {
+    if (!assertSender(event)) return false
     return app.getLoginItemSettings().openAtLogin
   })
 
-  ipcMain.handle('classify-paths', async (_, filePaths: unknown) => {
+  ipcMain.handle('classify-paths', async (event, filePaths: unknown) => {
+    if (!assertSender(event)) return []
     const safePaths = Array.isArray(filePaths)
       ? filePaths.filter((filePath): filePath is string => typeof filePath === 'string').slice(0, 200)
       : []
@@ -301,7 +419,8 @@ export function registerSystemHandlers() {
     }))
   })
 
-  ipcMain.handle('validate-apps', async (_, apps: unknown) => {
+  ipcMain.handle('validate-apps', async (event, apps: unknown) => {
+    if (!assertSender(event)) return []
     const safeApps = Array.isArray(apps)
       ? apps.filter((item): item is { id?: unknown; path?: unknown; type?: unknown } => typeof item === 'object' && item !== null).slice(0, 5000)
       : []
@@ -309,6 +428,9 @@ export function registerSystemHandlers() {
     // 原实现对最多 5000 个应用逐个同步 fs.existsSync，会长时间阻塞主进程事件循环。
     // 改为 fs.promises.access 异步判断，并按 32 个一批 Promise.all 并发；返回数组顺序
     // 与输入严格一致（每批内部顺序不变、批次按序 push），返回结构 {id,path,exists} 不变。
+    //
+    // ⚠️ 按类型分流的理由见 `main/appTargetCheck.ts`：不是所有类型的 `path`
+    // 都能拿去 fs.access，一律查盘会把网址、商店应用、笔记全判成"失效"。
     const BATCH_SIZE = 32
     const results: Array<{ id: string; path: string; exists: boolean }> = []
     for (let i = 0; i < safeApps.length; i += BATCH_SIZE) {
@@ -319,9 +441,10 @@ export function registerSystemHandlers() {
           const itemPath = typeof item.path === 'string' ? item.path : ''
           const type = typeof item.type === 'string' ? item.type : ''
           let exists: boolean
-          if (type === 'steam') {
-            exists = /^steam:\/\//i.test(itemPath)
-          } else if (!itemPath) {
+          const verdict = classifyAppTarget(itemPath, type)
+          if (verdict === 'valid') {
+            exists = true
+          } else if (verdict === 'invalid') {
             exists = false
           } else {
             try {
@@ -339,7 +462,8 @@ export function registerSystemHandlers() {
     return results
   })
 
-  ipcMain.handle('export-backup', async () => {
+  ipcMain.handle('export-backup', async (event) => {
+    if (!assertSender(event)) return { success: false, error: '调用来源不被信任。' }
     const options = {
       title: 'Export backup',
       defaultPath: `tidy-desktop-backup-${new Date().toISOString().slice(0, 10)}.json`,
@@ -351,18 +475,26 @@ export function registerSystemHandlers() {
       : dialog.showSaveDialog(options))
     if (result.canceled || !result.filePath) return { success: false }
 
-    const payload = {
-      version: app.getVersion(),
-      exportedAt: new Date().toISOString(),
-      config: readJsonFile<Config>(CONFIG_FILE, {} as Config),
-      apps: readJsonFile<AppsData>(APPS_FILE, { apps: [] }),
-      categories: readJsonFile<CategoriesData>(CATEGORIES_FILE, { categories: [], subcategories: [] })
+    // 写盘可能失败（目标只读、磁盘满、被占用）。以前这里没有 try/catch，
+    // 异常会以 rejection 的形式抛回渲染层，而渲染层只 await 不 catch —— 变成静默失败。
+    try {
+      const payload = {
+        version: app.getVersion(),
+        exportedAt: new Date().toISOString(),
+        config: readJsonFile<Config>(CONFIG_FILE, {} as Config),
+        apps: readJsonFile<AppsData>(APPS_FILE, { apps: [] }),
+        categories: readJsonFile<CategoriesData>(CATEGORIES_FILE, { categories: [], subcategories: [] }),
+        collections: readJsonFile<CollectionsData>(COLLECTIONS_FILE, { collections: [] })
+      }
+      fs.writeFileSync(result.filePath, JSON.stringify(payload, null, 2), 'utf-8')
+      return { success: true, filePath: result.filePath }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
     }
-    fs.writeFileSync(result.filePath, JSON.stringify(payload, null, 2), 'utf-8')
-    return { success: true, filePath: result.filePath }
   })
 
-  ipcMain.handle('import-backup', async () => {
+  ipcMain.handle('import-backup', async (event) => {
+    if (!assertSender(event)) return { success: false, error: '调用来源不被信任。' }
     const options = {
       title: 'Import backup',
       properties: ['openFile'],
@@ -378,22 +510,25 @@ export function registerSystemHandlers() {
       const raw = fs.readFileSync(result.filePaths[0], 'utf-8')
       const payload: unknown = JSON.parse(raw)
       if (!payload || typeof payload !== 'object') {
-        return { success: false, error: 'Invalid backup format' }
+        return { success: false, error: '该文件不是有效的备份文件。' }
       }
-      const backup = payload as { config?: unknown; apps?: unknown; categories?: unknown }
+      const backup = payload as { config?: unknown; apps?: unknown; categories?: unknown; collections?: unknown }
       const nextConfig = backup.config ? sanitizeConfig(backup.config, getDefaultConfig()) : null
       const nextApps = backup.apps ? sanitizeAppsData(backup.apps) : null
       const nextCategories = backup.categories ? sanitizeCategoriesData(backup.categories) : null
-      if (backup.config && !nextConfig) return { success: false, error: 'Invalid config data' }
-      if (backup.apps && !nextApps) return { success: false, error: 'Invalid apps data' }
-      if (backup.categories && !nextCategories) return { success: false, error: 'Invalid categories data' }
+      const nextCollections = backup.collections ? sanitizeCollectionsData(backup.collections) : null
+      if (backup.config && !nextConfig) return { success: false, error: '备份中的配置数据格式不合法。' }
+      if (backup.apps && !nextApps) return { success: false, error: '备份中的应用数据格式不合法。' }
+      if (backup.categories && !nextCategories) return { success: false, error: '备份中的分类数据格式不合法。' }
+      if (backup.collections && !nextCollections) return { success: false, error: '备份中的收纳格数据格式不合法。' }
       const entries = [
         ...(nextConfig ? [{ filePath: CONFIG_FILE, data: nextConfig }] : []),
         ...(nextApps ? [{ filePath: APPS_FILE, data: nextApps }] : []),
-        ...(nextCategories ? [{ filePath: CATEGORIES_FILE, data: nextCategories }] : [])
+        ...(nextCategories ? [{ filePath: CATEGORIES_FILE, data: nextCategories }] : []),
+        ...(nextCollections ? [{ filePath: COLLECTIONS_FILE, data: nextCollections }] : [])
       ]
       if (!writeJsonFilesAtomically(entries)) {
-        return { success: false, error: 'Backup could not be written safely' }
+        return { success: false, error: '备份无法安全写入磁盘，当前数据未被修改。' }
       }
       return { success: true, filePath: result.filePaths[0] }
     } catch (error) {
@@ -401,7 +536,8 @@ export function registerSystemHandlers() {
     }
   })
 
-  ipcMain.handle('export-diagnostics', async () => {
+  ipcMain.handle('export-diagnostics', async (event) => {
+    if (!assertSender(event)) return { success: false, error: '调用来源不被信任。' }
     try {
       const options = {
         title: 'Export diagnostics',
@@ -433,12 +569,14 @@ export function registerSystemHandlers() {
           configExists: fs.existsSync(CONFIG_FILE),
           appsExists: fs.existsSync(APPS_FILE),
           categoriesExists: fs.existsSync(CATEGORIES_FILE),
+          collectionsExists: fs.existsSync(COLLECTIONS_FILE),
           iconCount: iconFiles.length,
           iconBytes: iconFiles.reduce((sum, item) => sum + item.size, 0)
         },
         config: readJsonFile<Config>(CONFIG_FILE, {} as Config),
         apps: readJsonFile<AppsData>(APPS_FILE, { apps: [] }),
         categories: readJsonFile<CategoriesData>(CATEGORIES_FILE, { categories: [], subcategories: [] }),
+        collections: readJsonFile<CollectionsData>(COLLECTIONS_FILE, { collections: [] }),
         iconFiles
       }
       fs.writeFileSync(result.filePath, JSON.stringify(payload, null, 2), 'utf-8')
@@ -448,7 +586,8 @@ export function registerSystemHandlers() {
     }
   })
 
-  ipcMain.handle('scan-shortcuts', async () => {
+  ipcMain.handle('scan-shortcuts', async (event) => {
+    if (!assertSender(event)) return []
     if (shortcutScanCache && Date.now() - shortcutScanCache.createdAt < SHORTCUT_CACHE_MS) {
       return shortcutScanCache.items
     }
@@ -479,7 +618,7 @@ export function registerSystemHandlers() {
     }
 
     const uniqueTargets = new Set<string>()
-    const uniqueResults = results
+    const lnkResults = results
       .filter(item => {
         const key = item.targetPath.toLowerCase()
         if (uniqueTargets.has(key)) return false
@@ -487,11 +626,17 @@ export function registerSystemHandlers() {
         return true
       })
       .slice(0, SHORTCUT_RESULT_LIMIT)
-    shortcutScanCache = { createdAt: Date.now(), items: uniqueResults }
-    return uniqueResults
+
+    /* Appx 结果附在 .lnk 结果之后：与 .lnk 重复的跳过、单独限量、
+       扫描失败时静默降级（导入流程照常给出 .lnk 的结果）。规则见 mergeAppxResults。 */
+    const merged = mergeAppxResults(lnkResults, await getAppxEntries(), APPX_RESULT_LIMIT)
+      .slice(0, SHORTCUT_MERGED_LIMIT)
+    shortcutScanCache = { createdAt: Date.now(), items: merged }
+    return merged
   })
 
-  ipcMain.handle('resolve-shortcut-targets', (_, values: unknown) => {
+  ipcMain.handle('resolve-shortcut-targets', (event, values: unknown) => {
+    if (!assertSender(event)) return []
     if (!Array.isArray(values)) return []
     return values
       .filter((value): value is string => typeof value === 'string' && value.toLowerCase().endsWith('.lnk'))
@@ -500,13 +645,17 @@ export function registerSystemHandlers() {
       .filter(item => !!item.targetPath)
   })
 
-  ipcMain.handle('open-data-directory', async () => {
+  ipcMain.handle('open-data-directory', async (event) => {
+    if (!assertSender(event)) return false
     const error = await shell.openPath(CONFIG_DIR)
     return !error
   })
 
-  ipcMain.handle('open-backups-directory', async () => {
-    const backupDir = getBackupDir(CONFIG_DIR)
+  ipcMain.handle('open-backups-directory', async (event) => {
+    if (!assertSender(event)) return false
+    // 备份目录可配（P2-7）：跟实际写备份时用的是同一个解析函数，避免"打开的目录"和"备份落地的目录"不一致
+    const config = readJsonFile<Config>(CONFIG_FILE, getDefaultConfig())
+    const backupDir = resolveBackupDir(CONFIG_DIR, config.backupDir)
     if (!fs.existsSync(backupDir)) {
       fs.mkdirSync(backupDir, { recursive: true })
     }
@@ -514,20 +663,25 @@ export function registerSystemHandlers() {
     return !error
   })
 
-  ipcMain.handle('copy-text-to-clipboard', (_, text: unknown) => {
+  ipcMain.handle('copy-text-to-clipboard', (event, text: unknown) => {
+    if (!assertSender(event)) return false
     if (typeof text !== 'string' || text.length === 0 || text.length > 8192) return false
     clipboard.writeText(text)
     return true
   })
 
-  ipcMain.handle('clear-icon-cache', async () => {
+  ipcMain.handle('clear-icon-cache', async (event) => {
+    if (!assertSender(event)) return { success: false, count: 0 }
     let count = 0
     if (fs.existsSync(ICONS_DIR)) {
       for (const file of fs.readdirSync(ICONS_DIR)) {
         const filePath = path.join(ICONS_DIR, file)
         try {
           const ext = path.extname(file).toLowerCase()
-          if (fs.statSync(filePath).isFile() && ['.png', '.ico'].includes(ext)) {
+          /* 之前只清 .png / .ico，但 Steam 图标是按 `steam_<appId>.jpg` 缓存的
+             （见 iconHandlers 的 CDN 兜底分支），那些 jpg 永远不会被「刷新全部图标」清掉，
+             只能一直堆在 icons 目录里。这里把 .jpg / .jpeg 一并纳入。 */
+          if (fs.statSync(filePath).isFile() && ['.png', '.ico', '.jpg', '.jpeg'].includes(ext)) {
             fs.unlinkSync(filePath)
             count++
           }

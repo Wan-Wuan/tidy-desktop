@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { AppItem, Category } from '../../../shared/types'
-import { deduplicateAppsByPath, filterStillEmptyCategories, findEmptyCategories } from './maintenance'
+import {
+  buildRelocationCandidates,
+  deduplicateAppsByPath,
+  filterStillEmptyCategories,
+  findEmptyCategories
+} from './maintenance'
 
 const categories: Category[] = [
   { id: 'work', name: 'Work', icon: '', order: 1 },
@@ -43,5 +48,56 @@ describe('maintenance duplicate checks', () => {
     ])
     expect(result.apps.map(item => item.id)).toEqual(['first', 'other'])
     expect(result.removedCount).toBe(1)
+  })
+})
+
+describe('maintenance relocation candidates', () => {
+  const candidates = (paths: Array<[string, string]>, parent: string) =>
+    buildRelocationCandidates(paths.map(([id, path]) => ({ id, path })), parent)
+
+  it('keeps the relative structure under the shared parent directory', () => {
+    const result = candidates(
+      [['a', 'D:\\Tools\\Alpha\\a.exe'], ['b', 'D:\\Tools\\Beta\\b.exe']],
+      'E:\\Backup\\Tools'
+    )
+    expect(result).toEqual([
+      { id: 'a', from: 'D:\\Tools\\Alpha\\a.exe', to: 'E:\\Backup\\Tools\\Alpha\\a.exe' },
+      { id: 'b', from: 'D:\\Tools\\Beta\\b.exe', to: 'E:\\Backup\\Tools\\Beta\\b.exe' }
+    ])
+  })
+
+  it('treats the shared prefix case-insensitively but keeps the original tail', () => {
+    const result = candidates(
+      [['a', 'D:\\Tools\\Alpha\\a.exe'], ['b', 'd:\\tools\\Beta\\b.exe']],
+      'E:\\Tools'
+    )
+    expect(result.map(item => item.to)).toEqual([
+      'E:\\Tools\\Alpha\\a.exe',
+      'E:\\Tools\\Beta\\b.exe'
+    ])
+  })
+
+  it('falls back to the file name when the paths share no directory', () => {
+    const result = candidates([['a', 'D:\\Tools\\a.exe'], ['b', 'E:\\Games\\b.exe']], 'F:\\Moved')
+    expect(result.map(item => item.to)).toEqual(['F:\\Moved\\a.exe', 'F:\\Moved\\b.exe'])
+  })
+
+  it('uses the file name for a single failed path', () => {
+    const result = candidates([['a', 'D:\\Tools\\Alpha\\a.exe']], 'E:\\Tools')
+    expect(result[0].to).toBe('E:\\Tools\\a.exe')
+  })
+
+  it('accepts forward slashes and normalises the trailing separator of the parent', () => {
+    const result = candidates([['a', 'D:/Tools/Alpha/a.exe']], 'E:\\Tools\\')
+    expect(result[0].to).toBe('E:\\Tools\\a.exe')
+  })
+
+  it('skips apps without a usable path so the caller can keep them in the missing bucket', () => {
+    const result = candidates([['a', '   '], ['b', 'D:\\Tools\\b.exe']], 'E:\\Tools')
+    expect(result.map(item => item.id)).toEqual(['b'])
+  })
+
+  it('returns nothing when the parent folder is blank', () => {
+    expect(candidates([['a', 'D:\\Tools\\a.exe']], '   ')).toEqual([])
   })
 })

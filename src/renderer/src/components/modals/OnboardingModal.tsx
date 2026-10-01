@@ -1,11 +1,21 @@
 import React, { useState } from 'react'
+import { DEFAULT_SEARCH_HOTKEY } from '../../../../shared/defaults'
 
 export const OnboardingModal = React.memo(function OnboardingModal({
   onClose,
-  onImportShortcuts
+  onImportShortcuts,
+  searchHotkey = DEFAULT_SEARCH_HOTKEY
 }: {
   onClose: () => void
   onImportShortcuts: () => Promise<void>
+  /**
+   * 实际生效的搜索热键。
+   *
+   * 必须由调用方传进来，**不要在这里写死 `Ctrl+K`**——那个字面量曾经硬编码在这里，
+   * 默认值改成 `Ctrl+Alt+K` 之后它就成了误导新用户的假信息。
+   * 用户也可能在完成引导前就改过键，所以默认值只作兜底。
+   */
+  searchHotkey?: string
 }) {
   const [importing, setImporting] = useState(false)
 
@@ -26,7 +36,7 @@ export const OnboardingModal = React.memo(function OnboardingModal({
           {[
             ['添加项目', '拖入应用、文件夹、图片或快捷方式。'],
             ['整理分类', '按工作、工具、游戏或资料分组。'],
-            ['快速搜索', '用 Ctrl+K 打开搜索框，输入名称或别名。'],
+            ['快速搜索', `用 ${searchHotkey} 打开搜索框，输入名称或别名。`],
             ['备份维护', '定期导出备份，刷新图标和清理失效项。']
           ].map(([title, text]) => (
             <div key={title} className="p-3 rounded-xl bg-brand-50/50 border border-brand-100/50">
@@ -37,7 +47,7 @@ export const OnboardingModal = React.memo(function OnboardingModal({
         </div>
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors">
-            稍后再说
+            稍后
           </button>
           <button
             disabled={importing}
@@ -51,7 +61,7 @@ export const OnboardingModal = React.memo(function OnboardingModal({
             }}
             className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-60"
           >
-            {importing ? '正在扫描...' : '扫描并导入快捷方式'}
+            {importing ? '正在扫描…' : '扫描并导入快捷方式'}
           </button>
         </div>
       </div>

@@ -1,96 +1,269 @@
 # Tidy Desktop（桌面整理）
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4.svg)](#依赖要求)
+[![Version](https://img.shields.io/badge/version-3.0.0-4f46e5.svg)](./CHANGELOG.md)
 
-一个简洁高效的桌面应用整理工具，帮助您快速启动、分类和管理应用程序。
+一个简洁高效的 Windows 桌面应用整理与启动工具：把常用的程序、文件夹、网址、笔记收进网格，
+用**一个全局热键**唤出来启动，或者直接在**快速搜索框**里敲几个字母。
+
+- **不动你的桌面**——它是启动器，不是桌面替换。原来的桌面、开始菜单、快捷方式保持原样。
+- **两套入口**——主窗口（管理 + 启动）和搜索框（纯键盘），各有独立的全局热键。
+- **数据在你自己手里**——全部存本地、明文 JSON，随时可备份、可迁移、可手工编辑。
+
+## 目录
+
+- [功能特性](#功能特性)
+- [v3.0.0 版本更新说明](#v300-版本更新说明)
+- [安装与使用](#安装与使用)
+- [配置说明](#配置说明)
+- [依赖要求](#依赖要求)
+- [项目结构](#项目结构)
+- [开发与发布](#开发与发布)
+- [许可证](#许可证)
 
 ## 功能特性
 
-### 核心功能
-- **全局快捷键唤醒**：自定义快捷键快速打开/隐藏界面
-- **应用管理**：添加、删除、排序、分类管理应用程序，支持多选批量操作与一键撤销
-- **智能搜索**：多关键词模糊匹配、拼音首字母、单词前缀、路径搜索
-- **分类系统**：多级分类 + 子分类，支持拖拽排序和分组显示
-- **图标提取**：自动提取 .exe/.lnk 应用图标并缓存
-- **系统托盘**：最小化后驻留在系统托盘，双击可重新打开
-- **自动更新**：内置更新器，从 Gitee（主源）/ GitHub 获取新版本，下载后校验 SHA256 再静默安装
-- **失焦自动隐藏**：切到其它应用时主窗口与搜索窗口自动收起，两个窗口可分别开关
-- **五套主题 / 三种布局**：极光、浅色、深色、跟随系统、玻璃主题；`command-rail`、`horizon-workspace`、`studio-split` 三种界面布局，另可自定义强调色
-- **数据安全**：写入走临时文件 + 原子替换，每日自动备份，损坏文件自动隔离保留
-- **文件发送**：文档、图片等文件可一键复制到剪贴板，直接粘贴到微信等应用（走 Electron 原生剪贴板，不调用外部命令，瞬时完成）
-- **图片拖拽复制**：图片文件可直接拖拽到任意应用（微信、Word、QQ等），或一键复制图片内容到剪贴板粘贴
-- **Steam 游戏集成**：拖入 Steam 链接自动获取游戏名和图标
+### 启动与唤出
 
-### 搜索功能
-- **多关键词搜索**：`vs code` 匹配 `Visual Studio Code`
+- **全局快捷键唤出**：主窗口与搜索框各配一个（默认 `Ctrl+Alt+Space` / `Ctrl+Alt+K`），
+  在任何应用里都能直接唤出
+- **暂停 / 恢复热键**：托盘菜单、设置页开关，或另录一个暂停热键——暂停后所有唤出热键失效，
+  方便临时把键位让给别的软件
+- **失焦自动隐藏**：切到别的应用时主窗口与搜索窗口自动收起，两个窗口可分别开关
+- **系统托盘**：最小化后驻留托盘，双击重新打开；托盘图标可自定义
+- **冷启动到托盘**：可选开机自启，并直接最小化到托盘不弹窗
+
+### 项目类型（六种）
+
+| 类型 | 说明 |
+| --- | --- |
+| **应用程序** | `.exe` / `.lnk` / 商店应用（UWP）等，自动提取图标 |
+| **文件夹** | 打开目录，或用资源管理器定位 |
+| **Steam 链接** | 拖入 `steam://` 链接自动获取游戏名与图标 |
+| **网址** | 自动抓取网页标题与 favicon（可在设置里整体关闭） |
+| **文本备忘** | 两种形态：**笔记**（纯文本，点开即看、一键复制）或 **待办**（清单，点一下勾掉） |
+| **组合启动** | 把若干项目打包成一张卡片，一次启动；可开启「启动前先确认」 |
+
+另外：
+
+- **用指定程序打开**：给程序或文件夹项目配一个专用程序（如 `code --goto <文件>`），
+  路径前/后可各带一段参数，表单里实时预览最终命令；右键菜单保留「用系统默认方式打开」作为临时绕过
+- **启动参数与起始位置**：程序项目可填启动参数与工作目录（支持 `%KEY%` 环境变量展开），
+  以管理员身份启动同样会带上
+- **网址抓不到图标时**用「域名首字母 + 由域名推导的固定配色」头像，不会变成一排分不清的灰图标
+
+> ⚠️ **启动参数与起始位置只对 `.exe` 程序生效**。`.lnk` / `.bat` / `.cmd` 这类目标无法在
+> 「不经过命令解释器」的前提下携带参数，填了会被忽略——这是安全设计，不是缺陷。
+
+### 搜索
+
+- **多关键词模糊匹配**：`vs code` 匹配 `Visual Studio Code`
 - **首字母缩写**：`vc` 匹配 `Visual Studio Code`
 - **拼音搜索**：`weixin` 或 `wx` 匹配 `微信`
-- **文件夹路径**：输入 `C:\Users` 直接打开文件夹
+- **路径搜索**：输入 `C:\Users` 直接打开文件夹
+- **本机文件搜索**：命中文件与目录并显示完整路径，不限扩展名。由本机
+  [Everything](https://www.voidtools.com/) 提供，**端口自动检测**（无需手填），全盘、即时
+- **结果分组**：结果按「命令 / 应用 / 文件」分组显示，每条右侧带来源标签
+- **定位回主界面**：应用结果按 `Ctrl+Shift+Enter` 跳回主界面，自动切分类、滚动并高亮
+- **`>` 命令模式**：输入 `>` 触发内置命令（打开整理中心、健康检查、刷新图标、自动分类、
+  导入快捷方式、恢复隐藏项、导出备份）与自定义快捷命令
 
-### 搜索引擎（输入关键词 + 空格调用）
-| 前缀 | 引擎 |
-|------|------|
-| `b` | Bing |
-| `g` | Google |
-| `bd` | 百度 |
-| `yh` | Yahoo |
-| `ddg` | DuckDuckGo |
-| `gh` | GitHub |
-| `so` | StackOverflow |
-| `zhihu` | 知乎 |
-| `bilibili` | B站 |
+#### 搜索引擎（输入前缀 + 空格调用）
 
-### 分类管理
-- 自定义分类（图标、名称）
-- 子分类（支持挂在任意分类下或全局）
-- 拖拽应用到分类/子分类
-- **拖到子分类即可归类**：拖到顶部子分类标签，或拖到网格里的子分类分组上；落点在哪就排在哪，拖到空子分类也会自动留出位置
-- 拖拽时跟随鼠标显示**整块卡片**的实时预览（与原卡片等大、跟随主题配色）
-- 拖拽排序应用、分类、子分类
-- 分类视图中按子分类分组显示
-- 无分类时添加应用会提示先创建分类
+| 前缀 | 引擎 | 前缀 | 引擎 |
+|------|------|------|------|
+| `b` | Bing | `yt` | YouTube |
+| `g` | Google | `npm` | npm |
+| `bd` | 百度 | `mdn` | MDN |
+| `yh` | Yahoo | `so` | StackOverflow |
+| `ddg` | DuckDuckGo | `zhihu` | 知乎 |
+| `gh` | GitHub | `bilibili` | B站 |
+
+引擎列表可在设置里增删改（名称 + URL 前缀）。
+
+### 组织与分类
+
+- **多级分类**：分类 + 子分类（子分类可挂在任意分类下或全局）
+- **拖拽排序**：应用、分类、子分类、收纳格成员都能拖；拖拽时跟随鼠标显示**整块卡片**的实时预览
+- **拖到子分类即归类**：拖到顶部子分类标签或网格里的子分类分组上；落点在哪就排在哪，
+  拖到空子分类也会自动留出位置
+- **批量操作**：多选、批量移动/删除，带一键撤销
+- **智能整理**：按规则和名称重新分类；整理中心提供健康分、建议队列与维护工具
+- **使用统计**：启动次数、最近使用，可按此排序
+- **分类图标四种形态**：Emoji、本地图片（自动复制进图标缓存）、网络图片 URL、内联 SVG
+
+#### 收纳格
+
+分类之上的「展示层」：把几个常用项目聚到一个框里，折叠、改名、随时拆开，
+**项目本身的分类归属不受影响**（一个项目同一时间只能属于一个收纳格）。
+
+- 分类条右侧的「+ 收纳格」新建，建在当前分类下
+- 标题即改名入口（行内编辑，不弹系统对话框）；右侧是折叠箭头、铅笔、垃圾桶
+- 项目拖进框里即可加入；框内卡片仍可拖出去或调整顺序；右键「移出收纳格」放回原分类
+
+#### 关联文件夹
+
+给分类绑一个本地目录，目录里的可执行文件与子文件夹会出现在该分类下，
+适合「下载目录」「项目目录」这类经常变动的场景。
+
+- 分类右键 →「关联文件夹…」，或分类条上的「管理分类」→ 关联文件夹。
+  绑定时会问是否包含子目录（三选一：**仅本层 / 含子文件夹 / 取消**）
+- 目录内容由主进程扫描并缓存（`folderCache.json`），**不写进 `apps.json`**；
+  界面上的同步条目只读，右键只有「在文件夹中隐藏」，不能编辑或删除
+- 用户意图（隐藏了哪些、自定义顺序）写在 `categories.json` 的 `linkFolder` 里，
+  与随时可丢的扫描缓存分开存
+- 目录丢失或无权限时**保留上一次的结果**并显示琥珀色横幅，明确说明「下面显示的是
+  上次成功同步的条目」，同时给出重试 / 重新选择目录 / 解除关联
+- 分类条上的链接角标表示该分类已关联文件夹；正在同步时角标旋转
+
+> 与其他启动器的差异：同步**不做卸载器/更新器过滤**。`shortcutFilter` 那套判定只用于
+> 「扫描开始菜单快捷方式」这个一次性导入动作——那里漏进一个卸载器会让用户列表变脏；
+> 而关联文件夹是用户自己指定的目录，里面出现什么由用户决定，替他过滤反而会
+> 「明明在文件夹里却看不到」。
+
+### 外观与个性化
+
+- **五套主题**：极光、浅色、深色、跟随系统、玻璃；另可自定义强调色
+- **三种布局**：`command-rail`、`horizon-workspace`、`studio-split`
+- **UI 自定义**：每行数量、卡片大小、圆角、显示/隐藏图标和名称
+- **自定义背景**：纯色 / 本地图片，图片可调模糊与暗化
+- **全局字体与字号缩放**（不影响图标与网格尺寸）
+- **分类级外观**：每个分类可单独设字号、条目高度、图标尺寸
+- **搜索窗外观**：宽度、垂直位置、最大结果数、透明度、提示开关、占位符文案
+
+### 数据与安全
+
+- **原子写入**：所有 JSON 落盘走临时文件 + 原子替换，写一半断电不会留下半个文件
+- **每日自动备份**：可关闭、目录可自定义、保留份数可调
+- **损坏自动隔离**：读不出来的文件会被隔离保留，不会静默丢数据
+- **失效路径批量重定位**：整个文件夹搬走时不用删掉重建——选一次新父目录，
+  按公共父目录换算路径并**逐个实测**，命中才更新，分类/别名/启动参数/待办/统计全部保留
+- **配置预设导入导出**：外观、搜索引擎、快捷命令、环境变量、浏览器列表、自动分类规则
+  可导出成 JSON，换机器时导入即可
+- **导出诊断**：一键导出带版本、配置与数据摘要的诊断包，便于报障
+
+### 系统集成
+
+- **文件发送**：文档、图片等文件可一键复制到剪贴板，直接粘贴到微信等应用
+  （走 Electron 原生剪贴板，不调用外部命令，瞬时完成）
+- **图片拖拽复制**：图片文件可直接拖拽到任意应用（微信、Word、QQ 等）
+- **指定浏览器打开**：维护一组浏览器，网址项目可指定用哪个打开
+- **自动更新**：内置更新器，从 Gitee（主源）/ GitHub 获取新版本，
+  下载后校验 SHA256 再静默安装（**便携版除外**——它无法自我替换，只提示打开发布页）
 
 ### 支持的文件类型
+
 - **可执行**：`.exe` `.lnk` `.msi` `.bat` `.cmd` `.vbs` `.ps1` `.com` `.scr` `.appref-ms` `.url`
-- **文档 / 文本**：`.pdf` `.doc` `.docx` `.xls` `.xlsx` `.ppt` `.pptx` `.rtf` `.csv` `.txt` `.md` `.markdown` `.html` `.htm` `.json` `.xml` `.yaml` `.yml` `.toml` `.ini` `.conf` `.log`，以及常见代码文件（`.js` `.ts` `.tsx` `.jsx` `.vue` `.py` `.java` `.go` `.rs` `.c` `.cpp` `.cs` `.sql` `.sh` 等）
-- **压缩包**：`.zip` `.rar` `.7z` `.tar` `.gz` `.bz2` `.xz` `.tgz` `.iso` `.cab`
-- **媒体**：`.mp3` `.mp4` `.wav` `.avi` `.mkv` `.mov` `.flac` `.webm` `.m4a` `.aac` `.ogg` 等
-- **图片**：`.jpg` `.jpeg` `.png` `.gif` `.bmp` `.svg` `.webp` `.ico` `.tiff` `.tif` `.heic` `.heif` `.avif` `.psd`（支持复制图片内容或直接拖拽到外部应用）
-- **字体**：`.ttf` `.otf` `.woff` `.woff2`
+- **文档 / 文本**：`.pdf` `.doc(x)` `.xls(x/m)` `.ppt(x)` `.rtf` `.csv` `.txt` `.odt/ods/odp`
+  `.md` `.markdown` `.mdown` `.html` `.htm` `.xhtml` `.mhtml` `.vue`
+  `.json(c)` `.xml` `.yaml` `.yml` `.toml` `.ini` `.conf` `.cfg` `.properties` `.reg`
+  `.js` `.mjs` `.cjs` `.ts` `.tsx` `.jsx` `.svelte` `.astro`
+  `.py` `.java` `.kt(s)` `.c` `.h` `.cpp` `.hpp` `.cc` `.cs` `.go` `.rs` `.rb` `.php` `.swift`
+  `.scala` `.lua` `.r` `.pl` `.sql` `.sh` `.bash` `.zsh` `.fish` `.gradle` `.cmake` `.make` `.mk`
+  `.log` `.tex` `.bib` `.org` `.rst` `.adoc` `.nfo` `.diff` `.patch` `.srt` `.vtt` `.lrc`
+- **图片**：`.jpg` `.jpeg` `.jpe` `.jfif` `.pjpeg` `.png` `.gif` `.bmp` `.svg` `.webp`
+  `.ico` `.tiff` `.tif` `.heic` `.heif` `.avif` `.emf` `.wmf` `.psd` `.sketch`
+- **压缩包**：`.zip` `.rar` `.7z` `.tar` `.gz` `.bz2` `.xz` `.tgz` `.iso` `.cab` `.lz` `.lzma` `.zst`
+- **音视频**：`.mp3` `.mp4` `.wav` `.avi` `.mkv` `.flv` `.wmv` `.mov` `.m4a` `.m4v`
+  `.aac` `.flac` `.ogg` `.oga` `.opus` `.webm` `.mpg` `.mpeg` `.3gp` `.aiff` `.mid` `.midi` `.amr`
+- **字体**：`.ttf` `.otf` `.woff` `.woff2` `.eot` `.fon`
 
-> 完整清单以 `src/shared/utils.ts` 为准：拖入添加、图标提取、复制/拖拽按钮共用同一份白名单，新增类型只需改这一处。
+> 完整清单以 [`src/shared/utils.ts`](./src/shared/utils.ts) 的 `ALL_FILE_EXTS` 为准：
+> 拖入添加、图标提取、复制/拖拽按钮共用同一份白名单，新增类型只需改这一处。
 
-### 设置选项
-- 开机自启动 / 启动时最小化到托盘
-- 自定义快捷键（主窗口与搜索窗口分别录制）
-- 关闭行为（最小化到托盘 / 直接退出）
-- 界面布局与主题（含强调色）
-- UI 自定义（每行数量、卡片大小、圆角、显示/隐藏图标和名称）
-- 排序方式（手动 / 名称 / 启动次数 / 最近使用）
-- 搜索窗口（宽度、垂直位置、最大结果数、透明度、提示开关）
-- 失焦自动隐藏（主窗口与搜索窗口分别开关）
-- 默认搜索引擎、自动分类规则
+## v3.0.0 版本更新说明
 
-## 技术栈
+> 这是**自 v2.9.2 之后的一次性大版本**。中间规划的 v2.9.3 / v2.9.4 / v2.9.5 / v2.9.10
+> 四个阶段从未单独发布，全部并入 v3.0.0。逐条变更见 [CHANGELOG.md](./CHANGELOG.md)。
 
-- Electron 43
-- React 18
-- TypeScript 5
-- Vite 8
-- Tailwind CSS 3
-- electron-builder 26（打包）
-- Vitest 4（单元测试）
-- pinyin-pro（拼音搜索）
+### ⚠️ 升级须知（会改变你现有行为的几处）
 
-## 安装与运行
+1. **默认全局热键变了**，原因是旧默认值有缺陷：
+   - 主窗口：`Alt+Space` → **`Ctrl+Alt+Space`**。前者是 Windows 系统保留组合
+     （窗口系统菜单），`globalShortcut` 根本注册不上，表现为「装完按了没反应」。
+   - 搜索框：`Ctrl+K` → **`Ctrl+Alt+K`**。前者能注册上，但**全局注册即系统级独占**——
+     装完本应用后，全系统的 `Ctrl+K`（VS Code 删除行、浏览器地址栏、Word、Slack…）
+     都被吞掉，而且用户几乎不可能把这件事归因到启动器头上。
+   - 老版本升级时会**自动迁移一次并给出提示**；你自己改过键位的一律不动。
+     若新默认值也被占用，会依次退到 `Ctrl+Alt+Q`、`Ctrl+Shift+Space`，并在设置页显示实际生效的组合。
+2. **便携版与安装版的数据目录不同**（前者在 exe 同目录，后者在 `%APPDATA%`），
+   两者**不要共用同一个目录**，否则会抢同一份数据文件。
+3. **便携版不支持自动更新**（更新流程需要把安装包交给一个助手进程执行，而便携版就是
+   正在运行的它自己，无法自替换）。检测到新版本时只提供「打开发布页」。
+4. **关联文件夹的绑定对话框**由「是非题」改成明确的三选一
+   （「仅本层」/「含子文件夹」/「取消」）——原先的「取消」同时背着两个意思，按哪种理解都对。
+
+### 新增能力
+
+- **六种项目类型**：应用程序、文件夹、Steam 链接、网址、文本备忘（笔记 / 待办两种形态）、组合启动
+- **用指定程序打开**：`code --goto <文件>` 这类命令行模板，路径前/后各带一段参数，
+  参数**不经过命令解释器**（`&`、`|`、`%VAR%` 不会被当成命令执行）
+- **关联文件夹**：给分类绑本地目录，内容自动出现，支持含子目录 / 隐藏个别条目 / 手动重扫
+- **收纳格**：分类之上的展示层，把常用项目聚到一个框里，不影响原有分类归属
+- **本机文件搜索**：接入本机 Everything，端口自动检测，结果按「命令 / 应用 / 文件」分组
+- **结果定位回主界面**：搜索窗里 `Ctrl+Shift+Enter` 把应用跳回主界面并选中
+- **失效路径批量重定位**：选一次新父目录，按公共父目录换算路径并逐个实测，命中才更新
+- **配置预设导入导出**：外观 / 搜索引擎 / 快捷命令 / 环境变量 / 浏览器列表 / 自动分类规则
+- **便携版**：`tidy-desktop-Portable-*.exe`，免安装，数据跟着 exe 走
+- **「管理分类」入口**：分类的图标、名称、外观（字号 / 条目高度 / 图标尺寸）、关联文件夹集中管理
+- **外观扩展**：全局字体与字号缩放、自定义背景（纯色 / 图片 + 模糊 + 暗化）、
+  自定义托盘图标、分类级字号与条目高度、自定义搜索占位符、指定浏览器
+
+### 修复
+
+- **`validate-apps` 会误删用户数据（严重）**：它此前一律对项目路径做 `fs.access`，
+  但 `path` 存的是**启动目标**而非磁盘路径——网址存 URL、商店应用存
+  `shell:AppsFolder\<AUMID>`、文本与组合存空串，必然被判「失效」，
+  而「清理失效项 / 一键修复」拿到结果**直接删**：点一下，网址和商店应用一起消失。
+  现按类型分流，只有真正的磁盘路径才查文件系统。
+- **文本 / 组合项目被保存流程静默丢弃**：主进程的写入校验无条件要求 `path` 非空，
+  而这两类在表单里恒为空串 → 整条被过滤掉，用户看到的是「保存成功、卡片再没出现」。
+- **「启动参数 / 起始位置」是死配置**：设置项能填能存，但启动时从未被读取。
+- **分类外观与关联文件夹入口不可达**：对应弹窗写好了却没有任何地方能打开它。
+- **侧边栏拖拽热区位置不对**：热区只是右边缘一条 14px 窄条，现在整个侧边栏任意位置都能拖
+  （横向拖动超过 5px 才进入调整，没超过就还是「点一下切换分类」）。
+- 另有若干主题对比度、焦点环与可访问名称、分类删除后归属提示文案的修复，详见 CHANGELOG。
+
+### 性能：唤出响应速度
+
+针对「按热键唤出主界面 / 搜索框时的那一下卡顿」，逐条定位并移除了关键路径上的阻塞：
+
+| 原先的瓶颈 | 现在 |
+| --- | --- |
+| `@import` 引入 Google Fonts 是**渲染阻塞资源**，而 `fonts.googleapis.com` 在中国大陆基本不可达 → 首帧要等这段跨境请求超时 | 字体改到**首帧绘制完成后**再动态加载，首帧零网络等待（先回退系统字体，字体到位后自动替换） |
+| 主窗口获得焦点时**同步扫盘**（`fs.statSync` / `readdirSync`），主进程事件循环被按死 | 改为异步 IO 并让出事件循环；触发再延后一拍，让首帧和首批数据先落地 |
+| 搜索框**每次唤出**都重传 1.58MB 的 `apps.json`（94% 是图标） | 只在首次拉取；之后靠主进程广播保鲜，配置/分类等小数据仍每次重拉 |
+| 搜索框在 `show()` **之后**才复位 → 先闪一帧上次的结果，再跳一下高度 | 复位改到窗口**隐藏时**完成，唤出直接就是空的、高度正确的搜索框 |
+| 每日备份（同步拷贝 1.58MB）排在窗口创建**之前**，冷启动被串行阻塞 | 窗口先建，备份与渲染进程启动并行 |
+
+顺带修掉一个既有的字体不一致：搜索窗的 `@import` 曾写在 `:root{}` 之后，
+而 `@import` 必须位于样式表最前面——浏览器直接把它丢弃了，搜索框一直在用系统字体。
+
+## 安装与使用
 
 ### 下载安装
 
-从 **[Gitee Releases](https://gitee.com/wanwuan/tidy_desktop/releases)**（国内推荐，也是应用内更新检测的主源）
-或 [GitHub Releases](https://github.com/Wan-Wuan/tidy-desktop/releases) 下载最新版本：
+从 **[Gitee Releases](https://gitee.com/wanwuan/tidy_desktop/releases)**（国内推荐，
+也是应用内更新检测的主源）或 [GitHub Releases](https://github.com/Wan-Wuan/tidy-desktop/releases)
+下载：
 
-- `tidy-desktop-Setup-x.x.x.exe`：NSIS 安装包，支持自定义安装目录
-- `tidy-desktop-Setup-x.x.x.exe.sha256`：安装包 SHA256 校验文件，应用内更新会用它校验下载完整性
+| 文件 | 说明 |
+| --- | --- |
+| `tidy-desktop-Setup-3.0.0.exe` | NSIS 安装包，支持自定义安装目录、创建桌面与开始菜单快捷方式 |
+| `tidy-desktop-Setup-3.0.0.exe.sha256` | 安装包 SHA256 校验文件，应用内更新会用它校验下载完整性 |
+| `tidy-desktop-Portable-3.0.0.exe` | **免安装便携版**。数据存在 exe 同目录的 `data/`，拷到 U 盘即可带走 |
+
+> 以 Release 页面实际列出的文件为准（便携版由本地打包生成，是否上传见 [发布流程](#发布流程)）。
+> ⚠️ 便携版**不支持自动更新**，也**不要和安装版共用同一个目录**（会抢同一份数据文件）。
+
+### 首次使用
+
+1. 启动后会引导你创建第一个分类（例如「常用」「工作」）。
+2. 把 `.exe` / `.lnk` / 文件夹 / 网址 / 图片等**直接拖进窗口**即可添加；
+   也可以点「+ 添加」逐项填写，或从右键菜单选「导入快捷方式」扫描桌面与开始菜单。
+3. 在**设置 → 快捷键**里确认或修改两个全局热键。
+4. 按下搜索热键唤出搜索框，敲几个字母回车启动。
 
 ### 开发环境
 
@@ -98,57 +271,154 @@
 # 安装依赖
 npm install
 
-# 启动开发模式
+# 启动开发模式（Vite + Electron 并行）
 npm run electron:dev
+
+# 只起 Vite 开发服务器（不启动 Electron，页面里没有 electronAPI，一般用不到）
+npm run dev
 ```
 
 ### 构建打包
 
 ```bash
-# 构建前端
-npm run build
+# 类型检查（主进程 / 渲染层 / 构建脚本，三套 tsconfig）
+npm run typecheck
 
-# 构建主进程
+# 单元测试
+npm test
+
+# 构建前端 + 主进程
+npm run build
 npm run build:main
 
-# 打包为安装包
-npx electron-builder --win --x64
+# 一步到位：构建 + 校验图标 + 打包（NSIS 安装包 + 便携版）
+npm run electron:build
 ```
 
-## 发布流程
+打包产物输出到 `release/`。图标相关：`npm run icons:generate` 生成，`npm run verify:icons` 校验。
 
-`scripts/release.mjs` 会自动完成：升版本号（package.json + lock）、typecheck、测试、打包 NSIS 安装包、生成 SHA256 校验文件、提交 `release: vX.Y.Z` 并打 tag。任何一步失败会回滚版本号。
+### 常用命令
 
-**前置条件**：
+| 命令 | 作用 |
+| --- | --- |
+| `npm run typecheck` | 三套 tsconfig 类型检查（`:main` / `:renderer` / `:node` 可单独跑） |
+| `npm test` | 单元测试（Vitest，一次跑完） |
+| `npm run test:watch` | 测试 watch 模式 |
+| `npm run lint` | ESLint |
+| `npm run format` | Prettier 格式化（`format:check` 只检查） |
+| `npm run release -- patch\|minor\|major` | 升版本 + 验证 + 打包 + 提交 + 打 tag（见下） |
+| `npm run publish:github` | 把 `release/` 产物发到 GitHub Release |
+| `npm run publish:gitee` | 上传到 Gitee Release（需 `GITEE_TOKEN`，勾 `projects` 权限） |
 
-- 发布相关文件（src、package.json 等）必须已提交，工作区干净，否则脚本直接阻断；
-- Windows 上默认要求代码签名证书（环境变量 `CSC_LINK`）；本地/测试打包需显式设置 `ALLOW_UNSIGNED_RELEASE=1`；
-- 发布 GitHub Release 需要 [gh CLI](https://cli.github.com/) 已登录（`gh auth status`）。
+## 配置说明
 
-**完整步骤**（以 minor 版本为例，当前 master 分支）：
+### 数据存储
 
-```bash
-# 1. 提交本次改动
-git add -A
-git commit -m "Feat: ..."
-git push origin master
+数据根目录：安装版为 `%APPDATA%/tidy-desktop/`；**便携版**为 **exe 所在目录**。
+两者下面都有一个 `data/` 子目录：
 
-# 2. 升版本 + 验证 + 打包（无签名证书时）
-ALLOW_UNSIGNED_RELEASE=1 npm run release -- minor
-# 有签名证书时：CSC_LINK=<证书路径或URL> npm run release -- minor
+| 路径 | 内容 | 可删否 |
+| --- | --- | --- |
+| `data/config.json` | 用户配置（快捷键、搜索引擎、UI 设置等） | 否 |
+| `data/apps.json` | 项目列表（含图标缓存） | 否 |
+| `data/categories.json` | 分类、子分类，以及关联文件夹的路径 / 隐藏项 / 自定义顺序 | 否 |
+| `data/collections.json` | 收纳格（名称、成员、折叠状态） | 否 |
+| `data/folderCache.json` | 关联文件夹的扫描结果缓存 | **可以删**，删掉只影响下次启动要重扫一遍 |
+| `data/icons/` | 应用图标与分类图片图标的缓存目录 | 可以删，会重新提取 |
+| `data/backups/` | 每日自动备份（默认位置，可在设置里改到别的盘 / 网盘同步目录） | 可以删，但删掉就没有回滚点了 |
+| `data/*.corrupt-<时间戳>` | 读不出来的数据文件的留档（不会被静默丢弃） | 可以删 |
 
-# 3. 推送并创建 GitHub Release
-git push origin master
-git push origin v2.9.2
-gh release create v2.9.2 "release/*2.9.2*" --title "v2.9.2" --notes-file release/notes-v2.9.2.md
-```
+数据写入走临时文件 + 原子替换，写一半断电不会留下半个文件；每日自动备份默认开启，
+备份目录与保留份数可在设置里调整。数据目录与备份目录都可以从设置里一键打开。
 
-版本号规则：`patch` 修 bug、`minor` 新功能、`major` 破坏性变更。
+### 快捷键
 
-**Gitee 镜像**：安装包用 `npm run publish:gitee` 上传（需 `GITEE_TOKEN`，勾 `projects` 权限）；
-Release 说明与仓库描述用 `GITEE_TOKEN=<令牌> node scripts/sync-gitee-metadata.mjs` 从 GitHub 同步。
-顺序上要先推代码与 tag，再发 Release —— `publish:gitee` 用 `master` 作 `target_commitish`，
-master 落后时自动创建的 tag 会指向错误的提交。
+**全局热键**（可在设置里重新录制）：
+
+| 默认值 | 功能 |
+| --- | --- |
+| `Ctrl+Alt+Space` | 显示 / 隐藏主窗口 |
+| `Ctrl+Alt+K` | 快速搜索框 |
+| （默认未设置） | 暂停 / 恢复所有唤出热键 |
+
+> 主热键注册失败时会依次退到 `Ctrl+Alt+Q`、`Ctrl+Shift+Space`，并在设置页显示实际生效的组合。
+> 你在设置里主动改键时**不会**自动降级——避免「刚设的键没生效却被悄悄换掉」这种更困惑的情况。
+
+**主窗口**：
+
+| 快捷键 | 功能 |
+| --- | --- |
+| `Esc` | 有选中项时先取消选中，无选中时隐藏窗口 |
+| `Ctrl` + `A` | 全选当前视图中的项目 |
+| `Delete` | 删除选中的项目（可撤销） |
+
+**搜索框**：
+
+| 快捷键 | 功能 |
+| --- | --- |
+| `Enter` | 打开当前结果 |
+| `Ctrl` + `Enter` | 打开当前结果所在文件夹 |
+| `Shift` + `Enter` | 以管理员身份运行当前结果（仅应用程序） |
+| `Ctrl` + `Shift` + `Enter` | 在主界面中定位当前应用（切分类 + 滚动 + 高亮） |
+| `Delete` | 隐藏当前搜索结果 |
+| `↑` / `↓` | 上下移动选中项 |
+| `Esc` | 有输入或结果时先清空，都没有时隐藏窗口 |
+| 前缀 + 空格 | 用对应搜索引擎搜索（见上文引擎表） |
+| `>` | 进入命令模式 |
+
+### 设置项一览
+
+- **通用**：开机自启、启动时最小化到托盘、关闭行为（最小化到托盘 / 直接退出）、排序方式
+- **快捷键**：主窗口 / 搜索窗口 / 暂停热键分别录制，可暂停全部唤出热键
+- **外观**：主题（5 套）、布局（3 种）、强调色、自定义背景、每行数量 / 卡片大小 / 圆角 /
+  图标与名称的显示、分类级外观（字号 / 条目高度 / 图标尺寸）
+- **字体**：全局字体族与字号缩放
+- **搜索窗口**：宽度、垂直位置、最大结果数、透明度、提示开关、占位符
+- **行为**：失焦自动隐藏（两个窗口分别开关）、添加网址时是否联网抓取标题与图标
+- **本机文件搜索**：Everything HTTP 端口（留 `0` = 自动检测）、连接状态与「重新检测」
+  - 用 Everything 时需在 Everything 里开启 HTTP 服务器：
+    **工具 → 选项 → HTTP 服务器 → 勾选「启用 HTTP 服务器」**。开启后本应用会自动读到端口，无需手填
+- **项目**：环境变量表、便携根目录、优先保存相对路径
+  - **环境变量表**：定义 `KEY = 路径` 后，项目的路径 / 启动参数 / 起始位置里可用 `%KEY%` 引用
+  - **便携根目录与相对路径**：落在该目录下的项目按相对路径保存，整个目录搬走后不用重新添加
+    （只影响新增项目，不会批量改写已有数据）
+- **浏览器列表**：维护一组浏览器，网址项目可指定用哪个打开
+- **自动分类规则**、**快捷命令**、**搜索引擎**
+- **备份**：自动备份开关、备份目录、保留份数
+- **托盘**：自定义托盘图标（改完立即生效，无需重启）
+- **配置预设**：导入 / 导出
+
+## 依赖要求
+
+### 运行
+
+- **Windows 10 / 11（x64）**。更早的版本不受支持——Electron 43 已不再支持 Windows 7 / 8 / 8.1
+- 无需安装 .NET、Node.js 或任何运行时——安装包自带 Electron 运行时
+- 可选：[Everything](https://www.voidtools.com/)（仅本机文件搜索需要，需开启 HTTP 服务器）
+- 若 Windows SmartScreen 弹出「未识别的应用」提示，选「更多信息 → 仍要运行」即可
+
+### 开发
+
+| 依赖 | 版本 | 说明 |
+| --- | --- | --- |
+| Node.js | `^20.19.0` 或 `>=22.12.0` | Vite 8 的要求（Vitest 4 要求 `^20 \|\| ^22 \|\| >=24`） |
+| npm | 随 Node 附带 | 使用 `package-lock.json` |
+
+主要技术栈：
+
+| 组件 | 版本 | 用途 |
+| --- | --- | --- |
+| Electron | 43 | 桌面运行时（主进程 + 渲染进程） |
+| React | 18 | 渲染层 UI |
+| TypeScript | 5 | 全量类型 |
+| Vite | 8 | 渲染层构建 |
+| Tailwind CSS | 3 | 样式 |
+| electron-builder | 26 | 打包（NSIS + portable） |
+| Vitest | 4 | 单元测试 |
+| `pinyin-pro` | 3 | 拼音搜索 |
+| `@phosphor-icons/react` | 2 | 图标 |
+
+> 本项目**没有任何原生模块依赖**，`npm install` 不需要编译工具链。
 
 ## 项目结构
 
@@ -156,60 +426,130 @@ master 落后时自动创建的 tag 会指向错误的提交。
 tidy-desktop/
 ├── src/
 │   ├── main/                     # Electron 主进程
-│   │   ├── index.ts              # 主入口：窗口 / 托盘 / 快捷键 / 单实例锁
-│   │   ├── preload.ts            # 预加载脚本（唯一的渲染层 API 面）
-│   │   ├── config.ts             # 配置管理
-│   │   ├── blurAutoHide.ts       # 失焦自动隐藏（两个窗口共用）
-│   │   ├── dialogGuard.ts        # 原生对话框守卫
-│   │   ├── backup.ts             # 每日自动备份
+│   │   ├── index.ts              # 主入口：窗口 / 托盘 / 全局快捷键 / 单实例锁 / 启动顺序
+│   │   ├── preload.ts            # 预加载脚本（渲染层唯一的 API 面）
+│   │   ├── config.ts             # 配置读写与默认值、数据目录解析
 │   │   ├── jsonTransaction.ts    # JSON 原子写入与崩溃恢复
-│   │   ├── validation.ts         # 入参校验
-│   │   ├── urlPolicy.ts          # 外链白名单
-│   │   ├── ipcGuard.ts           # IPC 调用方校验
-│   │   ├── handlers/             # IPC 处理器
-│   │   │   ├── appHandlers.ts    # 应用操作
-│   │   │   ├── fileHandlers.ts   # 文件操作
-│   │   │   ├── iconHandlers.ts   # 图标提取
-│   │   │   └── systemHandlers.ts # 系统操作
+│   │   ├── backup.ts             # 每日自动备份
+│   │   ├── blurAutoHide.ts       # 失焦自动隐藏（两个窗口共用）
+│   │   ├── dialogGuard.ts        # 原生对话框守卫（对话框在场时不隐藏窗口）
+│   │   ├── ipcGuard.ts           # IPC 调用方校验（assertSender）
+│   │   ├── validation.ts         # 入参清洗与校验
+│   │   ├── pathResolver.ts       # 环境变量 / 便携根目录 / 相对路径解析
+│   │   ├── appTargetCheck.ts     # 项目目标类型判定（决定要不要查文件系统）
+│   │   ├── folderSync.ts         # 关联文件夹扫描与合并（异步 IO）
+│   │   ├── fileSearch.ts         # 本机文件搜索（Everything）
+│   │   ├── everythingDetect.ts   # Everything 端口自动检测
+│   │   ├── urlMeta.ts            # 网址标题 / favicon 抓取
+│   │   ├── urlPolicy.ts          # 外链协议白名单
+│   │   ├── preset.ts             # 配置预设导入导出
+│   │   ├── groupLaunch.ts        # 组合启动
+│   │   ├── shortcutFilter.ts     # 开始菜单扫描时的卸载器 / 更新器过滤
+│   │   ├── handlers/             # IPC 处理器（app / file / icon / system /
+│   │   │                         #   appearance / folderSync / fileSearch /
+│   │   │                         #   preset / urlMeta）
 │   │   └── update/               # 自研更新器（检测 / 下载 / 校验 / 安装助手）
 │   ├── renderer/                 # React 渲染进程
 │   │   └── src/
-│   │       ├── App.tsx           # 主应用组件
+│   │       ├── App.tsx           # 主窗口组件
 │   │       ├── SearchApp.tsx     # 快速搜索框组件
 │   │       ├── main.tsx          # 主窗口入口
 │   │       ├── search-main.tsx   # 搜索窗口入口
-│   │       ├── components/       # AppCard / CategoryNav / ToastStack / modals 等
-│   │       ├── hooks/            # useAppData / useDragAndDrop / useUpdate 等
-│   │       └── utils/            # 拼音、文件、图标、持久化工具
-│   └── shared/                   # 共享类型和工具
+│   │       ├── index.css         # 主窗口样式（Tailwind + 主题变量）
+│   │       ├── search.css        # 搜索窗样式（液态玻璃材质）
+│   │       ├── components/       # AppCard / AppGrid / CategoryNav / CollectionBox /
+│   │       │                     #   FolderSyncBanner / ToastStack / modals/ 等
+│   │       ├── hooks/            # useAppCrud / useDragAndDrop / useFolderSync /
+│   │       │                     #   useCollections / useUpdate / useMaintenance 等
+│   │       └── utils/            # 拼音、搜索打分、启动、持久化、图标、远端字体等
+│   └── shared/                   # 主进程与渲染层共享
 │       ├── types.ts              # TypeScript 接口
-│       └── utils.ts              # 共享工具函数
-├── electron-builder.yml          # 打包配置
-├── package.json
-├── tsconfig.json
-├── tsconfig.main.json
-├── vite.config.ts
+│       ├── defaults.ts           # 跨进程共用的默认值单点来源
+│       ├── utils.ts              # 文件类型白名单、匹配工具
+│       ├── pathResolve.ts        # 路径解析纯函数
+│       ├── commandLine.ts        # 命令行拆分纯函数
+│       ├── appTargets.ts         # 启动目标判定
+│       └── electron.d.ts         # window.electronAPI 的类型声明
+├── scripts/                      # 构建 / 打包 / 发布 / 图标生成脚本
+├── build/                        # 图标与安装器资源
+├── electron-builder.yml          # 打包配置（NSIS + portable，仅 x64）
+├── vite.config.ts                # 渲染层构建（main / search 两个入口）
+├── vitest.config.ts              # 单元测试配置
+├── tsconfig.json                 # 基础编译选项
+├── tsconfig.main.json            # 主进程（CommonJS）
+├── tsconfig.renderer.json        # 渲染层
+├── tsconfig.node.json            # 构建脚本
 ├── tailwind.config.js
 └── postcss.config.js
 ```
 
-## 数据存储
+## 开发与发布
 
-数据存储在 `%APPDATA%/tidy-desktop/data/` 目录：
+### 测试
 
-- `config.json`：用户配置（快捷键、搜索引擎、UI 设置等）
-- `apps.json`：应用列表（含图标缓存）
-- `categories.json`：分类和子分类信息
-- `icons/`：应用图标缓存目录
+```bash
+npm test                    # 全量
+npx vitest run <文件路径>    # 单个文件
+```
 
-## 快捷键
+单元测试覆盖纯逻辑（校验、路径解析、命令行拆分、搜索打分、拖拽落点计算、失效判定等）。
+涉及 `ipcMain` 的处理器不直接测——会误删用户数据或影响落盘的关键判定一律抽成纯函数后再测。
 
-| 快捷键 | 功能 |
-|--------|------|
-| 自定义（默认 `Alt+Space`） | 显示/隐藏主窗口 |
-| 自定义（默认 `Ctrl+K`） | 快速搜索框 |
-| `Esc` | 关闭窗口 |
-| `Enter` | 打开搜索结果中的第一个应用 |
+### 发布流程
+
+`scripts/release.mjs` 会自动完成：升版本号（`package.json` + `package-lock.json`）、
+typecheck、测试、打包、生成 SHA256 校验文件、提交 `release: vX.Y.Z` 并打 tag。
+**任何一步失败都会回滚版本号**（已提交的还会撤销 commit）。
+
+**前置条件**：
+
+- 发布相关文件（`src`、`package.json` 等）必须已提交、工作区干净，否则脚本直接阻断；
+- Windows 上默认要求代码签名证书（环境变量 `CSC_LINK`）；本地 / 测试打包需显式设置
+  `ALLOW_UNSIGNED_RELEASE=1`；
+- 上传 GitHub Release 需要 `GITHUB_TOKEN`（或 `GH_TOKEN`），权限勾 **Contents: write**；
+- 上传 Gitee 镜像需要 `GITEE_TOKEN`，权限勾 **projects**。
+
+**完整步骤**（以本次 v3.0.0 为例，master 分支）：
+
+```bash
+# 1. 提交本次改动
+git add -A
+git commit -m "Feat: ..."
+git push origin master
+
+# 2. 升版本 + 验证 + 打包
+#    v3.0.0 是大版本，package.json 当前为 2.9.2，走 major
+ALLOW_UNSIGNED_RELEASE=1 npm run release -- major
+#    有签名证书时：CSC_LINK=<证书路径或URL> npm run release -- major
+
+# 3. 推送并上传 GitHub Release
+#    说明正文取自 release/notes-v3.0.0.md（没有该文件则用一行占位文本）
+git push origin master
+git push origin v3.0.0
+GITHUB_TOKEN=<令牌> npm run publish:github
+
+# 4. 同步到 Gitee 镜像
+GITEE_TOKEN=<令牌> npm run publish:gitee
+GITEE_TOKEN=<令牌> node scripts/sync-gitee-metadata.mjs
+```
+
+> 版本号由发布脚本自动 bump，**不要手工改 `package.json` 的 `version`**——
+> 手改之后 `npm run release -- major` 会再往上跳一档。
+
+版本号规则：`patch` 修 bug、`minor` 新功能、`major` 破坏性变更或大版本。
+
+**发布产物与上传范围**：
+
+| 产物 | 由谁生成 | 由谁上传 |
+| --- | --- | --- |
+| `tidy-desktop-Setup-<ver>.exe` + `.sha256` | `npm run release -- <bump>`（electron-builder） | `publish:github` / `publish:gitee` |
+| `tidy-desktop-Portable-<ver>.exe` | 同上（`electron-builder.yml` 的 `portable` target） | ⚠️ **两个发布脚本目前都不上传**，需手动附到 Release |
+
+两个发布脚本刻意只传「安装包 + 校验文件」——更新器只认这两个文件，不读 `latest.yml`、
+也不用 blockmap 增量包。Gitee 侧对超过 100MB 的附件会跳过并给出警告。
+
+**Gitee 镜像**：顺序上要先推代码与 tag，再发 Release —— `publish:gitee` 用 `master`
+作 `target_commitish`，master 落后时自动创建的 tag 会指向错误的提交。
 
 ## 许可证
 
@@ -217,4 +557,4 @@ MIT
 
 ## 更新日志
 
-完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)，当前版本 **v2.9.2**。
+完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)，当前版本 **v3.0.0**。

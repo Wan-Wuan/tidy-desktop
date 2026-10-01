@@ -1,6 +1,8 @@
 import React from 'react'
+import { LinkSimple } from '@phosphor-icons/react'
 import type { AppItem, Category, Subcategory } from '../../../shared/types'
 import type { CategoryContextMenuTarget } from './CategoryOverlays'
+import { CategoryIcon } from './CategoryIcon'
 
 // 与 App.tsx 中局部定义的 ParsedDrop 保持一致：解析拖入文件得到的结果。
 type ParsedDrop = { apps: AppItem[]; duplicateCount: number; unsupportedCount: number }
@@ -32,6 +34,12 @@ interface CategoryNavProps {
   subcategoryBarRef: React.RefObject<HTMLDivElement>
   handleSubcategoryWheel: (e: React.WheelEvent<HTMLDivElement>) => void
   displaySubcategories: Subcategory[]
+  /** 正在同步中的分类 id：分类按钮上的链接角标转起来 */
+  syncingCategoryIds: string[]
+  /** 在当前分类下新建一个收纳格 */
+  onCreateCollection: () => void
+  /** 打开「管理分类」弹窗：分类的图标 / 名称 / 外观 / 关联文件夹都在那里 */
+  onManageCategories: () => void
 }
 
 // 分类导航：主分类横向栏 +（横向布局时）独立子分类栏。含拖入文件 / 拖应用归类的 drop 处理，
@@ -61,7 +69,10 @@ export function CategoryNav({
   addSubcategoryFromMenu,
   subcategoryBarRef,
   handleSubcategoryWheel,
-  displaySubcategories
+  displaySubcategories,
+  syncingCategoryIds,
+  onCreateCollection,
+  onManageCategories
 }: CategoryNavProps) {
   return (
     <>
@@ -103,6 +114,8 @@ export function CategoryNav({
                 }
               }}
               onDragLeave={() => setDragOverCategory(null)}
+              /* 分类外观（P2-3）：字号 / 图标尺寸按分类单独可调；未设置时沿用 text-sm + 16px 默认 */
+              style={cat.fontSize ? { fontSize: `${cat.fontSize}px` } : undefined}
               onDrop={async (e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -136,7 +149,7 @@ export function CategoryNav({
                   }
                 }
               }}
-              className={`focus-ring cursor-pointer px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${
+              className={`focus-ring cursor-pointer inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${
                 /* 拖拽悬停的判断必须排在 isCatActive 前面：
                    否则拖到"当前已选中的分类"上时走的是激活分支，不会变绿 */
                 dragOverCategory === cat.id
@@ -146,7 +159,17 @@ export function CategoryNav({
                     : 'bg-white/60 text-slate-700 hover:bg-brand-600 hover:text-white hover:border-brand-600 border border-brand-100/50'
               }`}
             >
-              {cat.icon} {cat.name}
+              <CategoryIcon icon={cat.icon} size={cat.iconSize ?? 16} className="shrink-0" />
+              <span>{cat.name}</span>
+              {/* 关联文件夹角标：提示这个分类的内容是跟着本地目录走的 */}
+              {cat.linkFolder && (
+                <LinkSimple
+                  size={13}
+                  weight="bold"
+                  className={`link-folder-badge shrink-0 ${syncingCategoryIds.includes(cat.id) ? 'link-folder-badge-syncing' : ''}`}
+                  aria-label="已关联文件夹"
+                />
+              )}
             </button>
             {/* 点击主分类后，子分类列表直接在该主分类下方展开 */}
             {isCatActive && (
@@ -170,7 +193,7 @@ export function CategoryNav({
           <button
             onClick={() => {
               if (categories.length === 0) {
-                alert('请先创建一个主分类，然后再添加子分类。')
+                alert('请先创建一个主分类，再添加子分类。')
                 return
               }
               const parentCategory = categories.find(category => category.id === activeCategory) || categories[0]
@@ -179,6 +202,22 @@ export function CategoryNav({
             className="focus-ring cursor-pointer px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
           >
             + 子分类
+          </button>
+          <button
+            onClick={onCreateCollection}
+            title="收纳格：把若干项目聚在一起显示，不改变它们原本的分类"
+            className="focus-ring cursor-pointer px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
+          >
+            + 收纳格
+          </button>
+          {/* 分类的图标 / 名称 / 外观 / 关联文件夹都在这里。
+              此前这些设置要么散在右键菜单里，要么干脆没有入口。 */}
+          <button
+            onClick={onManageCategories}
+            title="管理分类：图标、名称、外观、关联文件夹"
+            className="focus-ring cursor-pointer px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-white/60 text-slate-700 hover:bg-brand-500 hover:text-white transition-colors duration-200 border border-dashed border-brand-200/80 hover:border-brand-500"
+          >
+            管理分类
           </button>
         </div>
       </div>
@@ -203,7 +242,7 @@ export function CategoryNav({
           <button
             onClick={() => {
               if (categories.length === 0) {
-                alert('请先创建一个主分类，然后再添加子分类。')
+                alert('请先创建一个主分类，再添加子分类。')
                 return
               }
               const parentCategory = categories.find(category => category.id === activeCategory) || categories[0]

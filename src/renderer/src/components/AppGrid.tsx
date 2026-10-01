@@ -1,10 +1,18 @@
 import React from 'react'
 import { AppCard } from './AppCard'
-import type { AppItem, Subcategory, Config } from '../../../shared/types'
+import { CategoryIcon } from './CategoryIcon'
+import { CollectionBox } from './CollectionBox'
+import type { AppItem, Category, Collection, Subcategory, Config } from '../../../shared/types'
 
 interface GroupedApps {
   /** 该分组所属的子分类；null 表示"未归入任何子分类"的那一组 */
   sub: Subcategory | null
+  apps: AppItem[]
+}
+
+/** 一个收纳格 + 它当前解析出来的成员项目 */
+export interface CollectionGroup {
+  collection: Collection
   apps: AppItem[]
 }
 
@@ -14,6 +22,12 @@ interface AppGridProps {
   activeCategory: string | null
   dragOverGroupSubId: string | null
   groupedApps: GroupedApps[]
+  /** 当前视图里要显示的收纳格（已按分类过滤好） */
+  collectionGroups: CollectionGroup[]
+  dragOverCollectionId: string | null
+  onToggleCollectionCollapse: (id: string) => void
+  onRenameCollection: (id: string, name: string) => void
+  onDeleteCollection: (id: string) => void
   config: Config | null
   draggedAppId: string | null
   dragOverAppId: string | null
@@ -28,16 +42,30 @@ interface AppGridProps {
   cardOnContextMenu: (e: React.MouseEvent, app: AppItem) => void
   cardOnKeyDown: (e: React.KeyboardEvent, app: AppItem) => void
   filteredApps: AppItem[]
+  /** 当前分类的条目高度（P2-3，px）；未设置时按内容自适应 */
+  activeItemHeight?: number
+  /** 当前分类对象；"全部"视图下为 null。空状态要靠它决定是否引导"关联文件夹" */
+  activeCategoryObject: Category | null
+  onBindFolder: (category: Category) => void
 }
 
 // 主内容区：按子分类分组的卡片网格 + 空状态。纯展示 + 回调透传，
 // JSX 与原 App 内联实现逐字一致（含分组容器不加拖拽高亮底色的性能注释），行为不变。
-export function AppGrid({
+//
+// React.memo：App 层有些高频状态（维护提示倒计时、轻提示等）与网格无关，
+// 却会让 App 每秒重渲染一次。这里所有 props 都是稳定引用（ref / useCallback /
+// useMemo / useStableCallback 包装），memo 能把这些无关渲染整棵挡在门外。
+export const AppGrid = React.memo(function AppGrid({
   dropZoneRef,
   handleContentScroll,
   activeCategory,
   dragOverGroupSubId,
   groupedApps,
+  collectionGroups,
+  dragOverCollectionId,
+  onToggleCollectionCollapse,
+  onRenameCollection,
+  onDeleteCollection,
   config,
   draggedAppId,
   dragOverAppId,
@@ -50,7 +78,10 @@ export function AppGrid({
   cardOnMouseDown,
   cardOnContextMenu,
   cardOnKeyDown,
-  filteredApps
+  filteredApps,
+  activeItemHeight,
+  activeCategoryObject,
+  onBindFolder
 }: AppGridProps) {
   // 与原 App 内联实现一致：拖拽中的来源应用被隐藏，用 draggedAppId 推导。
   const isDraggingApp = draggedAppId !== null
@@ -62,6 +93,30 @@ export function AppGrid({
       style={{ scrollbarGutter: 'stable', willChange: 'scroll-position', backdropFilter: 'blur(40px) saturate(1.2)', WebkitBackdropFilter: 'blur(40px) saturate(1.2)' }}
     >
       <div key={activeCategory} className="tab-fade-enter" style={{ contain: 'content' }}>
+      {/* 收纳格排在子分类分组之前：它是"项目区里的容器"，层级上更靠近顶部 */}
+      {collectionGroups.map(group => (
+        <CollectionBox
+          key={group.collection.id}
+          collection={group.collection}
+          apps={group.apps}
+          ui={config?.ui}
+          isDragOver={dragOverCollectionId === group.collection.id}
+          draggedAppId={draggedAppId}
+          dragOverAppId={dragOverAppId}
+          dropInsertAfter={dropInsertAfter}
+          selectedAppIdSet={selectedAppIdSet}
+          cardOnOpen={cardOnOpen}
+          cardOnEdit={cardOnEdit}
+          cardOnDelete={cardOnDelete}
+          cardOnSendFile={cardOnSendFile}
+          cardOnMouseDown={cardOnMouseDown}
+          cardOnContextMenu={cardOnContextMenu}
+          cardOnKeyDown={cardOnKeyDown}
+          onToggleCollapse={onToggleCollectionCollapse}
+          onRename={onRenameCollection}
+          onDelete={onDeleteCollection}
+        />
+      ))}
       {(() => {
         return (
           <div>
@@ -90,7 +145,7 @@ export function AppGrid({
                   <div className={`flex items-center gap-2.5 mb-3 px-2 py-1 rounded-lg transition-colors ${
                     isGroupDropTarget ? 'bg-brand-500/15' : ''
                   }`}>
-                    <span className="text-sm">{group.sub.icon}</span>
+                    <CategoryIcon icon={group.sub.icon} size={16} className="shrink-0 text-brand-700" />
                     <span className="text-sm font-semibold font-display text-brand-700">{group.sub.name}</span>
                     <div className="flex-1 h-px bg-gradient-to-r from-brand-200/60 to-transparent"></div>
                     {isGroupDropTarget && (
@@ -106,7 +161,7 @@ export function AppGrid({
                   config?.ui?.gridColumns === 7 ? 'grid-cols-7' :
                   config?.ui?.gridColumns === 8 ? 'grid-cols-8' :
                   'grid-cols-6'
-                }`} style={{ gridAutoRows: 'min-content', contain: 'layout style' }}>
+                }`} style={{ gridAutoRows: activeItemHeight ? `minmax(${activeItemHeight}px, auto)` : 'min-content', contain: 'layout style' }}>
                   {group.apps.map(app => (
                     <AppCard
                       key={app.id}
@@ -162,11 +217,31 @@ export function AppGrid({
               <rect x="14" y="14" width="7" height="7" rx="1.5"/>
             </svg>
           </div>
-          <p className="text-slate-600 text-sm font-medium">暂无应用</p>
-          <p className="text-slate-500 text-xs mt-1">点击「添加应用」或「添加文件夹」，也可以直接拖入快捷方式</p>
+          {/* 空分类是最需要"关联文件夹"的时机：用户正盯着空白，也还没养成
+             右键分类的习惯。入口只在这个状态下出现，不占常驻位置。 */}
+          {activeCategoryObject && !activeCategoryObject.linkFolder ? (
+            <>
+              <p className="text-slate-600 text-sm font-medium">该分类暂无项目</p>
+              <p className="text-slate-500 text-xs mt-1 max-w-sm mx-auto leading-relaxed">
+                点击「添加应用」或「添加文件夹」手动添加，也可以关联一个本地文件夹，让其中的内容自动出现在这里。
+              </p>
+              <button
+                type="button"
+                onClick={() => onBindFolder(activeCategoryObject)}
+                className="focus-ring mt-4 cursor-pointer rounded-lg bg-brand-600 px-3.5 py-2 text-xs font-medium text-white shadow-sm shadow-brand-500/20 transition-colors hover:bg-brand-700"
+              >
+                关联文件夹…
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-slate-600 text-sm font-medium">暂无项目</p>
+              <p className="text-slate-500 text-xs mt-1">点击「添加应用」或「添加文件夹」，也可以直接拖入快捷方式</p>
+            </>
+          )}
         </div>
       )}
       </div>
     </main>
   )
-}
+})

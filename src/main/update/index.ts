@@ -5,21 +5,20 @@ import { compareVersions, fetchJson, fetchText, downloadWithRetry, cleanupFile }
 import { runInstaller, getUpdateFilePath } from './installer'
 import { UpdateInfo } from './types'
 import { hashFileSha256, parseSha256Checksum, parseSha256Digest } from './integrity'
+import { isTrustedReleaseAssetUrl, pickInstallerAsset, type ReleaseAsset, type UpdateChannel } from './assets'
 import { assertSender } from '../ipcGuard'
+import { IS_PORTABLE } from '../config'
 
 const GITHUB_API = 'https://api.github.com/repos/Wan-Wuan/tidy-desktop/releases/latest'
 const GITEE_API = 'https://gitee.com/api/v5/repos/wanwuan/tidy_desktop/releases/latest'
 
-let downloading = false
-
-type UpdateChannel = 'gitee' | 'github'
-
-interface ReleaseAsset {
-  name?: string
-  browser_download_url?: string
-  size?: number
-  digest?: string
+/** 各渠道的发布页——便携版不能自动更新，只能引导用户去这里手动下载 */
+const RELEASE_PAGES: Record<UpdateChannel, string> = {
+  gitee: 'https://gitee.com/wanwuan/tidy_desktop/releases',
+  github: 'https://github.com/Wan-Wuan/tidy-desktop/releases'
 }
+
+let downloading = false
 
 interface InstallerAsset {
   downloadUrl: string
@@ -43,39 +42,18 @@ interface DownloadCacheMeta {
 
 const UPDATE_META_FILE = path.join(app.getPath('temp'), 'tidy-desktop-update.json')
 
-function isTrustedReleaseAssetUrl(rawUrl: string, source: UpdateChannel): boolean {
-  try {
-    const url = new URL(rawUrl)
-    if (url.protocol !== 'https:') return false
-    if (source === 'github') {
-      return url.hostname === 'github.com' &&
-        url.pathname.startsWith('/Wan-Wuan/tidy-desktop/releases/download/')
-    }
-    return url.hostname === 'gitee.com' &&
-      url.pathname.startsWith('/wanwuan/tidy_desktop/releases/download/')
-  } catch {
-    return false
-  }
-}
-
 async function getInstallerAsset(
   release: { assets?: ReleaseAsset[] },
   source: UpdateChannel
 ): Promise<InstallerAsset | null> {
-  const assets = release.assets || []
-  const exeAsset = assets.find((asset) =>
-    asset.name &&
-    asset.name.endsWith('.exe') &&
-    !asset.name.includes('blockmap') &&
-    asset.browser_download_url &&
-    isTrustedReleaseAssetUrl(asset.browser_download_url, source)
-  )
+  /* 挑选规则（含"必须优先挑安装版、别挑到便携版"）在 assets.ts 里，那部分是纯函数、有单测 */
+  const exeAsset = pickInstallerAsset(release.assets || [], source)
   if (!exeAsset?.browser_download_url) return null
 
   let sha256 = parseSha256Digest(exeAsset.digest)
   if (!sha256 && exeAsset.name) {
     // GitHub API 偶发不返回 digest 字段；两个渠道的发布物都附带 .sha256 文件，作为兜底
-    const checksumAsset = assets.find((asset) =>
+    const checksumAsset = (release.assets || []).find((asset) =>
       asset.name === `${exeAsset.name}.sha256` &&
       asset.browser_download_url &&
       isTrustedReleaseAssetUrl(asset.browser_download_url, source)
@@ -177,25 +155,34 @@ async function hasCachedInstaller(version: string, asset: InstallerAsset): Promi
 }
 
 export function registerUpdateHandlers() {
-  ipcMain.handle('check-for-update', async (): Promise<UpdateInfo> => {
+  ipcMain.handle('check-for-update', async (event): Promise<UpdateInfo> => {
+    if (!assertSender(event)) return { available: false, error: '调用来源不被信任。' }
     try {
       const update = await resolveLatestUpdate()
-      if (!update) return { available: false }
+      if (!update) return { available: false, portable: IS_PORTABLE }
 
       return {
         available: true,
-        downloaded: await hasCachedInstaller(update.version, update.installer),
+        downloaded: IS_PORTABLE ? false : await hasCachedInstaller(update.version, update.installer),
         version: update.version,
         downloadUrl: update.installer.downloadUrl,
         releaseNotes: update.releaseNotes,
-        source: update.source
+        source: update.source,
+        portable: IS_PORTABLE,
+        releaseUrl: RELEASE_PAGES[update.source]
       }
     } catch (err: any) {
-      return { available: false, error: err.message || 'check failed' }
+      return { available: false, error: err.message || 'check failed', portable: IS_PORTABLE }
     }
   })
 
   ipcMain.handle('download-update', async (event) => {
+    if (!assertSender(event)) return { success: false, error: '调用来源不被信任。' }
+    /* 便携版不下载安装包：下载下来也装不了（它是正在运行的那个 exe 自己），
+       白占一百多兆磁盘还让用户以为"下完了就能更新"。界面会走"打开发布页"那条路。 */
+    if (IS_PORTABLE) {
+      return { success: false, error: '便携版不支持自动更新，请到发布页手动下载新版本。' }
+    }
     if (downloading) {
       return { success: false, error: 'Download already in progress' }
     }
@@ -259,12 +246,19 @@ export function registerUpdateHandlers() {
     // 这个入口会派生进程启动安装器，来源必须校验。
     // （runInstaller 内部还会把路径与预期的更新包路径做严格比对，这里是第二道。）
     if (!assertSender(event)) return false
+    /* 便携版兜底：界面上已经没有这条路径了，但绝不能让"正在运行的便携 exe
+       去执行一个安装包"这种事从别的入口溜进来。 */
+    if (IS_PORTABLE) {
+      console.warn('Rejected install-update: running as portable build')
+      return false
+    }
     const target = typeof filePath === 'string' && filePath ? filePath : getUpdateFilePath()
     const result = await runInstaller(target)
     return result.success
   })
 
-  ipcMain.handle('get-version', () => {
+  ipcMain.handle('get-version', (event) => {
+    if (!assertSender(event)) return ''
     return app.getVersion()
   })
 }

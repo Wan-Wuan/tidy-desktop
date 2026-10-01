@@ -14,6 +14,7 @@ export type DropTarget =
   | { type: 'category'; id: string }
   | { type: 'subcategory'; id: string }
   | { type: 'subcategory-drop'; id: string }
+  | { type: 'collection'; id: string }
 
 /**
  * 从命中的 DOM 元素向上找最近的落点载体。
@@ -31,6 +32,9 @@ export function findDropTarget(el: Element | null): DropTarget | null {
     if (node.hasAttribute?.('data-subcategory-id')) return { type: 'subcategory', id: node.getAttribute('data-subcategory-id')! }
     // 网格里的子分类分组区（拖拽也能往里归类）
     if (node.hasAttribute?.('data-subcategory-drop')) return { type: 'subcategory-drop', id: node.getAttribute('data-subcategory-drop')! }
+    /* 收纳格。⚠️ 必须排在 data-app-id 之后：收纳格内部也有卡片，
+       指针落在成员卡片上时应当命中卡片（用于精确落点），而不是整个收纳格。 */
+    if (node.hasAttribute?.('data-collection-id')) return { type: 'collection', id: node.getAttribute('data-collection-id')! }
     node = node.parentElement
   }
   return null

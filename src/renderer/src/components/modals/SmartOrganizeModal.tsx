@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { AppItem, AutoCategoryRule, Category } from '../../../../shared/types'
 import type { HealthReport, IconRefreshProgress } from './types'
 import { useDialogA11y } from '../../hooks/useDialogA11y'
+import { categoryIconGlyph } from '../../utils/categoryIcon'
 
 type ActionKey =
   | 'scan'
@@ -10,6 +11,7 @@ type ActionKey =
   | 'icons'
   | 'categorize'
   | 'import'
+  | 'relocate'
   | 'cleanup'
   | 'restore'
   | 'export'
@@ -29,6 +31,7 @@ interface SmartOrganizeModalProps {
   onRefreshIcons: () => Promise<void>
   onAutoCategorize: () => Promise<void>
   onImportShortcuts: () => Promise<void>
+  onRelocateInvalid: () => Promise<void>
   onCleanupInvalid: () => Promise<void>
   onRestoreHidden: () => Promise<void>
   onExportBackup: () => Promise<void>
@@ -65,6 +68,7 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
   onRefreshIcons,
   onAutoCategorize,
   onImportShortcuts,
+  onRelocateInvalid,
   onCleanupInvalid,
   onRestoreHidden,
   onExportBackup,
@@ -149,14 +153,26 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
     const items: Recommendation[] = []
 
     if (stats.invalid > 0) {
+      /* 失效路径给两条出路，重定位排在前面：用户遇到的绝大多数是"文件夹搬走了"，
+         直接删会把分类、别名、启动参数、待办一起丢掉——而那些才是攒出来的东西。 */
+      items.push({
+        id: 'relocate',
+        title: '重定位失效路径',
+        detail: `${stats.invalid} 个项目的路径已失效，可以指向新目录，保留分类与设置。`,
+        actionLabel: '重定位',
+        actionKey: 'relocate',
+        tone: 'warn',
+        priority: 100,
+        action: onRelocateInvalid
+      })
       items.push({
         id: 'invalid',
         title: '清理失效路径',
-        detail: `${stats.invalid} 个项目的路径已经不可用，会拖慢搜索和打开动作。`,
+        detail: `${stats.invalid} 个项目的路径已经不可用，直接移除可以让搜索更轻。`,
         actionLabel: '清理',
         actionKey: 'cleanup',
         tone: 'danger',
-        priority: 100,
+        priority: 95,
         action: onCleanupInvalid
       })
     }
@@ -204,7 +220,7 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
       items.push({
         id: 'uncategorized',
         title: '整理未分类项目',
-        detail: `${stats.uncategorized} 个项目还没有分类，可按规则和分类名自动归位。`,
+        detail: `${stats.uncategorized} 个项目尚未分类，可按规则和分类名自动归位。`,
         actionLabel: '分类',
         actionKey: 'categorize',
         tone: 'info',
@@ -262,6 +278,7 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
     stats.empty,
     stats.uncategorized,
     stats.hidden,
+    onRelocateInvalid,
     onCleanupInvalid,
     onFixHealthIssues,
     onRefreshIcons,
@@ -333,11 +350,11 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
       action: onImportShortcuts
     },
     {
-      key: 'cleanup' as const,
-      icon: '!',
-      title: '清理失效项',
+      key: 'relocate' as const,
+      icon: '⇄',
+      title: '重定位失效项',
       meta: `${stats.invalid} 个路径`,
-      action: onCleanupInvalid
+      action: onRelocateInvalid
     },
     {
       key: 'restore' as const,
@@ -375,7 +392,10 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
           </button>
         </div>
 
-        <div className="p-6 grid grid-cols-[280px_minmax(0,1fr)] gap-5">
+        {/* ⚠️ 必须带 md: 前缀：固定 280px 左列 + gap-5 + p-6 在窗口最小宽 600px 下
+            只给右列留下 220px，里面的「补全应用图标」会截成「补全应用…」、
+            「就绪」徽章被压到 min-content 后逐字竖排（实测 35×43）。 */}
+        <div className="p-6 grid grid-cols-1 md:grid-cols-[280px_minmax(0,1fr)] gap-5">
           <section className={`${panelClass} smart-score-panel p-5`}>
             <div className="flex flex-col items-center">
               <div className="relative">
@@ -398,7 +418,7 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
                 disabled={disabled}
                 className={`${actionButton} mt-4 w-full smart-button-success bg-emerald-500 text-white border-emerald-500 hover:bg-emerald-600`}
               >
-                {busyAction === 'tuneup' ? '智能维护中...' : '智能维护'}
+                {busyAction === 'tuneup' ? '智能维护中…' : '智能维护'}
               </button>
             </div>
 
@@ -416,7 +436,7 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
               disabled={disabled}
               className={`${actionButton} smart-button-soft mt-5 w-full bg-white text-brand-700 border-brand-200 hover:bg-brand-50`}
             >
-              {busyAction === 'scan' ? '扫描中...' : '重新扫描'}
+              {busyAction === 'scan' ? '扫描中…' : '重新扫描'}
             </button>
           </section>
 
@@ -427,7 +447,7 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
                   <div className="text-sm font-semibold text-slate-800">建议队列</div>
                   <div className="text-xs text-slate-500 mt-0.5">按影响排序，先处理最值得做的事。</div>
                 </div>
-                <span className="smart-status-pill text-[11px] px-2 py-1 rounded-full bg-brand-50 text-brand-600 border border-brand-100">
+                <span className="smart-status-pill shrink-0 whitespace-nowrap text-[11px] px-2 py-1 rounded-full bg-brand-50 text-brand-600 border border-brand-100">
                   {busyAction ? '处理中' : '就绪'}
                 </span>
               </div>
@@ -516,7 +536,7 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
                   <div className="text-sm font-semibold text-slate-800">自动分类规则</div>
                   <div className="text-xs text-slate-500 mt-1">名称、路径或别名命中关键词时归入对应分类，点击「自动分类」立即生效。</div>
                 </div>
-                <span className="smart-status-pill text-[11px] px-2 py-1 rounded-full bg-brand-50 text-brand-600 border border-brand-100">
+                <span className="smart-status-pill shrink-0 whitespace-nowrap text-[11px] px-2 py-1 rounded-full bg-brand-50 text-brand-600 border border-brand-100">
                   {autoCategoryRules.length} 条规则
                 </span>
               </div>
@@ -565,7 +585,7 @@ export const SmartOrganizeModal = React.memo(function SmartOrganizeModal({
                     className="focus-ring cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 outline-none focus:border-brand-400 max-w-[140px]"
                   >
                     {categories.map(category => (
-                      <option key={category.id} value={category.id}>{category.icon} {category.name}</option>
+                      <option key={category.id} value={category.id}>{categoryIconGlyph(category.icon)} {category.name}</option>
                     ))}
                   </select>
                   <button

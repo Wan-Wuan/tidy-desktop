@@ -32,6 +32,8 @@ export interface DragAndDropActions {
   reorder: (sourceId: string, targetId: string, insertAfter?: boolean) => Promise<void>
   toCategory: (appId: string, categoryId: string) => Promise<void>
   toSubcategory: (appId: string, subcategoryId: string | null) => Promise<void>
+  /** 拖进收纳格。收纳格只影响"在哪里显示"，不改项目的分类归属 */
+  toCollection: (appId: string, collectionId: string) => Promise<void>
 }
 
 interface UseDragAndDropParams {
@@ -53,6 +55,8 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
   const [dragOverSubId, setDragOverSubId] = useState<string | null>(null)
   /** 拖应用悬停在网格里的子分类分组上时的目标分组（'__none__' 表示未归类分组） */
   const [dragOverGroupSubId, setDragOverGroupSubId] = useState<string | null>(null)
+  /** 拖应用悬停在某个收纳格上时的目标收纳格 id */
+  const [dragOverCollectionId, setDragOverCollectionId] = useState<string | null>(null)
   /* 拖应用悬停在某张卡片上时，落点在该卡片的哪一半：false/null = 插到它前面，
      true = 插到它后面。既是松手时的依据，也用来画那条插入位置指示线——
      没有这条线，用户看到的是"拖到卡片右边，卡片却落到左边"，只能归因成"不准"。 */
@@ -115,6 +119,7 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
     setDragOverCategory(null)
     setDragOverSubId(null)
     setDragOverGroupSubId(null)
+    setDragOverCollectionId(null)
     setDropInsertAfter(null)
   }, [removeDragGhost])
 
@@ -210,6 +215,7 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
         setDragOverCategory(null)
         setDragOverSubId(null)
         setDragOverGroupSubId(null)
+        setDragOverCollectionId(null)
         return
       }
       if (target.type === 'app') {
@@ -218,6 +224,7 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
         setDragOverCategory(null)
         setDragOverSubId(null)
         setDragOverGroupSubId(null)
+        setDragOverCollectionId(null)
       } else if (target.type === 'category') {
         setDragOverCategory(target.id)
         setDragOverAppId(null)
@@ -225,17 +232,27 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
         setDropInsertAfter(null)
         setDragOverSubId(null)
         setDragOverGroupSubId(null)
+        setDragOverCollectionId(null)
       } else if (target.type === 'subcategory') {
         setDragOverSubId(target.id)
         setDragOverAppId(null)
         setDragOverCategory(null)
         setDropInsertAfter(null)
         setDragOverGroupSubId(null)
+        setDragOverCollectionId(null)
       } else if (target.type === 'subcategory-drop') {
         setDragOverGroupSubId(target.id)
         setDragOverAppId(null)
         setDragOverCategory(null)
         setDragOverSubId(null)
+        setDropInsertAfter(null)
+        setDragOverCollectionId(null)
+      } else if (target.type === 'collection') {
+        setDragOverCollectionId(target.id)
+        setDragOverAppId(null)
+        setDragOverCategory(null)
+        setDragOverSubId(null)
+        setDragOverGroupSubId(null)
         setDropInsertAfter(null)
       }
     }
@@ -364,6 +381,8 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
           await actionsRef.toSubcategory(appId, target.id)
         } else if (target.type === 'subcategory-drop') {
           await actionsRef.toSubcategory(appId, target.id === '__none__' ? null : target.id)
+        } else if (target.type === 'collection') {
+          await actionsRef.toCollection(appId, target.id)
         }
       }
     }
@@ -479,6 +498,7 @@ export function useDragAndDrop({ ghost, actions }: UseDragAndDropParams) {
     dragOverAppId,
     dragOverSubId,
     dragOverGroupSubId,
+    dragOverCollectionId,
     dropInsertAfter,
     // 子分类 chip 的 HTML5 排序仍由 App 层的 JSX 直接驱动
     draggedSubId,

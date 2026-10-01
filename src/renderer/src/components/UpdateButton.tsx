@@ -32,7 +32,7 @@ export function UpdateButton({ state, version, progress }: UpdateButtonProps) {
           strokeDashoffset={50 - (progress?.percent || 0) / 2}
         />
       </svg>
-      {progress ? `${progress.percent}%` : '下载中...'}
+      {progress ? `${progress.percent}%` : '下载中…'}
     </div>
   )
 }
@@ -65,7 +65,7 @@ export function UpdateDialog({ version, releaseNotes, error, onConfirm, onDismis
         )}
         {error && (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
-            <div className="font-medium">安装没有完成</div>
+            <div className="font-medium">安装未完成</div>
             <div className="mt-1 text-xs">{error}</div>
           </div>
         )}
@@ -74,7 +74,7 @@ export function UpdateDialog({ version, releaseNotes, error, onConfirm, onDismis
             onClick={onDismiss}
             className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
           >
-            稍后再说
+            稍后
           </button>
           <button
             onClick={onConfirm}

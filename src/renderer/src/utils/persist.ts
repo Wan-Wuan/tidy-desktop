@@ -1,4 +1,4 @@
-import type { AppItem, Category, Config, Subcategory } from '../../../shared/types'
+import type { AppItem, Category, Collection, Config, Subcategory } from '../../../shared/types'
 
 /**
  * 数据落盘的统一封装。
@@ -27,7 +27,7 @@ export function setPersistNotifier(fn: PersistNotifier | null): void {
 }
 
 function reportFailure(hint: string): false {
-  notifier?.(`保存${hint}失败，本次改动可能未持久化`)
+  notifier?.(`保存${hint}失败，本次改动可能未写入磁盘。`)
   return false
 }
 
@@ -59,6 +59,16 @@ export async function persistCategories(
 export async function persistConfig(config: Config, hint = '设置'): Promise<boolean> {
   try {
     const ok = await window.electronAPI.saveConfig(config)
+    return ok ? true : reportFailure(hint)
+  } catch {
+    return reportFailure(hint)
+  }
+}
+
+/** 落盘收纳格。返回是否成功（false 时已通过 notifier 提示）。 */
+export async function persistCollections(collections: Collection[], hint = '收纳格'): Promise<boolean> {
+  try {
+    const ok = await window.electronAPI.saveCollections({ collections })
     return ok ? true : reportFailure(hint)
   } catch {
     return reportFailure(hint)

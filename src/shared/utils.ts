@@ -134,12 +134,12 @@ export const ALL_FILE_EXTS = [
 
 const extSet = (list: string[]) => new Set(list)
 
-export const EXEC_FILE_EXTS_SET = extSet(EXEC_FILE_EXTS)
-export const DOC_FILE_EXTS_SET = extSet(DOC_FILE_EXTS)
+/* ⚠️ 这里**只保留真正被用到的两个 Set**：`IMAGE_FILE_EXTS_SET`（`isImageApp` 用）
+   与 `ALL_FILE_EXTS_SET`（拖入判定的全集，`useAppCrud` / `folderSync` 共用）。
+   其余按类别拆出来的 `EXEC_/DOC_/ARCHIVE_/MEDIA_/FONT_FILE_EXTS_SET` 从来没有调用方，
+   已删除——留着一堆没人用的 Set 只会让"到底哪份表生效"更难判断。
+   需要按类别判定时，用数组常量 + `getFileExtension` 现算即可。 */
 export const IMAGE_FILE_EXTS_SET = extSet(IMAGE_FILE_EXTS)
-export const ARCHIVE_FILE_EXTS_SET = extSet(ARCHIVE_FILE_EXTS)
-export const MEDIA_FILE_EXTS_SET = extSet(MEDIA_FILE_EXTS)
-export const FONT_FILE_EXTS_SET = extSet(FONT_FILE_EXTS)
 export const ALL_FILE_EXTS_SET = extSet(ALL_FILE_EXTS)
 
 /** 取路径的扩展名（小写，含点）；无扩展名返回空串 */

@@ -1,66 +1,39 @@
-import React, { useEffect, useRef } from 'react'
+import React from 'react'
 import { DotsSixVertical } from '@phosphor-icons/react'
+import {
+  SIDEBAR_DEFAULT_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+  clampSidebarWidth
+} from '../hooks/useSidebarResize'
 
-const MIN_WIDTH = 180
-const MAX_WIDTH = 420
-const DEFAULT_WIDTH = 240
-
-function clampSidebarWidth(value: number): number {
-  return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(value)))
-}
-
+/**
+ * 侧边栏右边缘的手柄。
+ *
+ * ⚠️ **它不是唯一的拖拽入口**——整个侧边栏都能拖拽改宽（`App.tsx` 的
+ * `handleShellPointerDown` 做几何判定后调同一个 `begin`）。
+ * 这个手柄保留三个不可替代的作用：
+ *   · 位置即意图，按下立刻生效，不需要先移动几个像素；
+ *   · 键盘可达（方向键 / Home / End），侧边栏整体拖拽做不到这一点；
+ *   · 可见性——它是"这里能调宽度"的唯一视觉提示。
+ */
 export const SidebarResizeHandle = React.memo(function SidebarResizeHandle({
   value,
   onChange,
-  onCommit
+  onCommit,
+  begin
 }: {
   value: number
   onChange: (width: number) => void
   onCommit: (width: number) => void
+  begin: (event: React.PointerEvent, options?: { threshold?: number }) => void
 }) {
-  const cleanupRef = useRef<(() => void) | null>(null)
-  const currentWidthRef = useRef(value)
-  currentWidthRef.current = value
-
-  useEffect(() => () => cleanupRef.current?.(), [])
-
-  const startResize = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return
-    event.preventDefault()
-    event.stopPropagation()
-
-    cleanupRef.current?.()
-    const startX = event.clientX
-    const startWidth = value
-    currentWidthRef.current = value
-    document.body.classList.add('sidebar-is-resizing')
-
-    const handleMove = (moveEvent: PointerEvent) => {
-      const nextWidth = clampSidebarWidth(startWidth + moveEvent.clientX - startX)
-      currentWidthRef.current = nextWidth
-      onChange(nextWidth)
-    }
-    const finish = () => {
-      window.removeEventListener('pointermove', handleMove)
-      window.removeEventListener('pointerup', finish)
-      window.removeEventListener('pointercancel', finish)
-      document.body.classList.remove('sidebar-is-resizing')
-      onCommit(currentWidthRef.current)
-      cleanupRef.current = null
-    }
-
-    window.addEventListener('pointermove', handleMove)
-    window.addEventListener('pointerup', finish, { once: true })
-    window.addEventListener('pointercancel', finish, { once: true })
-    cleanupRef.current = finish
-  }
-
   const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     let nextWidth: number | null = null
     if (event.key === 'ArrowLeft') nextWidth = value - (event.shiftKey ? 24 : 8)
     if (event.key === 'ArrowRight') nextWidth = value + (event.shiftKey ? 24 : 8)
-    if (event.key === 'Home') nextWidth = MIN_WIDTH
-    if (event.key === 'End') nextWidth = MAX_WIDTH
+    if (event.key === 'Home') nextWidth = SIDEBAR_MIN_WIDTH
+    if (event.key === 'End') nextWidth = SIDEBAR_MAX_WIDTH
     if (nextWidth === null) return
     event.preventDefault()
     const clamped = clampSidebarWidth(nextWidth)
@@ -75,14 +48,14 @@ export const SidebarResizeHandle = React.memo(function SidebarResizeHandle({
       role="separator"
       aria-label="调整分类栏宽度"
       aria-orientation="vertical"
-      aria-valuemin={MIN_WIDTH}
-      aria-valuemax={MAX_WIDTH}
+      aria-valuemin={SIDEBAR_MIN_WIDTH}
+      aria-valuemax={SIDEBAR_MAX_WIDTH}
       aria-valuenow={value}
       title="拖动调整分类栏宽度；双击恢复默认宽度"
-      onPointerDown={startResize}
+      onPointerDown={event => begin(event, { threshold: 0 })}
       onDoubleClick={() => {
-        onChange(DEFAULT_WIDTH)
-        onCommit(DEFAULT_WIDTH)
+        onChange(SIDEBAR_DEFAULT_WIDTH)
+        onCommit(SIDEBAR_DEFAULT_WIDTH)
       }}
       onKeyDown={handleKeyDown}
     >
